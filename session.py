@@ -34,7 +34,8 @@ class SwarmSession:
         self.flow = Flow()
         self.round_num = 0
         self.alive = False
-        self._lock = threading.Lock()
+        self._busy = set()  # agent IDs currently working
+        self._agent_queues = {}  # agent_id -> [(message, callback)]
         self._abort = threading.Event()
         self._pending_messages = []
         self._opening = True
