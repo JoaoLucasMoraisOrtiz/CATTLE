@@ -24,9 +24,10 @@ class EventCallback:
 
 
 class SwarmSession:
-    def __init__(self, project_path, cb=None):
+    def __init__(self, project_path, cb=None, flow_id=None):
         self.project_path = os.path.abspath(os.path.expanduser(project_path))
         self.cb = cb or EventCallback()
+        self.flow_id = flow_id
         self.agents = {}
         self.agent_defs = {}
         self.git = GitCheckpoint(self.project_path)
@@ -39,7 +40,8 @@ class SwarmSession:
         self._opening = True
 
     def open(self):
-        self.flow = load_flow()
+        fd = flowmod.get(self.flow_id) if self.flow_id else None
+        self.flow = fd.flow if fd else load_flow()
         all_defs = registry.load()
         self.agent_defs = {a.id: a for a in all_defs}
         flow_ids = {n.agent_id for n in self.flow.nodes}

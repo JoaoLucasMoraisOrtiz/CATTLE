@@ -58,11 +58,12 @@ def _send_with_retry(agent: Agent, message: str, log: Logger) -> str:
     raise RuntimeError(f'{agent.name}: failed after {MAX_RETRIES+1} attempts')
 
 
-def run_swarm(question: str, workdir: str = '.', flow: Flow | None = None, log: Logger | None = None, resume: bool = False) -> list[dict]:
+def run_swarm(question: str, workdir: str = '.', flow: Flow | None = None, log: Logger | None = None, resume: bool = False, flow_id: str | None = None) -> list[dict]:
     if log is None:
         log = Logger()
     if flow is None:
-        flow = load_flow()
+        fd = flowmod.get(flow_id) if flow_id else None
+        flow = fd.flow if fd else load_flow()
 
     workdir = os.path.abspath(workdir)
     agent_defs = registry.load()

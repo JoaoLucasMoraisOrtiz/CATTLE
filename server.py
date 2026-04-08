@@ -193,7 +193,7 @@ async def open_session(project_id: str, body: OpenSessionIn | None = None):
         def on_summary(self, text): self._push("summary", {"text": text})
         def on_done(self): self._push("done", {})
 
-    active_session = SwarmSession(proj.path, SSECallback())
+    active_session = SwarmSession(proj.path, SSECallback(), flow_id=body.flow_id if body else None)
 
     def spawn():
         active_session.open()
