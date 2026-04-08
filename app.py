@@ -5,13 +5,14 @@ from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import (
     Header, Footer, Static, Button, Input, TextArea, ListView, ListItem, Label,
-    RichLog,
+    RichLog, Select,
 )
 from textual.screen import ModalScreen
 from textual import on, work
 
 import registry
 from registry import AgentDef
+import flow as flowmod
 
 
 # ── Agent Form Modal ──────────────────────────────────────────────────────
@@ -108,6 +109,8 @@ class SwarmApp(App):
             with Vertical(id="content"):
                 yield VerticalScroll(Static("Selecione um agente", id="agent-detail"))
                 with Vertical(id="run-section"):
+                    yield Label("Flow:")
+                    yield Select([], id="flow-select", prompt="Selecione um flow")
                     yield Label("Pergunta inicial:")
                     yield Input(
                         placeholder="Ex: Como podemos melhorar esse projeto?",
@@ -126,7 +129,10 @@ class SwarmApp(App):
         lv.clear()
         for a in self.agents:
             lv.append(ListItem(Label(f"[{a.color}]● {a.name}[/] ({a.id})")))
-
+        # Populate flow select
+        flows = flowmod.load_all()
+        sel = self.query_one("#flow-select", Select)
+        sel.set_options([(f.name, f.id) for f in flows])
     def _show_detail(self, agent: AgentDef) -> None:
         detail = self.query_one("#agent-detail", Static)
         detail.update(
@@ -193,10 +199,12 @@ class SwarmApp(App):
         if len(self.agents) < 2:
             self.notify("Cadastre pelo menos 2 agentes", severity="warning")
             return
-        self._run_swarm(question)
+        sel = self.query_one("#flow-select", Select)
+        flow_id = sel.value if sel.value != Select.BLANK else None
+        self._run_swarm(question, flow_id)
 
     @work(thread=True)
-    def _run_swarm(self, question: str) -> None:
+    def _run_swarm(self, question: str, flow_id: str | None = None) -> None:
         """Run the swarm orchestrator in a background thread."""
         log = self.query_one("#run-log", RichLog)
         log.clear()
@@ -231,7 +239,7 @@ class SwarmApp(App):
 
         tui_log = TuiLogger(log)
         try:
-            run_swarm(question, '.', tui_log)
+            run_swarm(question, '.', log=tui_log, flow_id=flow_id)
         except Exception as e:
             log.write(f"[red]Error: {e}[/]")
 
