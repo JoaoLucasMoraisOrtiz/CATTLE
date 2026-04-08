@@ -11,7 +11,7 @@ ANSI_RE = re.compile(
     r'|\r'
 )
 SPINNER_THINKING_RE = re.compile(r'[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]\s*Thinking\.\.\.')
-PROMPT_RE = re.compile(r'\d+%\s*!>')
+PROMPT_RE = re.compile(r'\d+%.*?!>')
 PROCESSING_KEYWORDS = ('Thinking', 'Using tool:')  # fix: removed generic 'tool'
 
 
