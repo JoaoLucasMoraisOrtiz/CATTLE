@@ -13,7 +13,7 @@ from sse_starlette.sse import EventSourceResponse
 import registry
 from registry import AgentDef
 import flow as flowmod
-from flow import Flow, Node, Edge
+from flow import Flow, Node, Edge, FlowDef
 import projects as projmod
 from projects import Project
 from session import SwarmSession, EventCallback
@@ -41,6 +41,13 @@ class FlowIn(BaseModel):
     edges: list[dict]
     start_node: str = ''
 
+class FlowDefIn(BaseModel):
+    id: str
+    name: str
+    nodes: list[dict] = []
+    edges: list[dict] = []
+    start_node: str = ''
+
 class ProjectIn(BaseModel):
     id: str
     name: str
@@ -49,6 +56,9 @@ class ProjectIn(BaseModel):
 class MessageIn(BaseModel):
     text: str
     agent_id: str | None = None  # None = send to swarm, set = direct to agent
+
+class OpenSessionIn(BaseModel):
+    flow_id: str | None = None
 
 # ── Agent CRUD ────────────────────────────────────────────────────────────
 
@@ -113,10 +123,54 @@ def save_flow(body: FlowIn):
     ))
     return {"ok": True}
 
+# ── Multi-flow CRUD ───────────────────────────────────────────────────────
+
+def _flowdef_to_dict(fd: FlowDef) -> dict:
+    return {"id": fd.id, "name": fd.name,
+            "nodes": [n.__dict__ for n in fd.flow.nodes],
+            "edges": [e.__dict__ for e in fd.flow.edges],
+            "start_node": fd.flow.start_node}
+
+@app.get("/api/flows")
+def list_flows():
+    return [_flowdef_to_dict(fd) for fd in flowmod.load_all()]
+
+@app.post("/api/flows")
+def create_flow(body: FlowDefIn):
+    try:
+        flowmod.add(FlowDef(id=body.id, name=body.name, flow=Flow(
+            nodes=[Node(**n) for n in body.nodes],
+            edges=[Edge(**e) for e in body.edges],
+            start_node=body.start_node,
+        )))
+        return {"ok": True}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+@app.put("/api/flows/{flow_id}")
+def update_flow(flow_id: str, body: FlowDefIn):
+    try:
+        flowmod.update(FlowDef(id=flow_id, name=body.name, flow=Flow(
+            nodes=[Node(**n) for n in body.nodes],
+            edges=[Edge(**e) for e in body.edges],
+            start_node=body.start_node,
+        )))
+        return {"ok": True}
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+
+@app.delete("/api/flows/{flow_id}")
+def delete_flow(flow_id: str):
+    try:
+        flowmod.remove(flow_id)
+        return {"ok": True}
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+
 # ── Session management ────────────────────────────────────────────────────
 
 @app.post("/api/session/open/{project_id}")
-async def open_session(project_id: str):
+async def open_session(project_id: str, body: OpenSessionIn | None = None):
     global active_session, session_events, session_loop
     proj = projmod.get(project_id)
     if not proj:
