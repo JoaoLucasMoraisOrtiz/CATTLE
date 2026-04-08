@@ -339,7 +339,7 @@
       "dependencias": ["multi-flow-1-data-layer"],
       "resumo": {
         "objetivo": "SwarmSession e run_swarm() carregam flow específico por ID",
-        "problema": "Ambos chamam load_flow() que retorna o flow único global",
+        "problema": "session.py chama load_flow() global. orchestrator.py já aceita flow: Flow | None mas não resolve por flow_id",
         "resultadoEsperado": "Passando flow_id, o flow correto é carregado e usado para spawn/roteamento"
       },
       "arquivosRelevantes": [
@@ -350,7 +350,7 @@
         },
         {
           "caminho": "orchestrator.py",
-          "motivo": "run_swarm precisa de flow_id",
+          "motivo": "run_swarm já tem param flow: Flow | None — precisa adicionar flow_id como alternativa",
           "acoes": ["modify"]
         }
       ],
@@ -358,7 +358,7 @@
         "entrada": "flow_id passado pelo server.py ou app.py",
         "processamento": [
           "session.py: __init__ recebe flow_id, open() chama flowmod.get(flow_id) ou flowmod.load_all()[0]",
-          "orchestrator.py: run_swarm recebe flow_id, carrega flow específico"
+          "orchestrator.py: run_swarm já aceita flow: Flow | None — adicionar flow_id=None; se flow_id e não flow, resolver via flowmod.get(flow_id)"
         ],
         "armazenamento": "N/A — apenas leitura do flow",
         "recuperacao": "Via flowmod.get(flow_id)",
@@ -373,18 +373,18 @@
           "mudancas": [
             "Adicionar parâmetro flow_id=None ao __init__",
             "self.flow_id = flow_id",
-            "Em open(): se self.flow_id, chamar flowmod.get(self.flow_id).flow; senão manter load_flow() como fallback"
+            "Em open(): se self.flow_id, chamar flowmod.get(self.flow_id) e extrair Flow; senão manter load_flow() como fallback"
           ]
         },
         {
           "arquivo": "orchestrator.py",
           "classe": null,
           "metodo": "run_swarm()",
-          "motivo": "Aceitar e usar flow_id",
+          "motivo": "Adicionar resolução por flow_id — assinatura atual: run_swarm(question, workdir='.', flow=None, log=None, resume=False)",
           "mudancas": [
-            "Adicionar parâmetro flow_id=None à assinatura de run_swarm()",
-            "Se flow_id: fdef = flowmod.get(flow_id); flow = Flow(fdef.nodes, fdef.edges, fdef.start_node)",
-            "Senão: flow = load_flow() (backward compat)"
+            "Adicionar parâmetro flow_id=None à assinatura (após flow)",
+            "No início: se flow is None e flow_id: fdef = flowmod.get(flow_id); flow = Flow(fdef.nodes, fdef.edges, fdef.start_node)",
+            "Se flow is None e não flow_id: flow = load_flow() (backward compat, que agora chama flowmod.load_all()[0])"
           ]
         }
       ],
