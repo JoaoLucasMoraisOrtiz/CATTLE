@@ -642,6 +642,7 @@ function ensureGridPanel(name) {
       <span class="w-2 h-2 rounded-full" style="background:${c}" id="grid-dot-${escHtml(name)}"></span>
       <span class="text-xs font-medium text-white">${escHtml(name)}</span>
       <span class="text-[10px] text-muted ml-auto" id="grid-status-${escHtml(name)}">Pronto</span>
+      <button class="hidden text-[10px] text-red-400 hover:text-red-300 ml-1 px-1 rounded hover:bg-red-500/10" id="grid-stop-${escHtml(name)}" onclick="event.stopPropagation();stopAgent('${escHtml(name)}')">⏹</button>
     </div>
     <div class="flex-1 overflow-y-auto p-3 font-mono text-xs text-gray-400 whitespace-pre-wrap" id="grid-content-${escHtml(name)}"></div>`;
   grid.appendChild(div);
@@ -652,8 +653,10 @@ function updateGridPanel(name, status, text) {
   ensureGridPanel(name);
   const s = document.getElementById('grid-status-' + name);
   const d = document.getElementById('grid-dot-' + name);
+  const stop = document.getElementById('grid-stop-' + name);
   if (s) s.textContent = status;
   if (d) { d.style.background = status === '💀 Crashed' ? '#ef4444' : getColor(name); d.className = `w-2 h-2 rounded-full ${status === 'Processando...' ? 'running' : ''}`; }
+  if (stop) stop.classList.toggle('hidden', status !== 'Processando...');
   if (text !== undefined) {
     const c = document.getElementById('grid-content-' + name);
     if (c) { c.textContent = text; if (c.textContent.length > 5000) c.textContent = '...\n' + c.textContent.slice(-4000); c.scrollTop = c.scrollHeight; }
