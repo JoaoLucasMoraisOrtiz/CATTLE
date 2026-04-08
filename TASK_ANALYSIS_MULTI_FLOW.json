@@ -229,7 +229,7 @@
           "mudancas": [
             "Adicionar @dataclass FlowDef com campos: id (str), name (str), nodes (list[Node]), edges (list[Edge]), start_node (str)",
             "FlowDef herda os métodos targets_for() e start_agent() do Flow atual (ou delega para um Flow interno)",
-            "FLOWS_FILE = Path(__file__).parent / 'flows.json'",
+            "FLOWS_FILE = Path.home() / '.kiro-swarm' / 'flows.json'",
             "load_all() -> list[FlowDef]: lê flows.json, chama migrate() se não existe",
             "save_all(flows: list[FlowDef]) -> None: escreve flows.json",
             "get(flow_id: str) -> FlowDef | None",
