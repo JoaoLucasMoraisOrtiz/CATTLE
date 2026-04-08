@@ -26,6 +26,7 @@
   .drawflow .drawflow-node .output{background:#7c5cfc;border-color:#7c5cfc}
   .drawflow .connection .main-path{stroke:#7c5cfc;stroke-width:2;fill:none;marker-end:url(#arrowhead);cursor:pointer}
   .drawflow .connection:hover .main-path{stroke-width:5}
+  .drawflow .connection.return-edge .main-path{stroke:#f59e0b !important;stroke-dasharray:8 4 !important}
   .drawflow .drawflow-delete{background:#ef4444;border:none;color:white;border-radius:50%}
   .drawflow .point{width:10px;height:10px;background:#7c5cfc;border:2px solid #9b7fff;border-radius:50%;cursor:move}
   .node-inner{padding:12px 16px}
@@ -623,11 +624,7 @@ function initDrawflow() {
       const dst = raw[nodeIn]?.data?.agentId;
       if (!src || !dst) return;
       const isReturn = returnEdges.has(src + '->' + dst);
-      const path = conn.querySelector('.main-path');
-      if (path) {
-        path.style.stroke = isReturn ? '#f59e0b' : '';
-        path.style.strokeDasharray = isReturn ? '8 4' : '';
-      }
+      conn.classList.toggle('return-edge', isReturn);
     });
   }
 
