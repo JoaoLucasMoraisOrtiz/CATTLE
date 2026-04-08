@@ -182,8 +182,10 @@ class SwarmSession:
             self._save_state()
             self._auto_compact(current_id, agent)
             if signal.kind == 'handoff':
-                if signal.target not in self.agents:
-                    self.cb.on_error(f'Agent {signal.target} not found'); break
+                allowed = self.flow.targets_for(current_id)
+                if signal.target not in allowed:
+                    self.cb.on_error(f'Handoff to {signal.target} blocked (no edge from {defn.name})')
+                    break
                 self.cb.on_orch(f'→ {signal.target}: {signal.summary}')
                 msg = f"[Handoff de {defn.name}] {signal.summary}"
                 current_id = signal.target
