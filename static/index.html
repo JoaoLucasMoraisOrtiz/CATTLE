@@ -608,9 +608,9 @@ function initDrawflow() {
   // Auto-save on any change
   editor.on('nodeCreated', () => saveFlow());
   editor.on('nodeRemoved', () => saveFlow());
-  editor.on('connectionCreated', () => saveFlow());
+  editor.on('connectionCreated', () => { saveFlow(); setTimeout(styleReturnEdges, 50); });
   editor.on('connectionRemoved', () => saveFlow());
-  editor.on('nodeMoved', () => saveFlow());
+  editor.on('nodeMoved', () => { saveFlow(); setTimeout(styleReturnEdges, 50); });
 
 
   window.styleReturnEdges = function styleReturnEdges() {
@@ -624,7 +624,11 @@ function initDrawflow() {
       const dst = raw[nodeIn]?.data?.agentId;
       if (!src || !dst) return;
       const isReturn = returnEdges.has(src + '->' + dst);
-      conn.classList.toggle('return-edge', isReturn);
+      const path = conn.querySelector('.main-path');
+      if (path) {
+        path.setAttribute('stroke', isReturn ? '#f59e0b' : '#7c5cfc');
+        path.setAttribute('stroke-dasharray', isReturn ? '8 4' : '');
+      }
     });
   }
 
