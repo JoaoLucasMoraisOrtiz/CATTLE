@@ -43,9 +43,43 @@ class Agent:
         self._log_entry('send', message)
         self._chunk_buf = ''
         self._pty.write(message)
-        self._skip_until_processing()
-        raw = self._read_until_prompt(RESPONSE_TIMEOUT)
+        # Single read loop: skip echo, detect processing, read until prompt
+        buf = []
+        tail_carry = ''
+        silence = 0
+        streaming = False  # start emitting after we see processing keywords
+        echo_deadline = time.time() + PROCESSING_DETECT_TIMEOUT
+        deadline = time.time() + RESPONSE_TIMEOUT
+        while time.time() < deadline:
+            try:
+                chunk = self._pty.read_chunk(timeout=5)
+            except RuntimeError:
+                break
+            if chunk is None:
+                if streaming:
+                    silence += 1
+                    if silence >= MAX_SILENCE:
+                        break
+                elif time.time() > echo_deadline:
+                    streaming = True  # give up waiting for "Thinking", stream anyway
+                continue
+            silence = 0
+            buf.append(chunk)
+            clean = strip_ansi(chunk)
+            combined = tail_carry + clean
+            # Check prompt
+            if PROMPT_RE.search(combined[-PROMPT_TAIL_CHARS:]):
+                if streaming:
+                    self._emit_chunk(clean)
+                break
+            tail_carry = clean[-PROMPT_TAIL_CHARS:]
+            # Start streaming once we see processing keywords
+            if not streaming and is_processing(clean):
+                streaming = True
+            if streaming:
+                self._emit_chunk(clean)
         self._flush_chunk()
+        raw = strip_ansi(''.join(buf))
         result = clean_response(raw, skip_text=message.strip())
         self._log_entry('recv', result)
         return result
@@ -66,19 +100,6 @@ class Agent:
             self.on_chunk(self._chunk_buf)
             self._chunk_buf = ''
             self._last_chunk_ts = time.time()
-
-    def _skip_until_processing(self):
-        deadline = time.time() + PROCESSING_DETECT_TIMEOUT
-        while time.time() < deadline:
-            try:
-                chunk = self._pty.read_chunk(timeout=2)
-            except RuntimeError:
-                return
-            if chunk:
-                clean = strip_ansi(chunk)
-                if is_processing(clean):
-                    self._emit_chunk(clean)
-                    return
 
     def _read_until_prompt(self, timeout):
         buf = []
