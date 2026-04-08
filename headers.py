@@ -8,8 +8,9 @@ HEADERS_FILE = Path.home() / '.kiro-swarm' / 'headers.json'
 
 DEFAULT_PROTOCOL_ID = 'default-protocol'
 DEFAULT_WRAPPER_ID = 'default-wrapper'
+DEFAULT_HANDOFF_ID = 'default-handoff'
 
-AVAILABLE_PLACEHOLDERS = ['{agent_name}', '{agent_persona}', '{agent_list}', '{task}']
+AVAILABLE_PLACEHOLDERS = ['{agent_name}', '{agent_persona}', '{agent_list}', '{task}', '{handoff_context}']
 
 
 @dataclass
@@ -60,7 +61,7 @@ def update(header: HeaderDef) -> list[HeaderDef]:
 
 
 def remove(header_id: str) -> list[HeaderDef]:
-    if header_id in (DEFAULT_PROTOCOL_ID, DEFAULT_WRAPPER_ID):
+    if header_id in (DEFAULT_PROTOCOL_ID, DEFAULT_WRAPPER_ID, DEFAULT_HANDOFF_ID):
         raise ValueError(f'Cannot remove default header "{header_id}"')
     headers = [h for h in load_all() if h.id != header_id]
     _save(headers)
@@ -80,7 +81,7 @@ def compose(header_ids: list[str], context_vars: dict[str, str] | None = None) -
     text = '\n\n'.join(parts)
     if context_vars:
         safe = {k: context_vars.get(k, '{' + k + '}') for k in
-                ('agent_name', 'agent_persona', 'agent_list', 'task')}
+                ('agent_name', 'agent_persona', 'agent_list', 'task', 'handoff_context')}
         text = text.format_map(safe)
     return text
 
@@ -108,6 +109,12 @@ _DEFAULT_WRAPPER_CONTENT = """[SISTEMA — SUA IDENTIDADE E REGRAS]
 [TAREFA]
 {task}"""
 
+_DEFAULT_HANDOFF_CONTENT = """[Handoff de {agent_name}]
+Instrução: {task}
+
+Contexto do trabalho anterior:
+{handoff_context}"""
+
 
 def ensure_defaults() -> None:
     """Create default headers if they don't exist."""
@@ -125,6 +132,12 @@ def ensure_defaults() -> None:
             id=DEFAULT_WRAPPER_ID, name='Wrapper Padrão',
             content=_DEFAULT_WRAPPER_CONTENT,
             description='Template que envolve cada mensagem com [SISTEMA] e [TAREFA]'))
+        changed = True
+    if DEFAULT_HANDOFF_ID not in ids:
+        headers.append(HeaderDef(
+            id=DEFAULT_HANDOFF_ID, name='Handoff Padrão',
+            content=_DEFAULT_HANDOFF_CONTENT,
+            description='Template da mensagem enviada ao próximo agente no handoff'))
         changed = True
     if changed:
         _save(headers)

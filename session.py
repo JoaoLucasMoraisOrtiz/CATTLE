@@ -341,10 +341,16 @@ class SwarmSession:
         return defn.persona + '\n\n' + PROTOCOL_INSTRUCTIONS.format(agent_list=agent_list)
 
     def _handoff_msg(self, sender_name, signal):
+        import headers as hmod
+        hmod.ensure_defaults()
         ctx = signal.clean_response
         if len(ctx) > 1500:
             ctx = '...\n' + ctx[-1500:]
-        return f"[Handoff de {sender_name}]\nInstrução: {signal.summary}\n\nContexto do trabalho anterior:\n{ctx}"
+        return hmod.compose([hmod.DEFAULT_HANDOFF_ID], {
+            'agent_name': sender_name,
+            'task': signal.summary,
+            'handoff_context': ctx,
+        })
 
     def _chat(self, type, text, agent=''):
         append_chat_message(self.project_path, {'type': type, 'agent': agent, 'text': text, 'ts': time.time()})
