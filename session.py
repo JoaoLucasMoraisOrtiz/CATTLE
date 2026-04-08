@@ -163,6 +163,7 @@ class SwarmSession:
 
     def _run_handoff_chain(self, start_id, message):
         current_id, msg = start_id, message
+        return_stack = []  # stack of (sender_id, edge_src→dst was returns)
         for _ in range(MAX_HANDOFF_ROUNDS):
             if self._abort.is_set(): self.cb.on_orch('⏹ Abortado'); break
             self.round_num += 1
@@ -183,20 +184,47 @@ class SwarmSession:
             if h: self.cb.on_orch(f'📌 {h[:8]}')
             self._save_state()
             self._auto_compact(current_id, agent)
+            # Check if we must return to sender
+            if return_stack and return_stack[-1][0] != current_id:
+                sender_id = return_stack.pop()
+                sender_name = self.agent_defs.get(sender_id, defn).name
+                if signal.kind == 'handoff' and signal.target != sender_id:
+                    self.cb.on_orch(f'⚠️ {defn.name} quis enviar para {signal.target}, mas retorno forçado para {sender_name}')
+                msg = f"[Retorno de {defn.name}] {signal.summary or signal.clean_response[:500]}"
+                current_id = sender_id
+                continue
             if signal.kind == 'handoff':
                 allowed = self.flow.targets_for(current_id)
                 if signal.target not in allowed:
                     self.cb.on_error(f'Handoff to {signal.target} blocked (no edge from {defn.name})')
                     break
-                self.cb.on_orch(f'→ {signal.target}: {signal.summary}')
+                if self.flow.edge_returns(current_id, signal.target):
+                    return_stack.append(current_id)
+                    self.cb.on_orch(f'↩ {signal.target} (retorno obrigatório para {defn.name})')
+                else:
+                    self.cb.on_orch(f'→ {signal.target}: {signal.summary}')
                 msg = f"[Handoff de {defn.name}] {signal.summary}"
                 current_id = signal.target
             elif signal.kind == 'done':
-                self.cb.on_summary(f'{defn.name}: {signal.summary}')
-                self._chat('summary', f'{defn.name}: {signal.summary}')
-                break
+                if return_stack:
+                    sender_id = return_stack.pop()
+                    sender_name = self.agent_defs.get(sender_id, defn).name
+                    self.cb.on_orch(f'↩ {defn.name} finalizou, retornando para {sender_name}')
+                    msg = f"[Retorno de {defn.name}] {signal.summary}"
+                    current_id = sender_id
+                else:
+                    self.cb.on_summary(f'{defn.name}: {signal.summary}')
+                    self._chat('summary', f'{defn.name}: {signal.summary}')
+                    break
             else:
-                self.cb.on_summary(f'{defn.name} finalizou'); break
+                if return_stack:
+                    sender_id = return_stack.pop()
+                    sender_name = self.agent_defs.get(sender_id, defn).name
+                    self.cb.on_orch(f'↩ Retornando para {sender_name}')
+                    msg = f"[Retorno de {defn.name}] {signal.clean_response[:500]}"
+                    current_id = sender_id
+                else:
+                    self.cb.on_summary(f'{defn.name} finalizou'); break
 
     def _spawn_agent(self, nid, defn, all_defs):
         targets = self.flow.targets_for(nid)

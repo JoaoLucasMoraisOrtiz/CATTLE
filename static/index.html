@@ -552,12 +552,54 @@ function initDrawflow() {
     document.getElementById('flow-info').textContent = `⚡ Início: ${n.name}`;
   });
 
+  // Return edges tracking
+  window.returnEdges = new Set(); // "src->dst"
+
   // Auto-save on any change
   editor.on('nodeCreated', () => saveFlow());
   editor.on('nodeRemoved', () => saveFlow());
   editor.on('connectionCreated', () => saveFlow());
   editor.on('connectionRemoved', () => saveFlow());
   editor.on('nodeMoved', () => saveFlow());
+
+  // Toggle return edge on connection click
+  container.addEventListener('click', (ev) => {
+    const path = ev.target.closest('.connection path.main-path');
+    if (!path) return;
+    const conn = path.closest('.connection');
+    if (!conn) return;
+    const cls = conn.classList;
+    const nodeOut = [...cls].find(c => c.startsWith('node_out_'))?.replace('node_out_','');
+    const nodeIn = [...cls].find(c => c.startsWith('node_in_'))?.replace('node_in_','');
+    if (!nodeOut || !nodeIn) return;
+    const raw = editor.drawflow.drawflow.Home.data;
+    const srcAgent = raw[nodeOut]?.data?.agentId;
+    const dstAgent = raw[nodeIn]?.data?.agentId;
+    if (!srcAgent || !dstAgent) return;
+    const key = srcAgent + '->' + dstAgent;
+    if (returnEdges.has(key)) { returnEdges.delete(key); } else { returnEdges.add(key); }
+    styleReturnEdges();
+    saveFlow();
+  });
+
+  window.styleReturnEdges = function styleReturnEdges() {
+    const raw = editor.drawflow.drawflow.Home.data;
+    container.querySelectorAll('.connection').forEach(conn => {
+      const cls = conn.classList;
+      const nodeOut = [...cls].find(c => c.startsWith('node_out_'))?.replace('node_out_','');
+      const nodeIn = [...cls].find(c => c.startsWith('node_in_'))?.replace('node_in_','');
+      if (!nodeOut || !nodeIn) return;
+      const src = raw[nodeOut]?.data?.agentId;
+      const dst = raw[nodeIn]?.data?.agentId;
+      if (!src || !dst) return;
+      const isReturn = returnEdges.has(src + '->' + dst);
+      const path = conn.querySelector('.main-path');
+      if (path) {
+        path.style.stroke = isReturn ? '#f59e0b' : '';
+        path.style.strokeDasharray = isReturn ? '8 4' : '';
+      }
+    });
+  }
 
   loadFlow();
 }
@@ -577,12 +619,18 @@ async function loadFlow() {
     const nid = editor.addNode(a.name, 1, 1, n.x, n.y, a.id, { agentId: a.id }, nodeHtml(a, n.agent_id === startNodeId));
     idMap[n.agent_id] = nid;
   }
+  // Restore return edges
+  returnEdges = new Set();
+  for (const e of fd.edges) {
+    if (e.returns) returnEdges.add(e.src + '->' + e.dst);
+  }
   for (const e of fd.edges) {
     if (idMap[e.src] && idMap[e.dst]) {
       editor.addConnection(idMap[e.src], idMap[e.dst], 'output_1', 'input_1');
     }
   }
   refreshStartBadges();
+  setTimeout(styleReturnEdges, 100);
 }
 
 async function saveFlow() {
@@ -597,7 +645,7 @@ async function saveFlow() {
   for (const [nid, n] of Object.entries(raw)) {
     const conns = n.outputs?.output_1?.connections || [];
     for (const c of conns) {
-      edges.push({ src: nodeIdToAgent[nid], dst: nodeIdToAgent[c.node] });
+      edges.push({ src: nodeIdToAgent[nid], dst: nodeIdToAgent[c.node], returns: returnEdges.has(nodeIdToAgent[nid] + '->' + nodeIdToAgent[c.node]) });
     }
   }
   const fd = flows.find(f => f.id === currentFlowId);

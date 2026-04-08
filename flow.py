@@ -26,6 +26,7 @@ class Node:
 class Edge:
     src: str
     dst: str
+    returns: bool = False  # if True, response must come back to src
 
 
 @dataclass
@@ -36,6 +37,9 @@ class Flow:
 
     def targets_for(self, agent_id: str) -> list[str]:
         return [e.dst for e in self.edges if e.src == agent_id]
+
+    def edge_returns(self, src: str, dst: str) -> bool:
+        return any(e.src == src and e.dst == dst and e.returns for e in self.edges)
 
     def start_agent(self) -> str | None:
         if self.start_node:
