@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+.kiro-swarm/
+.kiro/
