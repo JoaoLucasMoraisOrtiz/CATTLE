@@ -1,0 +1,544 @@
+{
+  "taskId": "multi-flow",
+  "resumo": {
+    "objetivo": "Suportar múltiplos fluxos (flows) por projeto, com CRUD completo e seleção do flow ativo na aba Executar e na aba Flow",
+    "problema": "Atualmente existe um único flow.json global. Não é possível ter diferentes topologias de agentes para diferentes tarefas dentro do mesmo projeto",
+    "resultadoEsperado": "Usuário pode criar, renomear, duplicar e deletar flows. Na aba Flow, seleciona qual flow editar. Na aba Executar, seleciona qual flow usar antes de abrir a sessão. Backend e orchestrator respeitam o flow selecionado"
+  },
+  "arquivosRelevantes": [
+    {
+      "caminho": "flow.py",
+      "motivo": "Módulo central de persistência de flows — hoje lê/escreve um único flow.json. Precisa virar multi-flow",
+      "acoes": ["modify"]
+    },
+    {
+      "caminho": "server.py",
+      "motivo": "API REST — endpoints GET/PUT /api/flow precisam virar CRUD multi-flow, e open_session precisa aceitar flow_id",
+      "acoes": ["modify"]
+    },
+    {
+      "caminho": "session.py",
+      "motivo": "SwarmSession.open() chama load_flow() — precisa receber flow_id e carregar o flow específico",
+      "acoes": ["modify"]
+    },
+    {
+      "caminho": "orchestrator.py",
+      "motivo": "run_swarm() chama load_flow() — precisa receber flow_id e carregar o flow específico",
+      "acoes": ["modify"]
+    },
+    {
+      "caminho": "static/index.html",
+      "motivo": "Web UI — aba Flow precisa de seletor de flow, aba Executar precisa de dropdown de flow",
+      "acoes": ["modify"]
+    },
+    {
+      "caminho": "app.py",
+      "motivo": "TUI — seção de run precisa de seletor de flow",
+      "acoes": ["modify"]
+    },
+    {
+      "caminho": "flow.json",
+      "motivo": "Arquivo legado que será migrado para flows.json",
+      "acoes": ["reference"]
+    }
+  ],
+  "caminhoDosDados": {
+    "entrada": "Usuário cria/edita flows via UI (web ou TUI), seleciona flow na aba Executar",
+    "processamento": [
+      "Step 1: CRUD de flows via API REST ou TUI",
+      "Step 2: Seleção do flow_id na aba Executar antes de abrir sessão",
+      "Step 3: flow_id passado ao open_session/run_swarm",
+      "Step 4: Flow específico carregado e usado para spawn de agentes e roteamento"
+    ],
+    "armazenamento": "flows.json — array de objetos {id, name, nodes, edges, start_node}",
+    "recuperacao": "flow.load_all() retorna todos, flow.get(flow_id) retorna um específico",
+    "exibicao": "Dropdown de seleção na aba Flow e na aba Executar"
+  },
+  "codigoAModificar": [
+    {
+      "arquivo": "flow.py",
+      "classe": null,
+      "metodo": "load(), save()",
+      "motivo": "Transformar de single-flow para multi-flow. Adicionar FlowDef dataclass com id/name, CRUD functions, e migração automática do flow.json legado",
+      "mudancas": [
+        "Adicionar dataclass FlowDef(id, name, flow: Flow)",
+        "Renomear FLOW_FILE para FLOWS_FILE = 'flows.json'",
+        "Adicionar load_all() -> list[FlowDef]",
+        "Adicionar save_all(flows: list[FlowDef])",
+        "Adicionar get(flow_id) -> FlowDef | None",
+        "Adicionar add(flow_def: FlowDef)",
+        "Adicionar remove(flow_id: str)",
+        "Adicionar update(flow_def: FlowDef)",
+        "Manter load(flow_id) retrocompatível — carrega flow específico ou primeiro disponível",
+        "Adicionar migrate() que converte flow.json legado para flows.json se existir"
+      ]
+    },
+    {
+      "arquivo": "server.py",
+      "classe": null,
+      "metodo": "get_flow(), save_flow(), open_session()",
+      "motivo": "Endpoints precisam suportar multi-flow e sessão precisa receber flow_id",
+      "mudancas": [
+        "Adicionar GET /api/flows — lista todos os flows",
+        "Adicionar POST /api/flows — cria novo flow",
+        "Adicionar PUT /api/flows/{flow_id} — atualiza flow específico",
+        "Adicionar DELETE /api/flows/{flow_id} — remove flow",
+        "Manter GET/PUT /api/flow como alias do primeiro flow (backward compat)",
+        "Modificar POST /api/session/open/{project_id} para aceitar query param ?flow_id=",
+        "Adicionar FlowDefIn(BaseModel) com id, name, nodes, edges, start_node"
+      ]
+    },
+    {
+      "arquivo": "session.py",
+      "classe": "SwarmSession",
+      "metodo": "__init__(), open()",
+      "motivo": "Precisa receber e usar flow_id para carregar o flow correto",
+      "mudancas": [
+        "Adicionar parâmetro flow_id ao __init__",
+        "Em open(), chamar flow.get(self.flow_id) ao invés de load_flow()"
+      ]
+    },
+    {
+      "arquivo": "orchestrator.py",
+      "classe": null,
+      "metodo": "run_swarm()",
+      "motivo": "Precisa receber flow_id para carregar o flow correto",
+      "mudancas": [
+        "Adicionar parâmetro flow_id=None ao run_swarm()",
+        "Usar flow.get(flow_id) se fornecido, senão flow.load_all()[0] como fallback"
+      ]
+    },
+    {
+      "arquivo": "static/index.html",
+      "classe": null,
+      "metodo": "switchTab(), initDrawflow(), loadFlow(), saveFlow(), openSession()",
+      "motivo": "UI precisa de seletores de flow em duas abas",
+      "mudancas": [
+        "Aba Flow: adicionar dropdown de seleção de flow + botões Novo/Renomear/Duplicar/Deletar acima do canvas",
+        "Aba Executar: adicionar dropdown de seleção de flow ao lado do seletor de projeto",
+        "loadFlow() passa a receber flow_id e carregar flow específico",
+        "saveFlow() salva no flow_id selecionado",
+        "openSession() envia flow_id como query param",
+        "Adicionar funções: loadFlows(), createFlow(), deleteFlow(), renameFlow(), duplicateFlow()"
+      ]
+    },
+    {
+      "arquivo": "app.py",
+      "classe": "SwarmApp",
+      "metodo": "compose(), action_run_swarm(), _run_swarm()",
+      "motivo": "TUI precisa de seletor de flow na seção de execução",
+      "mudancas": [
+        "Adicionar Select widget para escolher flow na seção run",
+        "Passar flow_id selecionado ao run_swarm()"
+      ]
+    }
+  ],
+  "codigoNovo": [],
+  "casosDeTeste": {
+    "unitarios": [
+      {
+        "descricao": "flow.load_all() retorna lista vazia quando flows.json não existe",
+        "arquivo": "test_flow.py",
+        "metodo": "test_load_all_empty"
+      },
+      {
+        "descricao": "flow.add() cria flow e flow.get() recupera",
+        "arquivo": "test_flow.py",
+        "metodo": "test_add_and_get"
+      },
+      {
+        "descricao": "flow.migrate() converte flow.json legado para flows.json",
+        "arquivo": "test_flow.py",
+        "metodo": "test_migrate_legacy"
+      },
+      {
+        "descricao": "flow.remove() deleta flow por id",
+        "arquivo": "test_flow.py",
+        "metodo": "test_remove"
+      }
+    ],
+    "integracao": [
+      {
+        "descricao": "API GET /api/flows retorna lista de flows",
+        "arquivo": "test_server.py",
+        "endpoint": "/api/flows"
+      },
+      {
+        "descricao": "API POST /api/flows cria novo flow",
+        "arquivo": "test_server.py",
+        "endpoint": "/api/flows"
+      },
+      {
+        "descricao": "open_session com flow_id carrega flow correto",
+        "arquivo": "test_session.py",
+        "endpoint": "/api/session/open/{project_id}?flow_id=xxx"
+      }
+    ],
+    "e2e": [
+      {
+        "descricao": "Usuário cria dois flows, seleciona o segundo na aba Executar, e a sessão usa o flow correto",
+        "fluxo": [
+          "Abrir aba Flow",
+          "Criar flow 'Análise'",
+          "Criar flow 'Refatoração'",
+          "Abrir aba Executar",
+          "Selecionar flow 'Refatoração' no dropdown",
+          "Abrir sessão",
+          "Verificar que agentes do flow 'Refatoração' foram spawnados"
+        ]
+      }
+    ]
+  },
+  "subTarefas": [
+    {
+      "taskId": "multi-flow-1-data-layer",
+      "titulo": "Refatorar flow.py para suportar multi-flow com migração do legado",
+      "prioridade": 1,
+      "dependencias": [],
+      "resumo": {
+        "objetivo": "Transformar flow.py de single-flow para multi-flow com CRUD completo",
+        "problema": "flow.py hoje lê/escreve um único flow.json. Precisa suportar N flows em flows.json",
+        "resultadoEsperado": "flow.py com FlowDef dataclass, CRUD (load_all, get, add, update, remove), e migrate() que converte flow.json legado"
+      },
+      "arquivosRelevantes": [
+        {
+          "caminho": "flow.py",
+          "motivo": "Arquivo a ser refatorado",
+          "acoes": ["modify"]
+        }
+      ],
+      "caminhoDosDados": {
+        "entrada": "Chamadas de CRUD do server.py ou orchestrator.py",
+        "processamento": [
+          "load_all(): lê flows.json, se não existe tenta migrate() do flow.json legado",
+          "get(flow_id): filtra da lista",
+          "add(FlowDef): append + save",
+          "update(FlowDef): replace + save",
+          "remove(flow_id): filter + save"
+        ],
+        "armazenamento": "flows.json — [{id, name, nodes: [{agent_id, x, y}], edges: [{src, dst}], start_node}]",
+        "recuperacao": "JSON parse do flows.json",
+        "exibicao": "N/A — camada de dados"
+      },
+      "codigoAModificar": [
+        {
+          "arquivo": "flow.py",
+          "classe": null,
+          "metodo": "todo o módulo",
+          "motivo": "Refatoração completa para multi-flow",
+          "mudancas": [
+            "Adicionar @dataclass FlowDef com campos: id (str), name (str), nodes (list[Node]), edges (list[Edge]), start_node (str)",
+            "FlowDef herda os métodos targets_for() e start_agent() do Flow atual (ou delega para um Flow interno)",
+            "FLOWS_FILE = Path(__file__).parent / 'flows.json'",
+            "load_all() -> list[FlowDef]: lê flows.json, chama migrate() se não existe",
+            "save_all(flows: list[FlowDef]) -> None: escreve flows.json",
+            "get(flow_id: str) -> FlowDef | None",
+            "add(flow_def: FlowDef) -> None: valida id único, append, save",
+            "update(flow_def: FlowDef) -> None: replace por id, save",
+            "remove(flow_id: str) -> None: filter, save",
+            "migrate() -> list[FlowDef]: se flow.json existe, lê, cria FlowDef(id='default', name='Default'), salva em flows.json, retorna",
+            "Manter load() retrocompatível: retorna Flow do primeiro FlowDef (para orchestrator.py não quebrar antes de ser atualizado)"
+          ]
+        }
+      ],
+      "codigoNovo": [],
+      "casosDeTeste": {
+        "unitarios": [
+          {
+            "descricao": "load_all retorna vazio sem arquivo",
+            "arquivo": "test_flow.py",
+            "metodo": "test_load_all_empty"
+          },
+          {
+            "descricao": "add + get funciona",
+            "arquivo": "test_flow.py",
+            "metodo": "test_add_get"
+          },
+          {
+            "descricao": "migrate converte flow.json legado",
+            "arquivo": "test_flow.py",
+            "metodo": "test_migrate"
+          }
+        ],
+        "integracao": [],
+        "e2e": []
+      },
+      "subTarefas": []
+    },
+    {
+      "taskId": "multi-flow-2-api",
+      "titulo": "Adicionar endpoints REST multi-flow no server.py",
+      "prioridade": 2,
+      "dependencias": ["multi-flow-1-data-layer"],
+      "resumo": {
+        "objetivo": "Expor CRUD de flows via API REST e aceitar flow_id no open_session",
+        "problema": "API atual tem apenas GET/PUT /api/flow para um único flow",
+        "resultadoEsperado": "Endpoints CRUD /api/flows/{flow_id} funcionais, open_session aceita flow_id"
+      },
+      "arquivosRelevantes": [
+        {
+          "caminho": "server.py",
+          "motivo": "Arquivo a ser modificado",
+          "acoes": ["modify"]
+        },
+        {
+          "caminho": "flow.py",
+          "motivo": "Dependência — usa as novas funções CRUD",
+          "acoes": ["reference"]
+        }
+      ],
+      "caminhoDosDados": {
+        "entrada": "HTTP requests do frontend",
+        "processamento": [
+          "GET /api/flows → flowmod.load_all() → serialize",
+          "POST /api/flows → parse FlowDefIn → flowmod.add()",
+          "PUT /api/flows/{id} → parse FlowDefIn → flowmod.update()",
+          "DELETE /api/flows/{id} → flowmod.remove()",
+          "POST /api/session/open/{pid}?flow_id=X → passa flow_id ao SwarmSession"
+        ],
+        "armazenamento": "Delegado ao flow.py",
+        "recuperacao": "Delegado ao flow.py",
+        "exibicao": "JSON responses"
+      },
+      "codigoAModificar": [
+        {
+          "arquivo": "server.py",
+          "classe": null,
+          "metodo": "get_flow(), save_flow(), open_session()",
+          "motivo": "Adicionar novos endpoints e modificar open_session",
+          "mudancas": [
+            "Adicionar class FlowDefIn(BaseModel): id, name, nodes (list[dict]), edges (list[dict]), start_node (str = '')",
+            "Adicionar GET /api/flows → retorna [flowdef.__dict__ for flowdef in flowmod.load_all()]",
+            "Adicionar POST /api/flows → flowmod.add(FlowDef(...))",
+            "Adicionar PUT /api/flows/{flow_id} → flowmod.update(FlowDef(...))",
+            "Adicionar DELETE /api/flows/{flow_id} → flowmod.remove(flow_id)",
+            "Modificar open_session para aceitar flow_id: str = None como query param",
+            "Passar flow_id ao SwarmSession constructor",
+            "Manter GET/PUT /api/flow como backward compat (opera no primeiro flow)"
+          ]
+        }
+      ],
+      "codigoNovo": [],
+      "casosDeTeste": {
+        "unitarios": [],
+        "integracao": [
+          {
+            "descricao": "CRUD completo de flows via API",
+            "arquivo": "test_server.py",
+            "endpoint": "/api/flows"
+          }
+        ],
+        "e2e": []
+      },
+      "subTarefas": []
+    },
+    {
+      "taskId": "multi-flow-3-session-orchestrator",
+      "titulo": "Atualizar session.py e orchestrator.py para aceitar flow_id",
+      "prioridade": 3,
+      "dependencias": ["multi-flow-1-data-layer"],
+      "resumo": {
+        "objetivo": "SwarmSession e run_swarm() carregam flow específico por ID",
+        "problema": "Ambos chamam load_flow() que retorna o flow único global",
+        "resultadoEsperado": "Passando flow_id, o flow correto é carregado e usado para spawn/roteamento"
+      },
+      "arquivosRelevantes": [
+        {
+          "caminho": "session.py",
+          "motivo": "SwarmSession precisa de flow_id",
+          "acoes": ["modify"]
+        },
+        {
+          "caminho": "orchestrator.py",
+          "motivo": "run_swarm precisa de flow_id",
+          "acoes": ["modify"]
+        }
+      ],
+      "caminhoDosDados": {
+        "entrada": "flow_id passado pelo server.py ou app.py",
+        "processamento": [
+          "session.py: __init__ recebe flow_id, open() chama flowmod.get(flow_id) ou flowmod.load_all()[0]",
+          "orchestrator.py: run_swarm recebe flow_id, carrega flow específico"
+        ],
+        "armazenamento": "N/A — apenas leitura do flow",
+        "recuperacao": "Via flowmod.get(flow_id)",
+        "exibicao": "N/A"
+      },
+      "codigoAModificar": [
+        {
+          "arquivo": "session.py",
+          "classe": "SwarmSession",
+          "metodo": "__init__(), open()",
+          "motivo": "Aceitar e usar flow_id",
+          "mudancas": [
+            "Adicionar parâmetro flow_id=None ao __init__",
+            "self.flow_id = flow_id",
+            "Em open(): se self.flow_id, chamar flowmod.get(self.flow_id).flow; senão manter load_flow() como fallback"
+          ]
+        },
+        {
+          "arquivo": "orchestrator.py",
+          "classe": null,
+          "metodo": "run_swarm()",
+          "motivo": "Aceitar e usar flow_id",
+          "mudancas": [
+            "Adicionar parâmetro flow_id=None à assinatura de run_swarm()",
+            "Se flow_id: fdef = flowmod.get(flow_id); flow = Flow(fdef.nodes, fdef.edges, fdef.start_node)",
+            "Senão: flow = load_flow() (backward compat)"
+          ]
+        }
+      ],
+      "codigoNovo": [],
+      "casosDeTeste": {
+        "unitarios": [],
+        "integracao": [
+          {
+            "descricao": "SwarmSession com flow_id carrega flow correto",
+            "arquivo": "test_session.py",
+            "metodo": "test_open_with_flow_id"
+          }
+        ],
+        "e2e": []
+      },
+      "subTarefas": []
+    },
+    {
+      "taskId": "multi-flow-4-web-ui",
+      "titulo": "Atualizar Web UI com seletores de flow nas abas Flow e Executar",
+      "prioridade": 4,
+      "dependencias": ["multi-flow-2-api"],
+      "resumo": {
+        "objetivo": "Usuário pode criar, selecionar, editar e deletar flows pela interface web",
+        "problema": "UI atual edita um único flow sem conceito de múltiplos",
+        "resultadoEsperado": "Aba Flow tem dropdown + CRUD de flows. Aba Executar tem dropdown para selecionar flow antes de abrir sessão"
+      },
+      "arquivosRelevantes": [
+        {
+          "caminho": "static/index.html",
+          "motivo": "Arquivo único da web UI",
+          "acoes": ["modify"]
+        }
+      ],
+      "caminhoDosDados": {
+        "entrada": "Interação do usuário com dropdowns e botões",
+        "processamento": [
+          "loadFlows(): GET /api/flows → popula dropdowns",
+          "createFlow(): prompt nome → POST /api/flows com flow vazio",
+          "selectFlow(id): carrega flow no canvas Drawflow",
+          "saveFlow(): PUT /api/flows/{selectedFlowId}",
+          "deleteFlow(): DELETE /api/flows/{selectedFlowId}",
+          "openSession(): POST /api/session/open/{pid}?flow_id={selectedRunFlowId}"
+        ],
+        "armazenamento": "Via API REST → flows.json",
+        "recuperacao": "Via API REST",
+        "exibicao": "Dropdowns <select> nas abas Flow e Executar"
+      },
+      "codigoAModificar": [
+        {
+          "arquivo": "static/index.html",
+          "classe": null,
+          "metodo": "Seção Flow toolbar, Seção Run project bar, JS functions",
+          "motivo": "Adicionar UI de multi-flow",
+          "mudancas": [
+            "Aba Flow — toolbar: adicionar <select id='flow-select'> + botões '+ Novo', 'Renomear', 'Duplicar', '✕ Deletar'",
+            "Aba Executar — project bar: adicionar <select id='run-flow-select'> entre o seletor de projeto e o botão Abrir",
+            "Variável global: let flows = [], selectedFlowId = null",
+            "loadFlows(): fetch GET /api/flows, popular ambos os selects, selecionar primeiro",
+            "onFlowChange(): carregar flow selecionado no canvas Drawflow",
+            "createFlow(): prompt nome, POST /api/flows com {id: uuid, name, nodes:[], edges:[], start_node:''}, recarregar",
+            "deleteFlow(): confirm, DELETE /api/flows/{id}, recarregar",
+            "renameFlow(): prompt novo nome, PUT /api/flows/{id} com nome atualizado",
+            "duplicateFlow(): cria cópia com novo id/nome",
+            "saveFlow(): PUT /api/flows/{selectedFlowId} com dados do canvas",
+            "openSession(): incluir flow_id do run-flow-select como query param",
+            "Chamar loadFlows() no init e ao trocar de tab para Flow"
+          ]
+        }
+      ],
+      "codigoNovo": [],
+      "casosDeTeste": {
+        "unitarios": [],
+        "integracao": [],
+        "e2e": [
+          {
+            "descricao": "Criar flow, editar no canvas, salvar, selecionar na aba Executar",
+            "fluxo": [
+              "Abrir aba Flow",
+              "Clicar '+ Novo'",
+              "Digitar nome 'Meu Flow'",
+              "Arrastar agentes para o canvas",
+              "Conectar agentes",
+              "Clicar 'Salvar'",
+              "Abrir aba Executar",
+              "Verificar que 'Meu Flow' aparece no dropdown",
+              "Selecionar 'Meu Flow'",
+              "Abrir sessão"
+            ]
+          }
+        ]
+      },
+      "subTarefas": []
+    },
+    {
+      "taskId": "multi-flow-5-tui",
+      "titulo": "Atualizar TUI (app.py) com seletor de flow na seção de execução",
+      "prioridade": 5,
+      "dependencias": ["multi-flow-1-data-layer", "multi-flow-3-session-orchestrator"],
+      "resumo": {
+        "objetivo": "TUI permite selecionar qual flow usar antes de rodar o swarm",
+        "problema": "TUI atual não tem conceito de flow — roda com o flow único",
+        "resultadoEsperado": "Select widget na seção run mostra flows disponíveis, flow_id passado ao run_swarm()"
+      },
+      "arquivosRelevantes": [
+        {
+          "caminho": "app.py",
+          "motivo": "TUI a ser modificada",
+          "acoes": ["modify"]
+        }
+      ],
+      "caminhoDosDados": {
+        "entrada": "Seleção do usuário no Select widget",
+        "processamento": [
+          "on_mount: carrega flows via flow.load_all(), popula Select",
+          "action_run_swarm: lê flow_id selecionado, passa ao run_swarm()"
+        ],
+        "armazenamento": "N/A — leitura",
+        "recuperacao": "Via flow.load_all()",
+        "exibicao": "Select widget do Textual"
+      },
+      "codigoAModificar": [
+        {
+          "arquivo": "app.py",
+          "classe": "SwarmApp",
+          "metodo": "compose(), on_mount(), _run_swarm()",
+          "motivo": "Adicionar seletor de flow",
+          "mudancas": [
+            "Importar flow module e Select widget do textual",
+            "Em compose(): adicionar Select(id='flow-select') na seção run, antes do botão Rodar",
+            "Em on_mount() ou _refresh_list(): popular Select com flows de flow.load_all()",
+            "Em _run_swarm(): ler flow_id do Select, passar como parâmetro ao run_swarm()"
+          ]
+        }
+      ],
+      "codigoNovo": [],
+      "casosDeTeste": {
+        "unitarios": [],
+        "integracao": [],
+        "e2e": [
+          {
+            "descricao": "Selecionar flow na TUI e rodar swarm",
+            "fluxo": [
+              "Abrir TUI",
+              "Verificar que Select mostra flows disponíveis",
+              "Selecionar um flow",
+              "Digitar pergunta",
+              "Clicar Rodar Swarm",
+              "Verificar que agentes do flow selecionado foram usados"
+            ]
+          }
+        ]
+      },
+      "subTarefas": []
+    }
+  ]
+}
