@@ -22,6 +22,7 @@ class Node:
     agent_id: str
     x: float = 0
     y: float = 0
+    header_ids: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -59,6 +60,7 @@ class FlowDef:
     id: str
     name: str
     flow: Flow = field(default_factory=Flow)
+    default_header_ids: list[str] = field(default_factory=list)
 
 
 # --------------- serialization helpers ---------------
@@ -70,6 +72,7 @@ def _flow_to_dict(fd: FlowDef) -> dict:
         'nodes': [asdict(n) for n in fd.flow.nodes],
         'edges': [asdict(e) for e in fd.flow.edges],
         'start_node': fd.flow.start_node,
+        'default_header_ids': fd.default_header_ids,
     }
 
 
@@ -82,6 +85,7 @@ def _dict_to_flowdef(d: dict) -> FlowDef:
             edges=[Edge(**e) for e in d.get('edges', [])],
             start_node=d.get('start_node', ''),
         ),
+        default_header_ids=d.get('default_header_ids', []),
     )
 
 

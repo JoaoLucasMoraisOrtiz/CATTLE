@@ -51,6 +51,7 @@
     <div class="flex bg-surface rounded-lg p-0.5 text-xs">
       <button onclick="switchTab('agents')" id="tab-agents" class="tab-btn px-3 py-1.5 rounded-md transition font-medium bg-accent/10 text-accent">Agentes</button>
       <button onclick="switchTab('flow')" id="tab-flow" class="tab-btn px-3 py-1.5 rounded-md transition font-medium text-muted hover:text-white">Flow</button>
+      <button onclick="switchTab('headers')" id="tab-headers" class="tab-btn px-3 py-1.5 rounded-md transition font-medium text-muted hover:text-white">Headers</button>
       <button onclick="switchTab('run')" id="tab-run" class="tab-btn px-3 py-1.5 rounded-md transition font-medium text-muted hover:text-white">Executar</button>
     </div>
     <div class="flex items-center gap-2 text-xs text-muted">
@@ -112,6 +113,56 @@
       </div>
     </div>
     <button id="flow-help-btn" onclick="document.getElementById('flow-help').classList.remove('hidden');this.classList.add('hidden')" class="hidden absolute right-2 top-12 z-10 px-2 py-1 bg-card border border-border rounded-lg text-xs text-muted hover:text-white">📖</button>
+  </div>
+</div>
+
+<!-- ═══ TAB: Headers ═══ -->
+<div id="view-headers" class="flex-1 flex-col overflow-hidden hidden">
+  <div class="flex items-center gap-3 px-5 py-2 border-b border-border bg-card/20">
+    <span class="text-sm font-medium text-muted uppercase tracking-wider">Header Templates</span>
+    <button onclick="openHeaderModal()" class="px-3 py-1.5 bg-accent/10 text-accent text-xs rounded-lg hover:bg-accent/20 transition font-medium">+ Novo</button>
+  </div>
+  <div class="flex flex-1 overflow-hidden">
+    <!-- Header list -->
+    <div class="w-80 border-r border-border bg-card/30 overflow-y-auto p-3 space-y-2" id="header-list"></div>
+    <!-- Editor area -->
+    <div class="flex-1 flex flex-col overflow-hidden" id="header-editor-area">
+      <div class="flex-1 flex items-center justify-center text-muted text-sm">
+        <div class="text-center"><span class="text-4xl block mb-2">📝</span>Selecione ou crie um header</div>
+      </div>
+    </div>
+    <!-- Placeholders panel -->
+    <div class="w-56 border-l border-border bg-card/30 p-4 overflow-y-auto text-xs">
+      <div class="text-white font-medium text-sm mb-3">Placeholders</div>
+      <div class="space-y-2" id="placeholder-list"></div>
+      <div class="mt-4 text-muted text-[10px] leading-relaxed">Clique para inserir no editor. Placeholders são substituídos em runtime.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Header Modal ═══ -->
+<div id="header-modal" class="fixed inset-0 modal-bg z-50 hidden flex items-center justify-center">
+  <div class="bg-card border border-border rounded-2xl w-[600px] max-h-[90vh] overflow-y-auto shadow-2xl">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-border">
+      <h2 id="header-modal-title" class="text-base font-semibold text-white">Novo Header</h2>
+      <button onclick="closeHeaderModal()" class="text-muted hover:text-white transition">✕</button>
+    </div>
+    <div class="p-6 space-y-4">
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="block text-xs text-muted mb-1.5">ID</label>
+          <input id="h-id" class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent/50 transition" placeholder="meu-header"></div>
+        <div><label class="block text-xs text-muted mb-1.5">Nome</label>
+          <input id="h-name" class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent/50 transition" placeholder="Meu Header"></div>
+      </div>
+      <div><label class="block text-xs text-muted mb-1.5">Descrição</label>
+        <input id="h-desc" class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent/50 transition" placeholder="Breve descrição do header"></div>
+      <div><label class="block text-xs text-muted mb-1.5">Conteúdo</label>
+        <textarea id="h-content" rows="10" class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-accent/50 transition resize-none" placeholder="Conteúdo do header template..."></textarea></div>
+    </div>
+    <div class="flex justify-end gap-3 px-6 py-4 border-t border-border">
+      <button onclick="closeHeaderModal()" class="px-4 py-2 text-sm text-muted hover:text-white transition rounded-lg">Cancelar</button>
+      <button onclick="saveHeader()" class="px-5 py-2 bg-accent hover:bg-accentHover text-white text-sm font-medium rounded-lg transition">Salvar</button>
+    </div>
   </div>
 </div>
 
@@ -586,23 +637,26 @@ function initDrawflow() {
     if (!n?.data?.agentId) { hideEdgePanel(); return; }
     const src = n.data.agentId;
     const conns = n.outputs?.output_1?.connections || [];
-    if (!conns.length) { hideEdgePanel(); return; }
     const srcAgent = agents.find(a => a.id === src);
-    let html = `<div class="text-white font-medium mb-2">${escHtml(srcAgent?.name||src)} → conexões</div>`;
-    for (const c of conns) {
-      const dstNode = raw[c.node];
-      if (!dstNode?.data?.agentId) continue;
-      const dst = dstNode.data.agentId;
-      const dstAgent = agents.find(a => a.id === dst);
-      const key = src + '->' + dst;
-      const isReturn = returnEdges.has(key);
-      html += `<div class="flex items-center justify-between py-1.5 border-t border-border/50">
-        <span class="text-gray-400">→ ${escHtml(dstAgent?.name||dst)}</span>
-        <button onclick="toggleReturnEdge('${escHtml(src)}','${escHtml(dst)}')" class="px-2 py-0.5 rounded text-[10px] font-medium ${isReturn ? 'bg-amber-500/20 text-amber-400' : 'bg-surface text-muted hover:text-white'}">
-          ${isReturn ? '↩ Return' : '→ Normal'}
-        </button>
-      </div>`;
+    let html = `<div class="text-white font-medium mb-2">${escHtml(srcAgent?.name||src)}</div>`;
+    if (conns.length) {
+      html += `<div class="text-[10px] text-muted mb-1">Conexões</div>`;
+      for (const c of conns) {
+        const dstNode = raw[c.node];
+        if (!dstNode?.data?.agentId) continue;
+        const dst = dstNode.data.agentId;
+        const dstAgent = agents.find(a => a.id === dst);
+        const key = src + '->' + dst;
+        const isReturn = returnEdges.has(key);
+        html += `<div class="flex items-center justify-between py-1.5 border-t border-border/50">
+          <span class="text-gray-400">→ ${escHtml(dstAgent?.name||dst)}</span>
+          <button onclick="toggleReturnEdge('${escHtml(src)}','${escHtml(dst)}')" class="px-2 py-0.5 rounded text-[10px] font-medium ${isReturn ? 'bg-amber-500/20 text-amber-400' : 'bg-surface text-muted hover:text-white'}">
+            ${isReturn ? '↩ Return' : '→ Normal'}
+          </button>
+        </div>`;
+      }
     }
+    html += renderHeaderMultiSelect(src);
     edgePanel.innerHTML = html;
     edgePanel.classList.remove('hidden');
     const el = document.getElementById('node-' + nodeId);
@@ -663,6 +717,8 @@ async function loadFlow() {
   const fd = flows.find(f => f.id === currentFlowId);
   if (!fd) return;
   startNodeId = fd.start_node || '';
+  flowDefaultHeaderIds = fd.default_header_ids || [];
+  nodeHeaderIds = {};
   editor.clear();
   if (!fd.nodes.length) return;
   const idMap = {};
@@ -670,6 +726,7 @@ async function loadFlow() {
     const a = agents.find(x => x.id === n.agent_id);
     if (!a) continue;
     if (!startNodeId) startNodeId = n.agent_id;
+    if (n.header_ids && n.header_ids.length) nodeHeaderIds[n.agent_id] = n.header_ids;
     const nid = editor.addNode(a.name, 1, 1, n.x, n.y, a.id, { agentId: a.id }, nodeHtml(a, n.agent_id === startNodeId));
     idMap[n.agent_id] = nid;
   }
@@ -701,7 +758,8 @@ async function _doSaveFlow() {
   const nodes = []; const edges = [];
   const nodeIdToAgent = {};
   for (const [nid, n] of Object.entries(raw)) {
-    nodes.push({ agent_id: n.data.agentId, x: n.pos_x, y: n.pos_y });
+    const hids = nodeHeaderIds[n.data.agentId] || [];
+    nodes.push({ agent_id: n.data.agentId, x: n.pos_x, y: n.pos_y, header_ids: hids });
     nodeIdToAgent[nid] = n.data.agentId;
   }
   for (const [nid, n] of Object.entries(raw)) {
@@ -712,7 +770,7 @@ async function _doSaveFlow() {
   }
   const fd = flows.find(f => f.id === currentFlowId);
   const name = fd ? fd.name : 'Default';
-  await fetch(`${API}/flows/${currentFlowId}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ id: currentFlowId, name, nodes, edges, start_node: startNodeId }) });
+  await fetch(`${API}/flows/${currentFlowId}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ id: currentFlowId, name, nodes, edges, start_node: startNodeId, default_header_ids: flowDefaultHeaderIds }) });
   // Update local cache
   if (fd) { fd.nodes = nodes; fd.edges = edges; fd.start_node = startNodeId; }
   document.getElementById('flow-info').textContent = `✓ Salvo: ${nodes.length} nós, ${edges.length} conexões, início: ${startNodeId}`;
@@ -1053,11 +1111,139 @@ function isNearBottom(el, threshold=100) { return (el.scrollHeight - el.scrollTo
   btn.addEventListener('click', () => sc.scrollTo({top: sc.scrollHeight, behavior:'smooth'}));
 })();
 
+// ── Headers ──────────────────────────────────────────────────────────────
+
+let headersList = [];
+let editingHeaderId = null;
+let selectedHeaderId = null;
+const DEFAULT_HEADER_IDS = ['default-protocol', 'default-wrapper'];
+
+async function loadHeaders() {
+  headersList = await (await fetch(`${API}/headers`)).json();
+  renderHeaders();
+  loadPlaceholders();
+}
+
+async function loadPlaceholders() {
+  const phs = await (await fetch(`${API}/headers/placeholders`)).json();
+  document.getElementById('placeholder-list').innerHTML = phs.map(p =>
+    `<button onclick="insertPlaceholder('${escHtml(p)}')" class="block w-full text-left px-2 py-1.5 rounded bg-surface border border-border hover:border-accent/30 text-accent font-mono transition">${escHtml(p)}</button>`
+  ).join('');
+}
+
+function insertPlaceholder(ph) {
+  const ta = document.getElementById('h-content');
+  if (!ta) return;
+  const s = ta.selectionStart, e = ta.selectionEnd;
+  ta.value = ta.value.slice(0, s) + ph + ta.value.slice(e);
+  ta.focus(); ta.selectionStart = ta.selectionEnd = s + ph.length;
+}
+
+function renderHeaders() {
+  const el = document.getElementById('header-list');
+  if (!headersList.length) { el.innerHTML = '<p class="text-center text-muted text-xs py-8">Nenhum header</p>'; return; }
+  el.innerHTML = headersList.map(h => {
+    const isDef = DEFAULT_HEADER_IDS.includes(h.id);
+    const isSel = selectedHeaderId === h.id;
+    return `<div class="group flex flex-col gap-1 px-3 py-2.5 rounded-xl cursor-pointer transition ${isSel ? 'bg-accent/10 border border-accent/30' : 'hover:bg-surface/60 border border-transparent'}" onclick="selectHeader('${escHtml(h.id)}')">
+      <div class="flex items-center gap-2">
+        <span class="text-sm font-medium text-white">${escHtml(h.name)}</span>
+        ${isDef ? '<span class="text-[9px] bg-accent/20 text-accent px-1.5 py-0.5 rounded-full">default</span>' : ''}
+      </div>
+      <div class="text-xs text-muted truncate">${escHtml(h.description || h.content.slice(0, 60))}</div>
+      <div class="hidden group-hover:flex gap-1 mt-1">
+        <button onclick="event.stopPropagation();editHeader('${escHtml(h.id)}')" class="text-[10px] px-2 py-0.5 rounded bg-surface border border-border hover:border-accent/30 text-muted hover:text-white transition">✎ Editar</button>
+        ${isDef ? '' : `<button onclick="event.stopPropagation();deleteHeader('${escHtml(h.id)}')" class="text-[10px] px-2 py-0.5 rounded bg-surface border border-border hover:border-red-500/30 text-muted hover:text-red-400 transition">✕ Remover</button>`}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function selectHeader(id) {
+  selectedHeaderId = id;
+  renderHeaders();
+  const h = headersList.find(x => x.id === id);
+  if (!h) return;
+  const area = document.getElementById('header-editor-area');
+  area.innerHTML = `<div class="border-b border-border px-5 py-3 bg-card/10">
+    <div class="flex items-center gap-2"><span class="text-sm font-medium text-white">${escHtml(h.name)}</span>
+    ${DEFAULT_HEADER_IDS.includes(h.id) ? '<span class="text-[9px] bg-accent/20 text-accent px-1.5 py-0.5 rounded-full">default</span>' : ''}</div>
+    <div class="text-xs text-muted mt-0.5">${escHtml(h.description)}</div>
+  </div>
+  <div class="flex-1 overflow-y-auto p-5"><pre class="text-sm text-gray-300 whitespace-pre-wrap font-mono leading-relaxed">${escHtml(h.content)}</pre></div>`;
+}
+
+function openHeaderModal(header = null) {
+  editingHeaderId = header ? header.id : null;
+  document.getElementById('header-modal-title').textContent = header ? 'Editar Header' : 'Novo Header';
+  document.getElementById('h-id').value = header?.id || '';
+  document.getElementById('h-id').disabled = !!header;
+  document.getElementById('h-name').value = header?.name || '';
+  document.getElementById('h-desc').value = header?.description || '';
+  document.getElementById('h-content').value = header?.content || '';
+  document.getElementById('header-modal').classList.remove('hidden');
+}
+function closeHeaderModal() { document.getElementById('header-modal').classList.add('hidden'); editingHeaderId = null; }
+
+function editHeader(id) { const h = headersList.find(x => x.id === id); if (h) openHeaderModal(h); }
+
+async function saveHeader() {
+  const body = {
+    id: document.getElementById('h-id').value.trim(),
+    name: document.getElementById('h-name').value.trim(),
+    description: document.getElementById('h-desc').value.trim(),
+    content: document.getElementById('h-content').value,
+  };
+  if (!body.id || !body.name) return;
+  await fetch(editingHeaderId ? `${API}/headers/${editingHeaderId}` : `${API}/headers`, {
+    method: editingHeaderId ? 'PUT' : 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
+  });
+  closeHeaderModal();
+  await loadHeaders();
+  selectHeader(body.id);
+}
+
+async function deleteHeader(id) {
+  if (!confirm(`Remover header "${id}"?`)) return;
+  await fetch(`${API}/headers/${id}`, { method: 'DELETE' });
+  if (selectedHeaderId === id) selectedHeaderId = null;
+  loadHeaders();
+}
+
+// ── Flow: node header_ids + default_header_ids ───────────────────────────
+
+let nodeHeaderIds = {};  // agentId -> [header_id, ...]
+let flowDefaultHeaderIds = [];
+
+function getNodeHeaderIds(agentId) { return nodeHeaderIds[agentId] || []; }
+function setNodeHeaderIds(agentId, ids) { nodeHeaderIds[agentId] = ids; saveFlow(); }
+
+function renderHeaderMultiSelect(agentId) {
+  const selected = getNodeHeaderIds(agentId);
+  return `<div class="border-t border-border/50 mt-2 pt-2">
+    <div class="text-[10px] text-muted mb-1">Headers</div>
+    ${headersList.map(h => {
+      const checked = selected.includes(h.id) ? 'checked' : '';
+      return `<label class="flex items-center gap-1.5 text-[10px] text-gray-400 py-0.5 cursor-pointer hover:text-white">
+        <input type="checkbox" ${checked} onchange="toggleNodeHeader('${escHtml(agentId)}','${escHtml(h.id)}',this.checked)" class="rounded border-border bg-surface accent-accent w-3 h-3">
+        ${escHtml(h.name)}</label>`;
+    }).join('')}
+  </div>`;
+}
+
+function toggleNodeHeader(agentId, headerId, checked) {
+  let ids = getNodeHeaderIds(agentId);
+  if (checked && !ids.includes(headerId)) ids.push(headerId);
+  else ids = ids.filter(x => x !== headerId);
+  setNodeHeaderIds(agentId, ids);
+}
+
 // ── Init ─────────────────────────────────────────────────────────────────
-document.addEventListener('keydown', e => { if (e.key==='Escape') { closeModal(); closeProjectModal(); } });
+document.addEventListener('keydown', e => { if (e.key==='Escape') { closeModal(); closeProjectModal(); closeHeaderModal(); } });
 loadAgents();
 loadProjects();
 loadFlows();
+loadHeaders();
 </script>
 </body>
 </html>

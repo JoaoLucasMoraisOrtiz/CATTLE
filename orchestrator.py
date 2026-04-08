@@ -17,9 +17,11 @@ from checkpoint import GitCheckpoint
 from config import (
     PROTOCOL_INSTRUCTIONS, GOD_PERSONA,
     MAX_HANDOFF_ROUNDS, MIN_RESPONSE_LEN, MAX_RETRIES,
+    DEFAULT_PROTOCOL_HEADER_ID, MAX_SIGNAL_NUDGES, NUDGE_MESSAGE,
 )
 from swarm_state import SwarmState, save_swarm, load_swarm_state, resume_agent
 import flow as flowmod
+import headers as hmod
 
 
 def _build_agent_list_for(agent_id: str, agents: list[AgentDef], flow: Flow) -> str:
@@ -30,14 +32,15 @@ def _build_agent_list_for(agent_id: str, agents: list[AgentDef], flow: Flow) -> 
     return '\n'.join(f'- {a.id}: {a.name} — {a.persona[:80]}...' for a in visible)
 
 
-def _init_agent(defn: AgentDef, agent_list: str, workdir: str, log: Logger) -> Agent:
+def _init_agent(defn: AgentDef, agent_list: str, workdir: str, log: Logger, header_ids: list[str] | None = None) -> Agent:
     agent = Agent(defn.name, workdir, defn.model)
     agent.start()
-    persona = (
-        defn.persona + '\n\n' +
-        PROTOCOL_INSTRUCTIONS.format(agent_list=agent_list) +
-        '\n\nResponda apenas: "Entendido." Nada mais.'
-    )
+    hids = header_ids or [DEFAULT_PROTOCOL_HEADER_ID]
+    ctx = {'agent_name': defn.name, 'agent_persona': defn.persona, 'agent_list': agent_list}
+    composed = hmod.compose(hids, ctx)
+    if not composed.strip():
+        composed = defn.persona + '\n\n' + PROTOCOL_INSTRUCTIONS.format(agent_list=agent_list)
+    persona = composed + '\n\nResponda apenas: "Entendido." Nada mais.'
     agent.send(persona)
     log.agent(defn.name, 'ready', f'workdir: {workdir}')
     return agent
@@ -58,16 +61,29 @@ def _send_with_retry(agent: Agent, message: str, log: Logger) -> str:
     raise RuntimeError(f'{agent.name}: failed after {MAX_RETRIES+1} attempts')
 
 
+def _resolve_header_ids(nid: str, flow, flow_def) -> list[str]:
+    """Get header_ids for a node, falling back to flow defaults then system default."""
+    node = next((n for n in flow.nodes if n.agent_id == nid), None)
+    if node and node.header_ids:
+        return node.header_ids
+    if flow_def and flow_def.default_header_ids:
+        return flow_def.default_header_ids
+    return [DEFAULT_PROTOCOL_HEADER_ID]
+
+
 def run_swarm(question: str, workdir: str = '.', flow: Flow | None = None, log: Logger | None = None, resume: bool = False, flow_id: str | None = None) -> list[dict]:
     if log is None:
         log = Logger()
+    flow_def = None
     if flow is None:
         fd = flowmod.get(flow_id) if flow_id else None
+        flow_def = fd
         flow = fd.flow if fd else load_flow()
 
     workdir = os.path.abspath(workdir)
     agent_defs = registry.load()
     agent_map = {a.id: a for a in agent_defs}
+    hmod.ensure_defaults()
 
     # ── Resume from saved state? ──────────────────────────────
     saved = load_swarm_state(workdir) if resume else None
@@ -115,7 +131,8 @@ def run_swarm(question: str, workdir: str = '.', flow: Flow | None = None, log: 
             else:
                 agent_list = _build_agent_list_for(nid, agent_defs, flow)
                 log.orch(f'Spawning {defn.name}...')
-                live_agents[nid] = _init_agent(defn, agent_list, workdir, log)
+                hids = _resolve_header_ids(nid, flow, flow_def)
+                live_agents[nid] = _init_agent(defn, agent_list, workdir, log, hids)
 
         current_id = start_id
         message = saved.pending_message if saved and saved.pending_message else question
@@ -135,7 +152,8 @@ def run_swarm(question: str, workdir: str = '.', flow: Flow | None = None, log: 
                     live_agents[cmd.target].quit()
                     defn = agent_map[cmd.target]
                     agent_list = _build_agent_list_for(cmd.target, agent_defs, flow)
-                    live_agents[cmd.target] = _init_agent(defn, agent_list, workdir, log)
+                    hids = _resolve_header_ids(cmd.target, flow, flow_def)
+                    live_agents[cmd.target] = _init_agent(defn, agent_list, workdir, log, hids)
 
                 elif cmd.action == 'compact' and cmd.target in live_agents:
                     log.orch(f'👁 GOD: compacting {cmd.target}')
@@ -231,8 +249,36 @@ def run_swarm(question: str, workdir: str = '.', flow: Flow | None = None, log: 
                 log.orch(f'Done! {defn.name}: {signal.summary}')
                 break
             else:
-                log.orch(f'No signal from {defn.name}, treating as done')
-                break
+                # Nudge: ask agent to comply with protocol
+                nudged = False
+                for _nudge in range(MAX_SIGNAL_NUDGES):
+                    log.orch(f'⚠ No signal from {defn.name}, nudging...')
+                    nudge_resp = _send_with_retry(current, NUDGE_MESSAGE, log)
+                    signal = parse(nudge_resp)
+                    log.agent(defn.name, '→ nudge response', signal.clean_response)
+                    log.record(round_num, defn.name, signal.clean_response)
+                    if signal.kind != 'none':
+                        nudged = True
+                        break
+                if not nudged:
+                    log.orch(f'No signal from {defn.name} after nudge, treating as done')
+                    break
+                # Re-enter routing with the new signal
+                if signal.kind == 'handoff':
+                    allowed = flow.targets_for(current_id)
+                    if signal.target not in allowed:
+                        log.error(f'Handoff to "{signal.target}" blocked by flow')
+                        break
+                    log.orch(f'Handoff → {signal.target}: {signal.summary}')
+                    message = (
+                        f"O agente {defn.name} completou sua parte e passou para você:\n\n"
+                        f"---\n{signal.clean_response}\n---\n\n"
+                        f"Contexto do handoff: {signal.summary}"
+                    )
+                    current_id = signal.target
+                elif signal.kind == 'done':
+                    log.orch(f'Done! {defn.name}: {signal.summary}')
+                    break
 
         log.orch('Swarm complete!')
 

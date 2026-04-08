@@ -8,9 +8,16 @@ MIN_RESPONSE_LEN = 50
 MAX_RETRIES = 2
 MAX_HANDOFF_ROUNDS = 10
 
+MAX_SIGNAL_NUDGES = 1
+
+NUDGE_MESSAGE = "Se você já finalizou suas tasks, responda como o protocolo pede, com @done. Se não, avalie sua próxima task e execute."
+
 HOME_ALLOWLIST = {'.config', '.local', '.bashrc', '.profile', '.zshrc'}
 
 # ── Agent protocol ────────────────────────────────────────────────────────
+
+DEFAULT_PROTOCOL_HEADER_ID = 'default-protocol'
+DEFAULT_WRAPPER_HEADER_ID = 'default-wrapper'
 
 PROTOCOL_INSTRUCTIONS = """
 ## Protocolo de comunicação

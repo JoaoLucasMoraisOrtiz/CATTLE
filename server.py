@@ -17,6 +17,8 @@ from flow import Flow, Node, Edge, FlowDef
 import projects as projmod
 from projects import Project
 from session import SwarmSession, EventCallback
+import headers as hmod
+from headers import HeaderDef
 
 app = FastAPI(title="ReDo!")
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -47,6 +49,7 @@ class FlowDefIn(BaseModel):
     nodes: list[dict] = []
     edges: list[dict] = []
     start_node: str = ''
+    default_header_ids: list[str] = []
 
 class ProjectIn(BaseModel):
     id: str
@@ -56,6 +59,12 @@ class ProjectIn(BaseModel):
 class MessageIn(BaseModel):
     text: str
     agent_id: str | None = None  # None = send to swarm, set = direct to agent
+
+class HeaderIn(BaseModel):
+    id: str
+    name: str
+    content: str
+    description: str = ''
 
 class OpenSessionIn(BaseModel):
     flow_id: str | None = None
@@ -129,7 +138,8 @@ def _flowdef_to_dict(fd: FlowDef) -> dict:
     return {"id": fd.id, "name": fd.name,
             "nodes": [n.__dict__ for n in fd.flow.nodes],
             "edges": [e.__dict__ for e in fd.flow.edges],
-            "start_node": fd.flow.start_node}
+            "start_node": fd.flow.start_node,
+            "default_header_ids": fd.default_header_ids}
 
 @app.get("/api/flows")
 def list_flows():
@@ -142,7 +152,7 @@ def create_flow(body: FlowDefIn):
             nodes=[Node(**n) for n in body.nodes],
             edges=[Edge(**e) for e in body.edges],
             start_node=body.start_node,
-        )))
+        ), default_header_ids=body.default_header_ids))
         return {"ok": True}
     except ValueError as e:
         raise HTTPException(400, str(e))
@@ -154,7 +164,7 @@ def update_flow(flow_id: str, body: FlowDefIn):
             nodes=[Node(**n) for n in body.nodes],
             edges=[Edge(**e) for e in body.edges],
             start_node=body.start_node,
-        )))
+        ), default_header_ids=body.default_header_ids))
         return {"ok": True}
     except KeyError as e:
         raise HTTPException(404, str(e))
@@ -166,6 +176,38 @@ def delete_flow(flow_id: str):
         return {"ok": True}
     except KeyError as e:
         raise HTTPException(404, str(e))
+
+# ── Header CRUD ───────────────────────────────────────────────────────────
+
+@app.get("/api/headers")
+def list_headers():
+    hmod.ensure_defaults()
+    return [h.__dict__ for h in hmod.load_all()]
+
+@app.post("/api/headers")
+def create_header(h: HeaderIn):
+    try:
+        hmod.add(HeaderDef(**h.model_dump()))
+        return {"ok": True}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+@app.put("/api/headers/{header_id}")
+def update_header(header_id: str, h: HeaderIn):
+    hmod.update(HeaderDef(**{**h.model_dump(), 'id': header_id}))
+    return {"ok": True}
+
+@app.delete("/api/headers/{header_id}")
+def delete_header(header_id: str):
+    try:
+        hmod.remove(header_id)
+        return {"ok": True}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+@app.get("/api/headers/placeholders")
+def list_placeholders():
+    return hmod.AVAILABLE_PLACEHOLDERS
 
 # ── Session management ────────────────────────────────────────────────────
 
