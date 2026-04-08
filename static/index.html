@@ -24,10 +24,10 @@
   .drawflow .drawflow-node.selected{border-color:#7c5cfc !important;background:#1c1c28 !important;box-shadow:0 0 0 2px rgba(124,92,252,.3)}
   .drawflow .drawflow-node .input,.drawflow .drawflow-node .output{width:12px;height:12px;border-radius:50%;border:2px solid #2a2a35;background:#0f0f13}
   .drawflow .drawflow-node .output{background:#7c5cfc;border-color:#7c5cfc}
-  .drawflow .connection .main-path{stroke:#7c5cfc;stroke-width:2;fill:none;marker-end:url(#arrowhead)}
+  .drawflow .connection .main-path{stroke:#7c5cfc;stroke-width:2;fill:none;marker-end:url(#arrowhead);cursor:pointer}
+  .drawflow .connection:hover .main-path{stroke-width:5}
   .drawflow .drawflow-delete{background:#ef4444;border:none;color:white;border-radius:50%}
   .drawflow .point{width:10px;height:10px;background:#7c5cfc;border:2px solid #9b7fff;border-radius:50%;cursor:move}
-  .drawflow .connection .main-path{cursor:pointer}
   .node-inner{padding:12px 16px}
   .node-inner .node-title{font-weight:600;font-size:13px;display:flex;align-items:center;gap:6px}
   .node-inner .node-sub{font-size:10px;color:#6b6b80;margin-top:4px}
@@ -564,9 +564,9 @@ function initDrawflow() {
 
   // Toggle return edge on connection click
   container.addEventListener('click', (ev) => {
-    const path = ev.target.closest('.connection path.main-path');
+    const path = ev.target.closest('.connection');
     if (!path) return;
-    const conn = path.closest('.connection');
+    const conn = path;
     if (!conn) return;
     const cls = conn.classList;
     const nodeOut = [...cls].find(c => c.startsWith('node_out_'))?.replace('node_out_','');
