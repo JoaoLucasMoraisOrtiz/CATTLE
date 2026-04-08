@@ -205,6 +205,14 @@ def delete_header(header_id: str):
     except ValueError as e:
         raise HTTPException(400, str(e))
 
+@app.post("/api/headers/{header_id}/set-default")
+def set_default_header(header_id: str):
+    try:
+        hmod.set_default(header_id)
+        return {"ok": True}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
 @app.get("/api/headers/placeholders")
 def list_placeholders():
     return hmod.AVAILABLE_PLACEHOLDERS
