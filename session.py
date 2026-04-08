@@ -38,6 +38,7 @@ class SwarmSession:
         self._abort = threading.Event()
         self._pending_messages = []
         self._opening = True
+        self._compacting = False
 
     def open(self):
         fd = flowmod.get(self.flow_id) if self.flow_id else None
@@ -120,6 +121,7 @@ class SwarmSession:
             self.cb.on_orch('⏳ Agents still loading — message queued')
             return
         if not self.alive: self.cb.on_error('Session not open'); return
+        if self._compacting: self.cb.on_error('⏳ Aguarde — compactando contexto dos agentes...'); return
         with self._lock:
             self._abort.clear()
             start_id = self.flow.start_agent()
@@ -127,6 +129,7 @@ class SwarmSession:
                 self.cb.on_error('No start agent in flow'); return
             self._chat('user', message)
             self._run_handoff_chain(start_id, message)
+            self._compact_all()
             self.cb.on_done()
 
     def send_to_agent(self, agent_id, message):
@@ -135,6 +138,7 @@ class SwarmSession:
             self.cb.on_orch('⏳ Agents still loading — message queued')
             return
         if not self.alive: self.cb.on_error('Session not open'); return
+        if self._compacting: self.cb.on_error('⏳ Aguarde — compactando contexto dos agentes...'); return
         with self._lock:
             self._abort.clear()
             match = next((aid for aid in self.agents if aid.lower() == agent_id.lower()), agent_id)
@@ -266,6 +270,25 @@ class SwarmSession:
                 if attempt == MAX_RETRIES: raise
             time.sleep(2 ** attempt)
         return ''
+
+    def _compact_all(self):
+        self._compacting = True
+        self.cb.on_orch('🗜 Compactando contexto de todos os agentes...')
+        agents_copy = list(self.agents.items())
+        def do_compact(aid, agent):
+            try:
+                name = self.agent_defs.get(aid, agent).name
+                self.cb.on_agent(name, '⏳ streaming', '🗜 Compactando...\n')
+                agent._pty.write('/compact\r')
+                agent._read_until_prompt(timeout=60)
+                self.cb.on_agent(name, 'ready', '')
+            except Exception:
+                pass
+        threads = [threading.Thread(target=do_compact, args=(aid, a)) for aid, a in agents_copy]
+        for t in threads: t.start()
+        for t in threads: t.join()
+        self._compacting = False
+        self.cb.on_orch('✓ Contexto compactado')
 
     def _auto_compact(self, agent_id, agent):
         try:
