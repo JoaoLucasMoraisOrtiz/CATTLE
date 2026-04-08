@@ -126,7 +126,8 @@
       </div>
       <!-- Messages -->
       <div class="flex-1 overflow-y-auto" id="chat-scroll">
-        <div id="chat-messages" class="px-4 py-3 space-y-3 max-w-3xl mx-auto"></div>
+        <div id="agent-grid" class="grid grid-cols-1 md:grid-cols-2 gap-3 p-4 h-full auto-rows-fr"></div>
+        <div id="chat-messages" class="px-4 py-3 space-y-3 max-w-3xl mx-auto hidden"></div>
         <div id="raw-log" class="px-4 py-3 space-y-1 font-mono text-xs hidden"></div>
       </div>
       <button id="scroll-to-bottom" aria-label="Scroll to bottom">↓</button>
@@ -617,6 +618,52 @@ async function sendChat() {
   });
 }
 
+// ── Agent grid (Swarm view) ───────────────────────────────────────────────
+
+function ensureGridPanel(name) {
+  let panel = document.getElementById('grid-' + name);
+  if (panel) return panel;
+  const grid = document.getElementById('agent-grid');
+  const c = getColor(name);
+  const div = document.createElement('div');
+  div.id = 'grid-' + name;
+  div.className = 'flex flex-col rounded-xl border border-border bg-card overflow-hidden min-h-0';
+  div.style.borderTopColor = c; div.style.borderTopWidth = '2px';
+  div.innerHTML = `
+    <div class="flex items-center gap-2 px-3 py-2 border-b border-border bg-card/50 flex-shrink-0">
+      <span class="w-2 h-2 rounded-full" style="background:${c}" id="grid-dot-${escHtml(name)}"></span>
+      <span class="text-xs font-medium text-white">${escHtml(name)}</span>
+      <span class="text-[10px] text-muted ml-auto" id="grid-status-${escHtml(name)}">Pronto</span>
+    </div>
+    <div class="flex-1 overflow-y-auto p-3 font-mono text-xs text-gray-400 whitespace-pre-wrap" id="grid-content-${escHtml(name)}"></div>`;
+  grid.appendChild(div);
+  return div;
+}
+
+function updateGridPanel(name, status, text) {
+  ensureGridPanel(name);
+  const s = document.getElementById('grid-status-' + name);
+  const d = document.getElementById('grid-dot-' + name);
+  if (s) s.textContent = status;
+  if (d) { d.style.background = status === '💀 Crashed' ? '#ef4444' : getColor(name); d.className = `w-2 h-2 rounded-full ${status === 'Processando...' ? 'running' : ''}`; }
+  if (text !== undefined) {
+    const c = document.getElementById('grid-content-' + name);
+    if (c) { c.textContent = text; if (c.textContent.length > 5000) c.textContent = '...\n' + c.textContent.slice(-4000); c.scrollTop = c.scrollHeight; }
+  }
+}
+
+function appendGridPanel(name, text) {
+  ensureGridPanel(name);
+  const c = document.getElementById('grid-content-' + name);
+  if (c) { c.textContent += text; if (c.textContent.length > 5000) c.textContent = '...\n' + c.textContent.slice(-4000); c.scrollTop = c.scrollHeight; }
+}
+
+function showView(view) {
+  document.getElementById('agent-grid').classList.toggle('hidden', view !== 'grid');
+  document.getElementById('chat-messages').classList.toggle('hidden', view !== 'chat');
+  document.getElementById('raw-log').classList.toggle('hidden', view !== 'log');
+}
+
 // ── Chat rendering ───────────────────────────────────────────────────────
 
 function addChatBubble(type, text, label) {
@@ -702,31 +749,28 @@ function renderAgentBoxes() {
 function selectChatTarget(target) {
   chatTarget = target;
   renderAgentBoxes();
-  const log = document.getElementById('raw-log');
-  const msgs = document.getElementById('chat-messages');
-  log.classList.add('hidden'); msgs.classList.remove('hidden');
 
-  // Highlight
   document.querySelectorAll('.agent-box').forEach(b => { b.classList.remove('border-accent/50','bg-accent/5'); b.classList.add('border-border','bg-surface'); });
 
   if (target === '__log__') {
-    log.classList.remove('hidden'); msgs.classList.add('hidden');
+    showView('log');
     document.getElementById('chat-header').innerHTML = '<span class="text-sm text-muted">📋 Log bruto</span>';
     document.getElementById('chat-input').placeholder = 'Mensagem para o swarm...';
     document.getElementById('box-__log__').classList.add('border-accent/50','bg-accent/5');
   } else if (target) {
+    showView('chat');
     const c = getColor(target);
-    document.getElementById('chat-header').innerHTML = `<span class="w-2 h-2 rounded-full" style="background:${c}"></span><span class="text-sm font-medium text-white">${escHtml(target)}</span><span class="text-xs text-muted ml-2">Mensagens vão direto para este agente</span>`;
+    document.getElementById('chat-header').innerHTML = `<span class="w-2 h-2 rounded-full" style="background:${c}"></span><span class="text-sm font-medium text-white">${escHtml(target)}</span><span class="text-xs text-muted ml-2">Chat direto com este agente</span>`;
     document.getElementById('chat-input').placeholder = `Mensagem para ${target}...`;
   } else {
+    showView('grid');
     document.getElementById('chat-header').innerHTML = sessionOpen
-      ? '<span class="w-2 h-2 rounded-full bg-emerald-500"></span><span class="text-sm text-white font-medium">Swarm</span><span class="text-xs text-muted ml-2">Mensagens seguem o flow configurado</span>'
+      ? '<span class="w-2 h-2 rounded-full bg-emerald-500"></span><span class="text-sm text-white font-medium">Swarm</span><span class="text-xs text-muted ml-2">Visão geral de todos os agentes</span>'
       : '<span class="text-sm text-muted">Abra um projeto para começar</span>';
     document.getElementById('chat-input').placeholder = 'Mensagem para o swarm... (@agente para falar direto)';
     document.getElementById('box-swarm').classList.add('border-accent/50','bg-accent/5');
     document.getElementById('box-swarm').classList.remove('border-border','bg-surface');
   }
-  renderChat();
 }
 
 // ── Raw log ──────────────────────────────────────────────────────────────
@@ -759,13 +803,24 @@ function handleSSE(type, data) {
         appendLog(`<span class="text-muted ml-4">│</span> <span class="text-gray-400">${escHtml(l)}</span>`);
     }
     if (data.name !== 'GOD') {
-      if (data.event.includes('ready')) updateAgentBox(data.name, 'ready', 'Pronto');
-      if (data.event.includes('← prompt')) updateAgentBox(data.name, 'working', 'Processando...');
+      if (data.event.includes('ready')) {
+        updateAgentBox(data.name, 'ready', 'Pronto');
+        updateGridPanel(data.name, 'Pronto');
+      }
+      if (data.event.includes('← prompt') || data.event.includes('← direct')) {
+        updateAgentBox(data.name, 'working', 'Processando...');
+        updateGridPanel(data.name, 'Processando...', '');
+      }
+      if (data.event === '⏳ streaming') {
+        updateAgentBox(data.name, 'working', (data.text||'').slice(0,60));
+        appendGridPanel(data.name, data.text||'');
+        return;
+      }
       if (data.event.includes('→ response')) {
         updateAgentBox(data.name, 'ready', (data.text||'').slice(0,60));
+        updateGridPanel(data.name, 'Pronto');
         addChatBubble('agent', data.text||'', data.name);
       }
-      if (data.event.includes('← direct')) updateAgentBox(data.name, 'working', 'Respondendo...');
     }
   } else if (type === 'summary') {
     addChatBubble('summary', data.text);
