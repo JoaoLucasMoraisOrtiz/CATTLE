@@ -644,8 +644,13 @@ function initDrawflow() {
       const isReturn = returnEdges.has(src + '->' + dst);
       const path = conn.querySelector('.main-path');
       if (path) {
-        path.setAttribute('stroke', isReturn ? '#f59e0b' : '#7c5cfc');
-        path.setAttribute('stroke-dasharray', isReturn ? '8 4' : '');
+        if (isReturn) {
+          path.style.setProperty('stroke', '#f59e0b', 'important');
+          path.style.setProperty('stroke-dasharray', '8 4', 'important');
+        } else {
+          path.style.removeProperty('stroke');
+          path.style.removeProperty('stroke-dasharray');
+        }
       }
     });
   }
