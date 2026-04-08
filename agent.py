@@ -61,23 +61,27 @@ class Agent:
                     if silence >= MAX_SILENCE:
                         break
                 elif time.time() > echo_deadline:
-                    streaming = True  # give up waiting for "Thinking", stream anyway
+                    streaming = True
                 continue
             silence = 0
-            buf.append(chunk)
             clean = strip_ansi(chunk)
-            combined = tail_carry + clean
-            # Check prompt
-            if PROMPT_RE.search(combined[-PROMPT_TAIL_CHARS:]):
-                if streaming:
-                    self._emit_chunk(clean)
-                break
-            tail_carry = clean[-PROMPT_TAIL_CHARS:]
-            # Start streaming once we see processing keywords
+            # Detect processing start
             if not streaming and is_processing(clean):
                 streaming = True
-            if streaming:
-                self._emit_chunk(clean)
+                buf.clear()
+                tail_carry = ''
+            if not streaming:
+                # Still in echo phase — check for echo prompt and skip it
+                if PROMPT_RE.search(clean[-PROMPT_TAIL_CHARS:]):
+                    tail_carry = ''
+                continue
+            # Streaming phase — accumulate and check for final prompt
+            buf.append(chunk)
+            self._emit_chunk(clean)
+            combined = tail_carry + clean
+            if PROMPT_RE.search(combined[-PROMPT_TAIL_CHARS:]):
+                break
+            tail_carry = clean[-PROMPT_TAIL_CHARS:]
         self._flush_chunk()
         raw = strip_ansi(''.join(buf))
         result = clean_response(raw, skip_text=message.strip())
