@@ -182,7 +182,7 @@ class SwarmSession:
             self._auto_compact(match, agent)
             if signal.kind == 'handoff' and signal.target in self.agents:
                 self.cb.on_orch(f'→ {signal.target}: {signal.summary}')
-                msg = f"[Handoff de {defn.name}] {signal.summary}"
+                msg = self._handoff_msg(defn.name, signal)
                 self._run_handoff_chain(signal.target, msg)
             self.cb.on_done()
         finally:
@@ -244,7 +244,7 @@ class SwarmSession:
                     self.cb.on_orch(f'↩ {signal.target} (retorno obrigatório para {defn.name})')
                 else:
                     self.cb.on_orch(f'→ {signal.target}: {signal.summary}')
-                msg = f"[Handoff de {defn.name}] {signal.summary}"
+                msg = self._handoff_msg(defn.name, signal)
                 current_id = signal.target
             elif signal.kind == 'done':
                 if return_stack:
@@ -292,7 +292,7 @@ class SwarmSession:
                         self.cb.on_orch(f'↩ {signal.target} (retorno obrigatório para {defn.name})')
                     else:
                         self.cb.on_orch(f'→ {signal.target}: {signal.summary}')
-                    msg = f"[Handoff de {defn.name}] {signal.summary}"
+                    msg = self._handoff_msg(defn.name, signal)
                     current_id = signal.target
                 elif signal.kind == 'done':
                     if return_stack:
@@ -339,6 +339,12 @@ class SwarmSession:
             return composed
         # Fallback to hardcoded if headers not found
         return defn.persona + '\n\n' + PROTOCOL_INSTRUCTIONS.format(agent_list=agent_list)
+
+    def _handoff_msg(self, sender_name, signal):
+        ctx = signal.clean_response
+        if len(ctx) > 1500:
+            ctx = '...\n' + ctx[-1500:]
+        return f"[Handoff de {sender_name}]\nInstrução: {signal.summary}\n\nContexto do trabalho anterior:\n{ctx}"
 
     def _chat(self, type, text, agent=''):
         append_chat_message(self.project_path, {'type': type, 'agent': agent, 'text': text, 'ts': time.time()})
