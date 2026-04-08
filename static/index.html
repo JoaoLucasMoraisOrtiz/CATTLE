@@ -562,12 +562,11 @@ function initDrawflow() {
   editor.on('connectionRemoved', () => saveFlow());
   editor.on('nodeMoved', () => saveFlow());
 
-  // Toggle return edge on connection click
-  container.addEventListener('click', (ev) => {
-    const path = ev.target.closest('.connection');
-    if (!path) return;
-    const conn = path;
+  // Toggle return edge on right-click connection
+  container.addEventListener('contextmenu', (ev) => {
+    const conn = ev.target.closest('.connection');
     if (!conn) return;
+    ev.preventDefault();
     const cls = conn.classList;
     const nodeOut = [...cls].find(c => c.startsWith('node_out_'))?.replace('node_out_','');
     const nodeIn = [...cls].find(c => c.startsWith('node_in_'))?.replace('node_in_','');
@@ -580,6 +579,9 @@ function initDrawflow() {
     if (returnEdges.has(key)) { returnEdges.delete(key); } else { returnEdges.add(key); }
     styleReturnEdges();
     saveFlow();
+    document.getElementById('flow-info').textContent = returnEdges.has(key)
+      ? `↩ ${srcAgent} → ${dstAgent}: retorno obrigatório`
+      : `→ ${srcAgent} → ${dstAgent}: handoff normal`;
   });
 
   window.styleReturnEdges = function styleReturnEdges() {
