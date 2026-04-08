@@ -635,8 +635,8 @@ function initDrawflow() {
     const raw = editor.drawflow.drawflow.Home.data;
     container.querySelectorAll('.connection').forEach(conn => {
       const cls = conn.classList;
-      const nodeOut = [...cls].find(c => c.startsWith('node_out_'))?.replace('node_out_','');
-      const nodeIn = [...cls].find(c => c.startsWith('node_in_'))?.replace('node_in_','');
+      const nodeOut = [...cls].find(c => c.startsWith('node_out_'))?.replace('node_out_node-','');
+      const nodeIn = [...cls].find(c => c.startsWith('node_in_'))?.replace('node_in_node-','');
       if (!nodeOut || !nodeIn) return;
       const src = raw[nodeOut]?.data?.agentId;
       const dst = raw[nodeIn]?.data?.agentId;
