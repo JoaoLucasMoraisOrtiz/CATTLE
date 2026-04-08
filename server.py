@@ -252,6 +252,19 @@ def close_session():
     active_session = None
     return {"ok": True}
 
+@app.post("/api/session/abort")
+def abort_session():
+    if active_session:
+        active_session.abort()
+    return {"ok": True}
+
+@app.post("/api/session/interrupt/{agent_id}")
+def interrupt_agent(agent_id: str):
+    if not active_session or not active_session.alive:
+        raise HTTPException(400, 'No active session')
+    active_session.interrupt_agent(agent_id)
+    return {"ok": True}
+
 
 @app.get("/api/session/status")
 def session_status():

@@ -65,6 +65,11 @@ class PtyProcess:
     def is_alive(self) -> bool:
         return self.proc is not None and self.proc.isalive()
 
+    def interrupt(self) -> None:
+        """Send Ctrl+C (SIGINT) to interrupt current generation."""
+        if self.proc and self.proc.isalive():
+            self.proc.sendintr()
+
     def kill(self) -> None:
         if self.proc and self.proc.isalive():
             try:

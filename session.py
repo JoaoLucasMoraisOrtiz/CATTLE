@@ -111,7 +111,17 @@ class SwarmSession:
 
     def abort(self):
         self._abort.set()
+        for agent in self.agents.values():
+            try: agent._pty.interrupt()
+            except Exception: pass
         self.cb.on_orch('⏹ Operação abortada')
+
+    def interrupt_agent(self, agent_id):
+        match = next((aid for aid in self.agents if aid.lower() == agent_id.lower()), None)
+        if match and match in self.agents:
+            self.agents[match]._pty.interrupt()
+            name = self.agent_defs.get(match, match).name
+            self.cb.on_orch(f'⏹ {name} interrompido')
 
     def restart_agent(self, agent_id):
         defn = self.agent_defs.get(agent_id)

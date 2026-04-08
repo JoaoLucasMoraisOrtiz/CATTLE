@@ -862,7 +862,9 @@ function onProjectChange() {
 // ── Send message ─────────────────────────────────────────────────────────
 
 async function stopAgent(name) {
-  await fetch(`${API}/session/abort`, {method:'POST'});
+  const a = agents.find(x => x.name === name);
+  const id = a ? a.id : name;
+  await fetch(`${API}/session/interrupt/${encodeURIComponent(id)}`, {method:'POST'});
 }
 
 async function sendChat() {
