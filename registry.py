@@ -26,9 +26,14 @@ def load() -> list[AgentDef]:
 
 
 def save(agents: list[AgentDef]) -> None:
-    REGISTRY_FILE.write_text(
-        json.dumps([asdict(a) for a in agents], indent=2, ensure_ascii=False)
-    )
+    REGISTRY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    data = json.dumps([asdict(a) for a in agents], indent=2, ensure_ascii=False)
+    tmp = REGISTRY_FILE.with_suffix('.tmp')
+    with open(tmp, 'w', encoding='utf-8') as f:
+        f.write(data)
+        f.flush()
+        import os; os.fsync(f.fileno())
+    tmp.replace(REGISTRY_FILE)
 
 
 def add(agent: AgentDef) -> list[AgentDef]:
