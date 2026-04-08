@@ -149,7 +149,7 @@ class SwarmSession:
                     allowed = self.flow.targets_for(current_id)
                     if signal.target not in allowed: self.cb.on_error(f'Handoff to {signal.target} blocked'); break
                     self.cb.on_orch(f'→ {signal.target}: {signal.summary}')
-                    msg = f"O agente {defn.name} completou sua parte:\n\n---\n{signal.clean_response}\n---\n\nContexto: {signal.summary}"
+                    msg = f"[Handoff de {defn.name}] {signal.summary}"
                     current_id = signal.target
                 elif signal.kind == 'done':
                     self.cb.on_summary(f'{defn.name}: {signal.summary}')
