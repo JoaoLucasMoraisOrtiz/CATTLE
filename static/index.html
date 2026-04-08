@@ -94,6 +94,24 @@
       <div class="text-xs text-muted uppercase tracking-wider mb-2">Arrastar para o canvas</div>
     </div>
     <div class="flex-1" id="drawflow"></div>
+    <!-- Help panel -->
+    <div id="flow-help" class="w-64 border-l border-border bg-card/30 p-4 overflow-y-auto text-xs text-gray-400 space-y-3 transition-all">
+      <div class="flex items-center justify-between">
+        <span class="text-white font-medium text-sm">📖 Guia</span>
+        <button onclick="document.getElementById('flow-help').classList.add('hidden');document.getElementById('flow-help-btn').classList.remove('hidden')" class="text-muted hover:text-white">✕</button>
+      </div>
+      <div class="space-y-2.5 leading-relaxed">
+        <div><span class="text-white">Adicionar agente</span><br>Arraste da paleta à esquerda para o canvas.</div>
+        <div><span class="text-white">Conectar agentes</span><br>Clique na bolinha roxa (saída) de um nó e arraste até a bolinha preta (entrada) de outro.</div>
+        <div><span class="text-white">⚡ Definir início</span><br>Dê <b class="text-white">duplo-clique</b> num nó para marcá-lo como ponto de partida do flow.</div>
+        <div><span class="text-white">↩ Aresta de retorno</span><br>Clique num nó → painel de conexões aparece ao lado. Clique em <span class="text-amber-400">→ Normal</span> para alternar para <span class="text-amber-400">↩ Return</span>. A seta fica <span class="text-amber-400">amarela tracejada</span>.</div>
+        <div class="border-t border-border/50 pt-2"><span class="text-white">O que é Return?</span><br>Quando um agente envia via aresta return, a resposta do destinatário <b class="text-white">volta obrigatoriamente</b> para o remetente, mesmo que o destinatário tente redirecionar para outro agente.</div>
+        <div><span class="text-white">Remover conexão</span><br>Clique na seta → aparece um <span class="text-red-400">✕</span> para deletar.</div>
+        <div><span class="text-white">Remover nó</span><br>Selecione o nó → <span class="text-red-400">✕</span> aparece no canto.</div>
+        <div><span class="text-white">Múltiplos flows</span><br>Use o seletor no topo para criar, renomear ou alternar entre flows diferentes.</div>
+      </div>
+    </div>
+    <button id="flow-help-btn" onclick="document.getElementById('flow-help').classList.remove('hidden');this.classList.add('hidden')" class="hidden absolute right-2 top-12 z-10 px-2 py-1 bg-card border border-border rounded-lg text-xs text-muted hover:text-white">📖</button>
   </div>
 </div>
 
