@@ -605,6 +605,10 @@ function onProjectChange() {
 
 // ── Send message ─────────────────────────────────────────────────────────
 
+async function stopAgent(name) {
+  await fetch(`${API}/session/abort`, {method:'POST'});
+}
+
 async function sendChat() {
   const input = document.getElementById('chat-input');
   const text = input.value.trim();
