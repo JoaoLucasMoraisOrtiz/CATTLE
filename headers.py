@@ -10,7 +10,13 @@ DEFAULT_PROTOCOL_ID = 'default-protocol'
 DEFAULT_WRAPPER_ID = 'default-wrapper'
 DEFAULT_HANDOFF_ID = 'default-handoff'
 
-AVAILABLE_PLACEHOLDERS = ['{agent_name}', '{agent_persona}', '{agent_list}', '{task}', '{handoff_context}']
+HEADER_TYPES = ('protocol', 'wrapper', 'handoff')
+
+AVAILABLE_PLACEHOLDERS = {
+    'protocol': ['{agent_name}', '{agent_persona}', '{agent_list}'],
+    'wrapper': ['{agent_persona}', '{task}', '{agent_name}', '{agent_list}'],
+    'handoff': ['{agent_name}', '{task}', '{handoff_context}'],
+}
 
 
 @dataclass
@@ -18,6 +24,8 @@ class HeaderDef:
     id: str
     name: str
     content: str
+    type: str = 'protocol'  # 'protocol' | 'wrapper' | 'handoff'
+    is_default: bool = False
     description: str = ''
 
 
@@ -61,9 +69,26 @@ def update(header: HeaderDef) -> list[HeaderDef]:
 
 
 def remove(header_id: str) -> list[HeaderDef]:
-    if header_id in (DEFAULT_PROTOCOL_ID, DEFAULT_WRAPPER_ID, DEFAULT_HANDOFF_ID):
-        raise ValueError(f'Cannot remove default header "{header_id}"')
+    h = get(header_id)
+    if h and h.is_default:
+        raise ValueError(f'Cannot remove default header "{header_id}". Unset as default first.')
     headers = [h for h in load_all() if h.id != header_id]
+    _save(headers)
+    return headers
+
+
+def get_default(header_type: str) -> HeaderDef | None:
+    return next((h for h in load_all() if h.type == header_type and h.is_default), None)
+
+
+def set_default(header_id: str) -> list[HeaderDef]:
+    headers = load_all()
+    target = next((h for h in headers if h.id == header_id), None)
+    if not target:
+        raise ValueError(f'Header "{header_id}" not found')
+    for h in headers:
+        if h.type == target.type:
+            h.is_default = (h.id == header_id)
     _save(headers)
     return headers
 
@@ -121,23 +146,17 @@ def ensure_defaults() -> None:
     headers = load_all()
     ids = {h.id for h in headers}
     changed = False
-    if DEFAULT_PROTOCOL_ID not in ids:
-        headers.append(HeaderDef(
-            id=DEFAULT_PROTOCOL_ID, name='Protocolo Padrão',
-            content=_DEFAULT_PROTOCOL_CONTENT,
-            description='Instruções de protocolo de comunicação do swarm'))
-        changed = True
-    if DEFAULT_WRAPPER_ID not in ids:
-        headers.append(HeaderDef(
-            id=DEFAULT_WRAPPER_ID, name='Wrapper Padrão',
-            content=_DEFAULT_WRAPPER_CONTENT,
-            description='Template que envolve cada mensagem com [SISTEMA] e [TAREFA]'))
-        changed = True
-    if DEFAULT_HANDOFF_ID not in ids:
-        headers.append(HeaderDef(
-            id=DEFAULT_HANDOFF_ID, name='Handoff Padrão',
-            content=_DEFAULT_HANDOFF_CONTENT,
-            description='Template da mensagem enviada ao próximo agente no handoff'))
-        changed = True
+    defaults = [
+        HeaderDef(id=DEFAULT_PROTOCOL_ID, name='Protocolo Padrão', type='protocol', is_default=True,
+                  content=_DEFAULT_PROTOCOL_CONTENT, description='Instruções de protocolo @handoff/@done'),
+        HeaderDef(id=DEFAULT_WRAPPER_ID, name='Wrapper Padrão', type='wrapper', is_default=True,
+                  content=_DEFAULT_WRAPPER_CONTENT, description='Envolve a 1ª mensagem com [SISTEMA] e [TAREFA]'),
+        HeaderDef(id=DEFAULT_HANDOFF_ID, name='Handoff Padrão', type='handoff', is_default=True,
+                  content=_DEFAULT_HANDOFF_CONTENT, description='Mensagem enviada ao próximo agente no handoff'),
+    ]
+    for d in defaults:
+        if d.id not in ids:
+            headers.append(d)
+            changed = True
     if changed:
         _save(headers)

@@ -8,7 +8,7 @@ from protocol import parse
 from flow import Flow, Node, load as load_flow
 from checkpoint import GitCheckpoint
 from swarm_state import save_swarm, SwarmState, save_agent_session, append_chat_message, load_chat_history, _project_dir
-from config import PROTOCOL_INSTRUCTIONS, MAX_HANDOFF_ROUNDS, MIN_RESPONSE_LEN, MAX_RETRIES, DEFAULT_PROTOCOL_HEADER_ID, DEFAULT_WRAPPER_HEADER_ID, MAX_SIGNAL_NUDGES, NUDGE_MESSAGE
+from config import PROTOCOL_INSTRUCTIONS, MAX_HANDOFF_ROUNDS, MIN_RESPONSE_LEN, MAX_RETRIES
 import flow as flowmod
 import headers as hmod
 
@@ -342,22 +342,24 @@ class SwarmSession:
 
     def _handoff_msg(self, sender_name, signal):
         import headers as hmod
-        hmod.ensure_defaults()
         ctx = signal.clean_response
         if len(ctx) > 1500:
             ctx = '...\n' + ctx[-1500:]
-        return hmod.compose([hmod.DEFAULT_HANDOFF_ID], {
-            'agent_name': sender_name,
-            'task': signal.summary,
-            'handoff_context': ctx,
-        })
+        h = hmod.get_default('handoff')
+        if h:
+            return h.content.format_map({
+                'agent_name': sender_name,
+                'task': signal.summary,
+                'handoff_context': ctx,
+            })
+        return f"[Handoff de {sender_name}]\n{signal.summary}\n\n{ctx}"
 
     def _chat(self, type, text, agent=''):
         append_chat_message(self.project_path, {'type': type, 'agent': agent, 'text': text, 'ts': time.time()})
 
     def _send_with_retry(self, agent, message):
         if hasattr(agent, '_persona') and not agent._persona_sent:
-            wrapper = hmod.get(DEFAULT_WRAPPER_HEADER_ID)
+            wrapper = hmod.get_default('wrapper')
             if wrapper:
                 message = wrapper.content.format_map({
                     'agent_persona': agent._persona,
@@ -377,7 +379,7 @@ class SwarmSession:
                     self._spawn_agent(agent_id, defn, list(self.agent_defs.values()))
                     agent = self.agents[agent_id]
                     if hasattr(agent, '_persona'):
-                        wrapper = hmod.get(DEFAULT_WRAPPER_HEADER_ID)
+                        wrapper = hmod.get_default('wrapper')
                         if wrapper:
                             message = wrapper.content.format_map({
                                 'agent_persona': agent._persona,
