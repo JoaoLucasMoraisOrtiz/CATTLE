@@ -1,0 +1,329 @@
+{
+  "taskId": "configurable-headers",
+  "resumo": {
+    "objetivo": "Tornar o 'header' (mensagem de sistema que guia os agentes) configurável, salvável e associável a trechos específicos do fluxo",
+    "problema": "Atualmente o header é hardcoded em config.py (PROTOCOL_INSTRUCTIONS) e montado inline em session.py/orchestrator.py. Não há como customizar sem editar código Python. Não existe conceito de variações de header para diferentes partes do fluxo.",
+    "resultadoEsperado": "Sistema de templates de header com CRUD, placeholders dinâmicos, atribuição por nó do fluxo, e UI completa para gerenciamento"
+  },
+  "arquivosRelevantes": [
+    {"caminho": "config.py", "motivo": "Contém PROTOCOL_INSTRUCTIONS hardcoded — será refatorado para ser um header default", "acoes": ["modify"]},
+    {"caminho": "session.py", "motivo": "Monta o header em _send_with_retry() e _spawn_agent() — precisa usar o novo sistema de composição", "acoes": ["modify"]},
+    {"caminho": "orchestrator.py", "motivo": "Monta o header em _init_agent() — precisa usar o novo sistema de composição", "acoes": ["modify"]},
+    {"caminho": "flow.py", "motivo": "Node precisa de campo header_ids para associar headers a nós do fluxo", "acoes": ["modify"]},
+    {"caminho": "server.py", "motivo": "Novos endpoints REST para CRUD de headers + atribuição no fluxo", "acoes": ["modify"]},
+    {"caminho": "static/index.html", "motivo": "Nova tab 'Headers' na UI + seletor de header no editor de fluxo", "acoes": ["modify"]},
+    {"caminho": "registry.py", "motivo": "AgentDef pode referenciar header_ids default", "acoes": ["reference"]}
+  ],
+  "caminhoDosDados": {
+    "entrada": "Usuário cria/edita templates de header via UI web (tab Headers) ou API REST",
+    "processamento": [
+      "1. CRUD de HeaderDef em headers.json (novo módulo headers.py)",
+      "2. Atribuição de header_ids a nós do fluxo (campo em Node)",
+      "3. Atribuição de header_ids default ao FlowDef",
+      "4. Na hora do spawn/send, composição do header final: resolve placeholders ({agent_name}, {agent_persona}, {agent_list}, {task}) e concatena headers na ordem"
+    ],
+    "armazenamento": "~/.kiro-swarm/headers.json — lista de HeaderDef com id, name, content, type",
+    "recuperacao": "headers.load_all() retorna lista; headers.get(id) retorna um; composição via headers.compose(header_ids, context_vars)",
+    "exibicao": "Tab 'Headers' na UI web com editor de texto, lista de placeholders disponíveis, preview. No editor de fluxo, dropdown de headers ao clicar num nó."
+  },
+  "codigoAModificar": [
+    {
+      "arquivo": "config.py",
+      "classe": null,
+      "metodo": "PROTOCOL_INSTRUCTIONS (constante)",
+      "motivo": "Mover para ser um header default criado na primeira execução, manter como fallback",
+      "mudancas": ["Adicionar DEFAULT_PROTOCOL_HEADER_ID constante", "Adicionar DEFAULT_WRAPPER_TEMPLATE constante"]
+    },
+    {
+      "arquivo": "flow.py",
+      "classe": "Node",
+      "metodo": null,
+      "motivo": "Adicionar campo para associar headers a nós específicos do fluxo",
+      "mudancas": ["Adicionar campo header_ids: list[str] = [] ao Node", "Adicionar campo default_header_ids: list[str] = [] ao FlowDef"]
+    },
+    {
+      "arquivo": "session.py",
+      "classe": "SwarmSession",
+      "metodo": "_spawn_agent(), _send_with_retry()",
+      "motivo": "Usar o novo sistema de composição de headers ao invés de concatenação hardcoded",
+      "mudancas": [
+        "Importar headers module",
+        "Em _spawn_agent(): resolver header_ids do nó (ou default do flow) e compor via headers.compose()",
+        "Em _send_with_retry(): usar template wrapper configurável ao invés de string hardcoded"
+      ]
+    },
+    {
+      "arquivo": "orchestrator.py",
+      "classe": null,
+      "metodo": "_init_agent()",
+      "motivo": "Usar o novo sistema de composição de headers",
+      "mudancas": ["Importar headers module", "Compor persona via headers.compose() ao invés de concatenação manual"]
+    },
+    {
+      "arquivo": "server.py",
+      "classe": null,
+      "metodo": null,
+      "motivo": "Adicionar endpoints REST para CRUD de headers",
+      "mudancas": ["Adicionar GET/POST/PUT/DELETE /api/headers", "Adicionar campo header_ids nos endpoints de flow"]
+    },
+    {
+      "arquivo": "static/index.html",
+      "classe": null,
+      "metodo": null,
+      "motivo": "Nova tab Headers + integração no editor de fluxo",
+      "mudancas": [
+        "Nova tab 'Headers' com lista, editor de texto, placeholders",
+        "No editor de fluxo: ao clicar num nó, mostrar dropdown de headers atribuídos",
+        "Preview de header composto para cada agente"
+      ]
+    }
+  ],
+  "codigoNovo": [
+    {
+      "arquivo": "headers.py",
+      "tipo": "service",
+      "responsabilidade": "CRUD de HeaderDef + composição de headers com resolução de placeholders",
+      "interfaces": ["HeaderDef(id, name, content, description, placeholders)", "compose(header_ids, context) -> str", "load_all() -> list[HeaderDef]", "ensure_defaults() -> None"]
+    }
+  ],
+  "casosDeTeste": {
+    "unitarios": [],
+    "integracao": [],
+    "e2e": [
+      {
+        "descricao": "Criar header template, atribuir a nó do fluxo, executar swarm e verificar que o agente recebeu o header correto",
+        "fluxo": ["Abrir UI", "Criar header na tab Headers", "Ir ao editor de fluxo", "Clicar num nó", "Atribuir header", "Executar swarm", "Verificar transcript"]
+      }
+    ]
+  },
+  "subTarefas": [
+    {
+      "taskId": "headers-01-module",
+      "titulo": "Criar módulo headers.py com CRUD e composição",
+      "prioridade": 1,
+      "dependencias": [],
+      "resumo": {
+        "objetivo": "Módulo de persistência e composição de header templates",
+        "problema": "Não existe conceito de header template reutilizável no sistema",
+        "resultadoEsperado": "headers.py com HeaderDef dataclass, CRUD em ~/.kiro-swarm/headers.json, função compose() que resolve placeholders, e ensure_defaults() que cria os headers padrão (protocol + wrapper) na primeira execução"
+      },
+      "arquivosRelevantes": [
+        {"caminho": "registry.py", "motivo": "Padrão de CRUD + JSON persistence a seguir", "acoes": ["reference"]},
+        {"caminho": "config.py", "motivo": "PROTOCOL_INSTRUCTIONS será migrado como header default", "acoes": ["reference"]}
+      ],
+      "caminhoDosDados": {
+        "entrada": "Chamadas CRUD via API ou código interno",
+        "processamento": ["Validação de campos", "Serialização JSON", "Resolução de placeholders via str.format_map()"],
+        "armazenamento": "~/.kiro-swarm/headers.json",
+        "recuperacao": "headers.load_all(), headers.get(id)",
+        "exibicao": "N/A — módulo backend"
+      },
+      "codigoAModificar": [],
+      "codigoNovo": [
+        {
+          "arquivo": "headers.py",
+          "tipo": "service",
+          "responsabilidade": "CRUD + composição de headers. HeaderDef(id, name, content, description). Placeholders suportados: {agent_name}, {agent_persona}, {agent_list}, {task}. compose(header_ids, context_vars) concatena headers resolvendo placeholders. ensure_defaults() cria 'default-protocol' (conteúdo atual de PROTOCOL_INSTRUCTIONS) e 'default-wrapper' (template [SISTEMA]...[TAREFA]) se não existirem."
+        }
+      ],
+      "casosDeTeste": {"unitarios": [], "integracao": [], "e2e": []},
+      "subTarefas": []
+    },
+    {
+      "taskId": "headers-02-flow-integration",
+      "titulo": "Integrar headers no modelo de fluxo (Node + FlowDef)",
+      "prioridade": 2,
+      "dependencias": ["headers-01-module"],
+      "resumo": {
+        "objetivo": "Permitir atribuição de headers a nós do fluxo e default do flow",
+        "problema": "Node e FlowDef não têm campo para referenciar headers",
+        "resultadoEsperado": "Node.header_ids e FlowDef default_header_ids permitem configurar quais headers cada agente recebe"
+      },
+      "arquivosRelevantes": [
+        {"caminho": "flow.py", "motivo": "Adicionar campos header_ids", "acoes": ["modify"]}
+      ],
+      "caminhoDosDados": {
+        "entrada": "Configuração via UI/API ao editar fluxo",
+        "processamento": ["Serialização/deserialização dos novos campos"],
+        "armazenamento": "flows.json (campos adicionais nos nós)",
+        "recuperacao": "Via flow.get() — campos já presentes nos objetos",
+        "exibicao": "N/A"
+      },
+      "codigoAModificar": [
+        {
+          "arquivo": "flow.py",
+          "classe": "Node",
+          "metodo": null,
+          "motivo": "Adicionar header_ids",
+          "mudancas": ["Adicionar campo header_ids: list[str] = field(default_factory=list)"]
+        },
+        {
+          "arquivo": "flow.py",
+          "classe": "FlowDef",
+          "metodo": null,
+          "motivo": "Adicionar default_header_ids para o fluxo inteiro",
+          "mudancas": ["Adicionar campo default_header_ids: list[str] = field(default_factory=list)"]
+        },
+        {
+          "arquivo": "flow.py",
+          "classe": null,
+          "metodo": "_flow_to_dict, _dict_to_flowdef",
+          "motivo": "Serializar/deserializar os novos campos",
+          "mudancas": ["Incluir header_ids nos dicts de Node", "Incluir default_header_ids no dict de FlowDef"]
+        }
+      ],
+      "codigoNovo": [],
+      "casosDeTeste": {"unitarios": [], "integracao": [], "e2e": []},
+      "subTarefas": []
+    },
+    {
+      "taskId": "headers-03-compose-runtime",
+      "titulo": "Refatorar session.py e orchestrator.py para usar headers.compose()",
+      "prioridade": 3,
+      "dependencias": ["headers-01-module", "headers-02-flow-integration"],
+      "resumo": {
+        "objetivo": "Substituir a montagem hardcoded de headers pela composição dinâmica via headers.compose()",
+        "problema": "session.py e orchestrator.py montam o header inline com concatenação de strings",
+        "resultadoEsperado": "Headers são resolvidos a partir dos header_ids do nó (ou defaults do flow), com fallback para os headers padrão"
+      },
+      "arquivosRelevantes": [
+        {"caminho": "session.py", "motivo": "Refatorar _spawn_agent() e _send_with_retry()", "acoes": ["modify"]},
+        {"caminho": "orchestrator.py", "motivo": "Refatorar _init_agent()", "acoes": ["modify"]},
+        {"caminho": "headers.py", "motivo": "Usar compose()", "acoes": ["reference"]},
+        {"caminho": "config.py", "motivo": "Manter PROTOCOL_INSTRUCTIONS como fallback, adicionar constantes de IDs default", "acoes": ["modify"]}
+      ],
+      "caminhoDosDados": {
+        "entrada": "Spawn de agente ou envio de primeira mensagem",
+        "processamento": [
+          "1. Buscar header_ids do Node no flow (ou default_header_ids do FlowDef)",
+          "2. Se vazio, usar ['default-protocol'] como fallback",
+          "3. Montar context_vars: {agent_name, agent_persona, agent_list, task}",
+          "4. Chamar headers.compose(header_ids, context_vars) → string final",
+          "5. Usar como persona do agente"
+        ],
+        "armazenamento": "N/A — composição em runtime",
+        "recuperacao": "N/A",
+        "exibicao": "N/A"
+      },
+      "codigoAModificar": [
+        {
+          "arquivo": "session.py",
+          "classe": "SwarmSession",
+          "metodo": "_spawn_agent()",
+          "motivo": "Usar headers.compose() ao invés de concatenação manual",
+          "mudancas": [
+            "Buscar node do flow para obter header_ids",
+            "Chamar headers.compose(ids, {agent_name, agent_persona, agent_list})",
+            "Resultado substitui a concatenação defn.persona + PROTOCOL_INSTRUCTIONS"
+          ]
+        },
+        {
+          "arquivo": "session.py",
+          "classe": "SwarmSession",
+          "metodo": "_send_with_retry()",
+          "motivo": "Usar template wrapper configurável",
+          "mudancas": ["Buscar wrapper template dos headers ao invés de string hardcoded [SISTEMA]...[TAREFA]"]
+        },
+        {
+          "arquivo": "orchestrator.py",
+          "classe": null,
+          "metodo": "_init_agent()",
+          "motivo": "Usar headers.compose()",
+          "mudancas": ["Mesma lógica: buscar header_ids do node, compor via headers.compose()"]
+        },
+        {
+          "arquivo": "config.py",
+          "classe": null,
+          "metodo": null,
+          "motivo": "Adicionar constantes de IDs default",
+          "mudancas": ["DEFAULT_PROTOCOL_HEADER_ID = 'default-protocol'", "DEFAULT_WRAPPER_HEADER_ID = 'default-wrapper'"]
+        }
+      ],
+      "codigoNovo": [],
+      "casosDeTeste": {"unitarios": [], "integracao": [], "e2e": []},
+      "subTarefas": []
+    },
+    {
+      "taskId": "headers-04-api",
+      "titulo": "Endpoints REST para CRUD de headers",
+      "prioridade": 4,
+      "dependencias": ["headers-01-module"],
+      "resumo": {
+        "objetivo": "Expor CRUD de headers via API REST",
+        "problema": "Não existem endpoints para gerenciar headers",
+        "resultadoEsperado": "GET/POST/PUT/DELETE /api/headers funcionando"
+      },
+      "arquivosRelevantes": [
+        {"caminho": "server.py", "motivo": "Adicionar endpoints", "acoes": ["modify"]},
+        {"caminho": "headers.py", "motivo": "Usar CRUD", "acoes": ["reference"]}
+      ],
+      "caminhoDosDados": {
+        "entrada": "HTTP requests da UI web",
+        "processamento": ["Validação via Pydantic", "Delegação para headers.py"],
+        "armazenamento": "Via headers.py → headers.json",
+        "recuperacao": "Via headers.py",
+        "exibicao": "JSON responses"
+      },
+      "codigoAModificar": [
+        {
+          "arquivo": "server.py",
+          "classe": null,
+          "metodo": null,
+          "motivo": "Adicionar rotas de headers",
+          "mudancas": [
+            "Adicionar HeaderIn (Pydantic model)",
+            "GET /api/headers — lista todos",
+            "POST /api/headers — cria novo",
+            "PUT /api/headers/{header_id} — atualiza",
+            "DELETE /api/headers/{header_id} — remove (bloquear remoção de defaults)",
+            "GET /api/headers/placeholders — retorna lista de placeholders disponíveis"
+          ]
+        }
+      ],
+      "codigoNovo": [],
+      "casosDeTeste": {"unitarios": [], "integracao": [], "e2e": []},
+      "subTarefas": []
+    },
+    {
+      "taskId": "headers-05-ui",
+      "titulo": "UI web — tab Headers + integração no editor de fluxo",
+      "prioridade": 5,
+      "dependencias": ["headers-04-api", "headers-02-flow-integration"],
+      "resumo": {
+        "objetivo": "Interface para gerenciar headers e atribuí-los a nós do fluxo",
+        "problema": "Não existe UI para headers",
+        "resultadoEsperado": "Tab 'Headers' com CRUD completo, editor de texto com referência de placeholders, e no editor de fluxo: ao clicar num nó, poder selecionar quais headers ele usa"
+      },
+      "arquivosRelevantes": [
+        {"caminho": "static/index.html", "motivo": "Toda a UI está neste SPA", "acoes": ["modify"]}
+      ],
+      "caminhoDosDados": {
+        "entrada": "Interação do usuário na UI",
+        "processamento": ["Fetch API para CRUD", "Renderização de lista e editor"],
+        "armazenamento": "Via API → headers.json",
+        "recuperacao": "Via API GET /api/headers",
+        "exibicao": "Tab Headers: lista de cards com nome/descrição, editor de texto com syntax highlight de placeholders. Editor de fluxo: dropdown multi-select de headers ao clicar num nó."
+      },
+      "codigoAModificar": [
+        {
+          "arquivo": "static/index.html",
+          "classe": null,
+          "metodo": null,
+          "motivo": "Adicionar tab Headers e integrar no editor de fluxo",
+          "mudancas": [
+            "Nova tab 'Headers' no nav (entre Fluxo e Executar)",
+            "Lista de headers com botões criar/editar/deletar",
+            "Modal/form de edição com: nome, descrição, textarea para conteúdo",
+            "Painel lateral com placeholders disponíveis ({agent_name}, {agent_persona}, {agent_list}, {task}) — clicável para inserir",
+            "Badge 'default' nos headers padrão (não deletáveis)",
+            "No editor de fluxo: ao selecionar nó, mostrar seção 'Headers' com multi-select dos headers disponíveis",
+            "Campo 'Default Headers' nas configurações do flow"
+          ]
+        }
+      ],
+      "codigoNovo": [],
+      "casosDeTeste": {"unitarios": [], "integracao": [], "e2e": []},
+      "subTarefas": []
+    }
+  ]
+}
