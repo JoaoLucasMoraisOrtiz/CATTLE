@@ -469,8 +469,16 @@ function initDrawflow() {
     if (!n?.data?.agentId) return;
     startNodeId = n.data.agentId;
     refreshStartBadges();
+    saveFlow();
     document.getElementById('flow-info').textContent = `⚡ Início: ${n.name}`;
   });
+
+  // Auto-save on any change
+  editor.on('nodeCreated', () => saveFlow());
+  editor.on('nodeRemoved', () => saveFlow());
+  editor.on('connectionCreated', () => saveFlow());
+  editor.on('connectionRemoved', () => saveFlow());
+  editor.on('nodeMoved', () => saveFlow());
 
   loadFlow();
 }
