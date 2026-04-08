@@ -123,40 +123,8 @@ class SwarmSession:
             start_id = self.flow.start_agent()
             if not start_id or start_id not in self.agents:
                 self.cb.on_error('No start agent in flow'); return
-            current_id, msg = start_id, message
             self._chat('user', message)
-            for _ in range(MAX_HANDOFF_ROUNDS):
-                if self._abort.is_set(): self.cb.on_orch('⏹ Abortado'); break
-                self.round_num += 1
-                agent = self.agents.get(current_id)
-                defn = self.agent_defs.get(current_id)
-                if not agent or not defn: self.cb.on_error(f'Agent {current_id} not available'); break
-                self.cb.on_orch(f'Round {self.round_num}: {defn.name}')
-                self.cb.on_agent(defn.name, '← prompt', msg[:300] + ('...' if len(msg) > 300 else ''))
-                try:
-                    response = self._send_with_retry(agent, msg)
-                    agent = self.agents.get(current_id, agent)
-                except Exception as e: self.cb.on_error(f'{defn.name}: {e}'); break
-                if self._abort.is_set(): self.cb.on_orch('⏹ Abortado'); break
-                signal = parse(response)
-                self.cb.on_agent(defn.name, '→ response', signal.clean_response)
-                self._chat('agent', signal.clean_response, defn.name)
-                h = self.git.commit(self.round_num, defn.name)
-                if h: self.cb.on_orch(f'📌 {h[:8]}')
-                self._save_state()
-                self._auto_compact(current_id, agent)
-                if signal.kind == 'handoff':
-                    allowed = self.flow.targets_for(current_id)
-                    if signal.target not in allowed: self.cb.on_error(f'Handoff to {signal.target} blocked'); break
-                    self.cb.on_orch(f'→ {signal.target}: {signal.summary}')
-                    msg = f"[Handoff de {defn.name}] {signal.summary}"
-                    current_id = signal.target
-                elif signal.kind == 'done':
-                    self.cb.on_summary(f'{defn.name}: {signal.summary}')
-                    self._chat('summary', f'{defn.name}: {signal.summary}')
-                    break
-                else:
-                    self.cb.on_summary(f'{defn.name} finalizou'); break
+            self._run_handoff_chain(start_id, message)
             self.cb.on_done()
 
     def send_to_agent(self, agent_id, message):
@@ -184,7 +152,47 @@ class SwarmSession:
             self._chat('agent', signal.clean_response, defn.name)
             self._save_state()
             self._auto_compact(match, agent)
+            # Follow handoff if requested
+            if signal.kind == 'handoff' and signal.target in self.agents:
+                self.cb.on_orch(f'→ {signal.target}: {signal.summary}')
+                msg = f"[Handoff de {defn.name}] {signal.summary}"
+                self._run_handoff_chain(signal.target, msg)
             self.cb.on_done()
+
+    def _run_handoff_chain(self, start_id, message):
+        current_id, msg = start_id, message
+        for _ in range(MAX_HANDOFF_ROUNDS):
+            if self._abort.is_set(): self.cb.on_orch('⏹ Abortado'); break
+            self.round_num += 1
+            agent = self.agents.get(current_id)
+            defn = self.agent_defs.get(current_id)
+            if not agent or not defn: self.cb.on_error(f'Agent {current_id} not available'); break
+            self.cb.on_orch(f'Round {self.round_num}: {defn.name}')
+            self.cb.on_agent(defn.name, '← prompt', msg[:300] + ('...' if len(msg) > 300 else ''))
+            try:
+                response = self._send_with_retry(agent, msg)
+                agent = self.agents.get(current_id, agent)
+            except Exception as e: self.cb.on_error(f'{defn.name}: {e}'); break
+            if self._abort.is_set(): self.cb.on_orch('⏹ Abortado'); break
+            signal = parse(response)
+            self.cb.on_agent(defn.name, '→ response', signal.clean_response)
+            self._chat('agent', signal.clean_response, defn.name)
+            h = self.git.commit(self.round_num, defn.name)
+            if h: self.cb.on_orch(f'📌 {h[:8]}')
+            self._save_state()
+            self._auto_compact(current_id, agent)
+            if signal.kind == 'handoff':
+                if signal.target not in self.agents:
+                    self.cb.on_error(f'Agent {signal.target} not found'); break
+                self.cb.on_orch(f'→ {signal.target}: {signal.summary}')
+                msg = f"[Handoff de {defn.name}] {signal.summary}"
+                current_id = signal.target
+            elif signal.kind == 'done':
+                self.cb.on_summary(f'{defn.name}: {signal.summary}')
+                self._chat('summary', f'{defn.name}: {signal.summary}')
+                break
+            else:
+                self.cb.on_summary(f'{defn.name} finalizou'); break
 
     def _spawn_agent(self, nid, defn, all_defs):
         targets = self.flow.targets_for(nid)
