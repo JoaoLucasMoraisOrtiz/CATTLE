@@ -131,23 +131,24 @@
     },
     {
       "taskId": "headers-02-flow-integration",
-      "titulo": "Integrar headers no modelo de fluxo (Node + FlowDef)",
+      "titulo": "Integrar headers no modelo de fluxo (Node + FlowDef) e atualizar endpoints existentes",
       "prioridade": 2,
       "dependencias": ["headers-01-module"],
       "resumo": {
-        "objetivo": "Permitir atribuição de headers a nós do fluxo e default do flow",
-        "problema": "Node e FlowDef não têm campo para referenciar headers",
-        "resultadoEsperado": "Node.header_ids e FlowDef default_header_ids permitem configurar quais headers cada agente recebe"
+        "objetivo": "Permitir atribuição de headers a nós do fluxo e default do flow, incluindo atualização dos endpoints REST existentes de flow",
+        "problema": "Node e FlowDef não têm campo para referenciar headers, e os endpoints existentes de flow em server.py (FlowDefIn, _flowdef_to_dict, create_flow, update_flow, save_flow, get_flow) não serializam/deserializam os novos campos",
+        "resultadoEsperado": "Node.header_ids e FlowDef.default_header_ids funcionam end-to-end: modelo → serialização → API REST → UI"
       },
       "arquivosRelevantes": [
-        {"caminho": "flow.py", "motivo": "Adicionar campos header_ids", "acoes": ["modify"]}
+        {"caminho": "flow.py", "motivo": "Adicionar campos header_ids aos dataclasses e funções de serialização", "acoes": ["modify"]},
+        {"caminho": "server.py", "motivo": "Atualizar FlowDefIn, FlowIn, _flowdef_to_dict e endpoints existentes de flow para incluir os novos campos", "acoes": ["modify"]}
       ],
       "caminhoDosDados": {
         "entrada": "Configuração via UI/API ao editar fluxo",
-        "processamento": ["Serialização/deserialização dos novos campos"],
-        "armazenamento": "flows.json (campos adicionais nos nós)",
-        "recuperacao": "Via flow.get() — campos já presentes nos objetos",
-        "exibicao": "N/A"
+        "processamento": ["Serialização/deserialização dos novos campos em flow.py e server.py"],
+        "armazenamento": "flows.json (campos adicionais nos nós e no FlowDef)",
+        "recuperacao": "Via flow.get() e endpoints GET /api/flows, GET /api/flow",
+        "exibicao": "Endpoints retornam header_ids nos nós e default_header_ids no flow"
       },
       "codigoAModificar": [
         {
@@ -170,6 +171,34 @@
           "metodo": "_flow_to_dict, _dict_to_flowdef",
           "motivo": "Serializar/deserializar os novos campos",
           "mudancas": ["Incluir header_ids nos dicts de Node", "Incluir default_header_ids no dict de FlowDef"]
+        },
+        {
+          "arquivo": "server.py",
+          "classe": null,
+          "metodo": "FlowIn (Pydantic model)",
+          "motivo": "Aceitar header_ids nos nós ao salvar flow legado",
+          "mudancas": ["Nós em FlowIn.nodes já são dict — nenhuma mudança no model, mas garantir que o Node(**n) em save_flow aceita header_ids"]
+        },
+        {
+          "arquivo": "server.py",
+          "classe": null,
+          "metodo": "FlowDefIn (Pydantic model)",
+          "motivo": "Aceitar default_header_ids ao criar/atualizar flows",
+          "mudancas": ["Adicionar campo default_header_ids: list[str] = []"]
+        },
+        {
+          "arquivo": "server.py",
+          "classe": null,
+          "metodo": "_flowdef_to_dict()",
+          "motivo": "Retornar header_ids dos nós e default_header_ids nos GETs",
+          "mudancas": ["Incluir 'default_header_ids': fd.default_header_ids no dict retornado"]
+        },
+        {
+          "arquivo": "server.py",
+          "classe": null,
+          "metodo": "create_flow(), update_flow()",
+          "motivo": "Passar default_header_ids ao construir FlowDef",
+          "mudancas": ["Adicionar default_header_ids=body.default_header_ids na construção do FlowDef"]
         }
       ],
       "codigoNovo": [],

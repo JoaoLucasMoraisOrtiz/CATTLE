@@ -123,15 +123,14 @@ class SwarmSession:
             return
         if not self.alive: self.cb.on_error('Session not open'); return
         if self._compacting: self.cb.on_error('⏳ Aguarde — compactando contexto dos agentes...'); return
-        with self._lock:
-            self._abort.clear()
-            start_id = self.flow.start_agent()
-            if not start_id or start_id not in self.agents:
-                self.cb.on_error('No start agent in flow'); return
-            self._chat('user', message)
-            self._run_handoff_chain(start_id, message)
-            self._compact_all()
-            self.cb.on_done()
+        self._abort.clear()
+        start_id = self.flow.start_agent()
+        if not start_id or start_id not in self.agents:
+            self.cb.on_error('No start agent in flow'); return
+        self._chat('user', message)
+        self._run_handoff_chain(start_id, message)
+        self._compact_all()
+        self.cb.on_done()
 
     def send_to_agent(self, agent_id, message):
         if self._opening:
@@ -140,13 +139,21 @@ class SwarmSession:
             return
         if not self.alive: self.cb.on_error('Session not open'); return
         if self._compacting: self.cb.on_error('⏳ Aguarde — compactando contexto dos agentes...'); return
-        with self._lock:
-            self._abort.clear()
-            match = next((aid for aid in self.agents if aid.lower() == agent_id.lower()), agent_id)
+        match = next((aid for aid in self.agents if aid.lower() == agent_id.lower()), agent_id)
+        if match in self._busy:
+            self.cb.on_orch(f'⏳ {self.agent_defs.get(match, agent_id).name} ocupado — mensagem na fila')
+            self._agent_queues.setdefault(match, []).append(message)
+            return
+        self._abort.clear()
+        threading.Thread(target=self._do_send_to_agent, args=(match, message), daemon=True).start()
+
+    def _do_send_to_agent(self, match, message):
+        self._busy.add(match)
+        try:
             agent = self.agents.get(match)
             defn = self.agent_defs.get(match)
             if not agent or not defn:
-                self.cb.on_error(f'Agent {agent_id} not found'); self.cb.on_done(); return
+                self.cb.on_error(f'Agent {match} not found'); self.cb.on_done(); return
             self.cb.on_agent(defn.name, '← direct', message[:300])
             self._chat('user', message, defn.name)
             try:
@@ -159,18 +166,33 @@ class SwarmSession:
             self._chat('agent', signal.clean_response, defn.name)
             self._save_state()
             self._auto_compact(match, agent)
-            # Follow handoff if requested
             if signal.kind == 'handoff' and signal.target in self.agents:
                 self.cb.on_orch(f'→ {signal.target}: {signal.summary}')
                 msg = f"[Handoff de {defn.name}] {signal.summary}"
                 self._run_handoff_chain(signal.target, msg)
             self.cb.on_done()
+        finally:
+            self._busy.discard(match)
+            self._drain_queue(match)
+
+    def _drain_queue(self, agent_id):
+        q = self._agent_queues.get(agent_id, [])
+        if q:
+            msg = q.pop(0)
+            self.cb.on_orch(f'📨 Processando mensagem da fila para {self.agent_defs.get(agent_id, agent_id).name}')
+            self._do_send_to_agent(agent_id, msg)
 
     def _run_handoff_chain(self, start_id, message):
         current_id, msg = start_id, message
-        return_stack = []  # stack of (sender_id, edge_src→dst was returns)
+        return_stack = []
+        used_agents = set()
         for _ in range(MAX_HANDOFF_ROUNDS):
             if self._abort.is_set(): self.cb.on_orch('⏹ Abortado'); break
+            if current_id in self._busy:
+                self.cb.on_error(f'Agent {current_id} is busy — chain paused')
+                break
+            self._busy.add(current_id)
+            used_agents.add(current_id)
             self.round_num += 1
             agent = self.agents.get(current_id)
             defn = self.agent_defs.get(current_id)
