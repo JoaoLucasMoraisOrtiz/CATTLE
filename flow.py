@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 
-FLOW_FILE = Path(__file__).parent / 'flow.json'
+FLOW_FILE = Path.home() / '.kiro-swarm' / 'flow.json'
 
 
 @dataclass

@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 
-REGISTRY_FILE = Path(__file__).parent / 'agents.json'
+REGISTRY_FILE = Path.home() / '.kiro-swarm' / 'agents.json'
 
 
 @dataclass
