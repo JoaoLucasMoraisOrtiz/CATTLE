@@ -252,6 +252,8 @@ class SwarmSession:
                     current_id = sender_id
                 else:
                     self.cb.on_summary(f'{defn.name} finalizou'); break
+        # Release all agents used in this chain
+        self._busy -= used_agents
 
     def _spawn_agent(self, nid, defn, all_defs):
         targets = self.flow.targets_for(nid)
