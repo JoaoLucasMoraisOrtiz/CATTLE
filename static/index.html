@@ -538,9 +538,10 @@ function initDrawflow() {
 
   // Double-click node = set as start
   editor.on('nodeSelected', function(nodeId) {
-    // Store for dblclick
     container._selectedNodeId = nodeId;
+    showEdgePanel(nodeId);
   });
+  editor.on('nodeUnselected', function() { hideEdgePanel(); });
   container.addEventListener('dblclick', () => {
     const nodeId = container._selectedNodeId;
     if (!nodeId) return;
@@ -552,6 +553,54 @@ function initDrawflow() {
     document.getElementById('flow-info').textContent = `⚡ Início: ${n.name}`;
   });
 
+  // Edge panel for return toggle
+  const edgePanel = document.createElement('div');
+  edgePanel.id = 'edge-panel';
+  edgePanel.className = 'absolute z-50 bg-card border border-border rounded-xl shadow-lg p-3 text-xs hidden';
+  edgePanel.style.minWidth = '200px';
+  container.style.position = 'relative';
+  container.appendChild(edgePanel);
+
+  window.showEdgePanel = function(nodeId) {
+    const raw = editor.drawflow.drawflow.Home.data;
+    const n = raw[nodeId];
+    if (!n?.data?.agentId) { hideEdgePanel(); return; }
+    const src = n.data.agentId;
+    const conns = n.outputs?.output_1?.connections || [];
+    if (!conns.length) { hideEdgePanel(); return; }
+    const srcAgent = agents.find(a => a.id === src);
+    let html = `<div class="text-white font-medium mb-2">${escHtml(srcAgent?.name||src)} → conexões</div>`;
+    for (const c of conns) {
+      const dstNode = raw[c.node];
+      if (!dstNode?.data?.agentId) continue;
+      const dst = dstNode.data.agentId;
+      const dstAgent = agents.find(a => a.id === dst);
+      const key = src + '->' + dst;
+      const isReturn = returnEdges.has(key);
+      html += `<div class="flex items-center justify-between py-1.5 border-t border-border/50">
+        <span class="text-gray-400">→ ${escHtml(dstAgent?.name||dst)}</span>
+        <button onclick="toggleReturnEdge('${escHtml(src)}','${escHtml(dst)}')" class="px-2 py-0.5 rounded text-[10px] font-medium ${isReturn ? 'bg-amber-500/20 text-amber-400' : 'bg-surface text-muted hover:text-white'}">
+          ${isReturn ? '↩ Return' : '→ Normal'}
+        </button>
+      </div>`;
+    }
+    edgePanel.innerHTML = html;
+    edgePanel.classList.remove('hidden');
+    const el = document.getElementById('node-' + nodeId);
+    if (el) {
+      edgePanel.style.left = (n.pos_x + 220) + 'px';
+      edgePanel.style.top = n.pos_y + 'px';
+    }
+  };
+  window.hideEdgePanel = function() { edgePanel.classList.add('hidden'); };
+  window.toggleReturnEdge = function(src, dst) {
+    const key = src + '->' + dst;
+    if (returnEdges.has(key)) returnEdges.delete(key); else returnEdges.add(key);
+    styleReturnEdges();
+    saveFlow();
+    if (container._selectedNodeId) showEdgePanel(container._selectedNodeId);
+  };
+
   // Return edges tracking
   window.returnEdges = new Set(); // "src->dst"
 
@@ -562,27 +611,6 @@ function initDrawflow() {
   editor.on('connectionRemoved', () => saveFlow());
   editor.on('nodeMoved', () => saveFlow());
 
-  // Toggle return edge on right-click connection
-  container.addEventListener('contextmenu', (ev) => {
-    const conn = ev.target.closest('.connection');
-    if (!conn) return;
-    ev.preventDefault();
-    const cls = conn.classList;
-    const nodeOut = [...cls].find(c => c.startsWith('node_out_'))?.replace('node_out_','');
-    const nodeIn = [...cls].find(c => c.startsWith('node_in_'))?.replace('node_in_','');
-    if (!nodeOut || !nodeIn) return;
-    const raw = editor.drawflow.drawflow.Home.data;
-    const srcAgent = raw[nodeOut]?.data?.agentId;
-    const dstAgent = raw[nodeIn]?.data?.agentId;
-    if (!srcAgent || !dstAgent) return;
-    const key = srcAgent + '->' + dstAgent;
-    if (returnEdges.has(key)) { returnEdges.delete(key); } else { returnEdges.add(key); }
-    styleReturnEdges();
-    saveFlow();
-    document.getElementById('flow-info').textContent = returnEdges.has(key)
-      ? `↩ ${srcAgent} → ${dstAgent}: retorno obrigatório`
-      : `→ ${srcAgent} → ${dstAgent}: handoff normal`;
-  });
 
   window.styleReturnEdges = function styleReturnEdges() {
     const raw = editor.drawflow.drawflow.Home.data;
