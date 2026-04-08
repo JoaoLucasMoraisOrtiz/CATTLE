@@ -633,8 +633,16 @@ async function loadFlow() {
   setTimeout(styleReturnEdges, 100);
 }
 
-async function saveFlow() {
-  if (!currentFlowId) return;
+let _saveFlowTimer = null;
+let _saveFlowRunning = false;
+function saveFlow() {
+  clearTimeout(_saveFlowTimer);
+  _saveFlowTimer = setTimeout(_doSaveFlow, 500);
+}
+async function _doSaveFlow() {
+  if (_saveFlowRunning || !currentFlowId) return;
+  _saveFlowRunning = true;
+  try {
   const raw = editor.drawflow.drawflow.Home.data;
   const nodes = []; const edges = [];
   const nodeIdToAgent = {};
@@ -654,6 +662,7 @@ async function saveFlow() {
   // Update local cache
   if (fd) { fd.nodes = nodes; fd.edges = edges; fd.start_node = startNodeId; }
   document.getElementById('flow-info').textContent = `✓ Salvo: ${nodes.length} nós, ${edges.length} conexões, início: ${startNodeId}`;
+  } finally { _saveFlowRunning = false; }
 }
 
 function autoLayout() {

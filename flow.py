@@ -7,12 +7,14 @@ with automatic migration from the legacy single flow.json.
 import json
 import os
 import uuid
+import threading
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 
 _SWARM_DIR = Path.home() / '.kiro-swarm'
 FLOW_FILE = _SWARM_DIR / 'flow.json'       # legacy
 FLOWS_FILE = _SWARM_DIR / 'flows.json'     # multi-flow
+_lock = threading.Lock()
 
 
 @dataclass
@@ -114,14 +116,15 @@ def load_all() -> list[FlowDef]:
 
 
 def save_all(flows: list[FlowDef]) -> None:
-    _SWARM_DIR.mkdir(parents=True, exist_ok=True)
-    data = json.dumps([_flow_to_dict(fd) for fd in flows], indent=2)
-    tmp = FLOWS_FILE.with_suffix('.tmp')
-    with open(tmp, 'w', encoding='utf-8') as f:
-        f.write(data)
-        f.flush()
-        os.fsync(f.fileno())
-    tmp.replace(FLOWS_FILE)
+    with _lock:
+        _SWARM_DIR.mkdir(parents=True, exist_ok=True)
+        data = json.dumps([_flow_to_dict(fd) for fd in flows], indent=2)
+        tmp = FLOWS_FILE.with_suffix('.tmp')
+        with open(tmp, 'w', encoding='utf-8') as f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+        tmp.replace(FLOWS_FILE)
 
 
 def get(flow_id: str) -> FlowDef | None:
