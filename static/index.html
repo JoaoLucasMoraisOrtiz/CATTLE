@@ -76,8 +76,16 @@
 <!-- ═══ TAB: Flow ═══ -->
 <div id="view-flow" class="flex-1 flex-col overflow-hidden hidden">
   <div class="flex items-center gap-3 px-4 py-2 border-b border-border bg-card/20 text-xs">
+    <select id="flow-select" onchange="onFlowSelect()" class="bg-surface border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent/50 transition min-w-[160px]">
+      <option value="">Nenhum flow</option>
+    </select>
+    <button onclick="createFlow()" class="px-2 py-1.5 bg-accent/10 text-accent rounded-lg hover:bg-accent/20 transition font-medium">+ Novo</button>
+    <button onclick="renameFlow()" class="px-2 py-1.5 bg-surface border border-border rounded-lg hover:border-accent/30 transition text-muted hover:text-white">Renomear</button>
+    <button onclick="duplicateFlow()" class="px-2 py-1.5 bg-surface border border-border rounded-lg hover:border-accent/30 transition text-muted hover:text-white">Duplicar</button>
+    <button onclick="deleteFlow()" class="px-2 py-1.5 text-muted hover:text-red-400 rounded-lg hover:bg-red-500/10 transition">✕ Deletar</button>
+    <div class="border-l border-border h-5 mx-1"></div>
     <button onclick="autoLayout()" class="px-3 py-1.5 bg-surface border border-border rounded-lg hover:border-accent/30 transition text-muted hover:text-white">Auto Layout</button>
-    <button onclick="saveFlow()" class="px-3 py-1.5 bg-accent/10 text-accent rounded-lg hover:bg-accent/20 transition font-medium">💾 Salvar Flow</button>
+    <button onclick="saveFlow()" class="px-3 py-1.5 bg-accent/10 text-accent rounded-lg hover:bg-accent/20 transition font-medium">💾 Salvar</button>
     <span class="text-muted" id="flow-info">Arraste agentes do painel. Conecte saídas → entradas.</span>
   </div>
   <div class="flex flex-1 overflow-hidden">
@@ -98,6 +106,11 @@
     </select>
     <button onclick="openProjectModal()" class="px-3 py-1.5 bg-accent/10 text-accent text-xs rounded-lg hover:bg-accent/20 transition font-medium">+ Novo</button>
     <button onclick="deleteProject()" class="px-2 py-1.5 text-muted hover:text-red-400 text-xs rounded-lg hover:bg-red-500/10 transition">✕</button>
+    <div class="border-l border-border h-5 mx-1"></div>
+    <label class="text-xs text-muted">🔀</label>
+    <select id="run-flow-select" class="bg-surface border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent/50 transition min-w-[140px]">
+      <option value="">Nenhum flow</option>
+    </select>
     <button id="btn-open" onclick="openSession()" class="px-3 py-1.5 bg-emerald-500/10 text-emerald-400 text-xs rounded-lg hover:bg-emerald-500/20 transition font-medium hidden">⚡ Abrir</button>
     <button id="btn-close" onclick="closeSession()" class="px-3 py-1.5 bg-red-500/10 text-red-400 text-xs rounded-lg hover:bg-red-500/20 transition font-medium hidden">■ Fechar</button>
   </div>
@@ -213,6 +226,8 @@
 const API = '/api';
 let agents = [];
 let projectsList = [];
+let flows = [];
+let currentFlowId = null;
 let editingId = null;
 let editor = null; // Drawflow instance
 
@@ -257,6 +272,70 @@ async function onProjectChange() {
 }
 
 // ── MCP rows ─────────────────────────────────────────────────────────────
+
+function slugify(name) { return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); }
+
+async function loadFlows() {
+  flows = await (await fetch(`${API}/flows`)).json();
+  const opts = flows.map(f => `<option value="${f.id}">${escHtml(f.name)}</option>`).join('');
+  for (const sel of [document.getElementById('flow-select'), document.getElementById('run-flow-select')]) {
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">Nenhum flow</option>' + opts;
+    if (flows.find(f => f.id === cur)) sel.value = cur;
+    else if (flows.length) sel.value = flows[0].id;
+  }
+  if (!currentFlowId && flows.length) currentFlowId = flows[0].id;
+  document.getElementById('flow-select').value = currentFlowId || '';
+}
+
+function onFlowSelect() {
+  currentFlowId = document.getElementById('flow-select').value || null;
+  if (drawflowReady && currentFlowId) loadFlow();
+}
+
+async function createFlow() {
+  const name = prompt('Nome do novo flow:');
+  if (!name) return;
+  const id = slugify(name);
+  await fetch(`${API}/flows`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id, name, nodes:[], edges:[], start_node:''}) });
+  await loadFlows();
+  currentFlowId = id;
+  document.getElementById('flow-select').value = id;
+  if (drawflowReady) loadFlow();
+}
+
+async function deleteFlow() {
+  if (!currentFlowId || !confirm('Remover este flow?')) return;
+  await fetch(`${API}/flows/${currentFlowId}`, {method:'DELETE'});
+  currentFlowId = null;
+  await loadFlows();
+  if (drawflowReady) { if (currentFlowId) loadFlow(); else editor.clear(); }
+}
+
+async function renameFlow() {
+  if (!currentFlowId) return;
+  const fd = flows.find(f => f.id === currentFlowId);
+  if (!fd) return;
+  const name = prompt('Novo nome:', fd.name);
+  if (!name || name === fd.name) return;
+  fd.name = name;
+  await fetch(`${API}/flows/${currentFlowId}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(fd) });
+  await loadFlows();
+}
+
+async function duplicateFlow() {
+  if (!currentFlowId) return;
+  const fd = flows.find(f => f.id === currentFlowId);
+  if (!fd) return;
+  const name = prompt('Nome da cópia:', fd.name + ' (cópia)');
+  if (!name) return;
+  const id = slugify(name);
+  await fetch(`${API}/flows`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({...fd, id, name}) });
+  await loadFlows();
+  currentFlowId = id;
+  document.getElementById('flow-select').value = id;
+  if (drawflowReady) loadFlow();
+}
 
 const MCP_PRESETS = {
   browser:   { command: 'uv', args: ['--directory', '/mnt/c/Users/jlortiz/Desktop/testes/browser-mcp', 'run', 'python', 'server.py'] },
@@ -484,19 +563,21 @@ function initDrawflow() {
 }
 
 async function loadFlow() {
-  const data = await (await fetch(`${API}/flow`)).json();
-  startNodeId = data.start_node || '';
-  if (!data.nodes.length) return;
+  if (!currentFlowId) return;
+  const fd = flows.find(f => f.id === currentFlowId);
+  if (!fd) return;
+  startNodeId = fd.start_node || '';
   editor.clear();
+  if (!fd.nodes.length) return;
   const idMap = {};
-  for (const n of data.nodes) {
+  for (const n of fd.nodes) {
     const a = agents.find(x => x.id === n.agent_id);
     if (!a) continue;
-    if (!startNodeId) startNodeId = n.agent_id;  // default to first
+    if (!startNodeId) startNodeId = n.agent_id;
     const nid = editor.addNode(a.name, 1, 1, n.x, n.y, a.id, { agentId: a.id }, nodeHtml(a, n.agent_id === startNodeId));
     idMap[n.agent_id] = nid;
   }
-  for (const e of data.edges) {
+  for (const e of fd.edges) {
     if (idMap[e.src] && idMap[e.dst]) {
       editor.addConnection(idMap[e.src], idMap[e.dst], 'output_1', 'input_1');
     }
@@ -505,6 +586,7 @@ async function loadFlow() {
 }
 
 async function saveFlow() {
+  if (!currentFlowId) return;
   const raw = editor.drawflow.drawflow.Home.data;
   const nodes = []; const edges = [];
   const nodeIdToAgent = {};
@@ -518,7 +600,11 @@ async function saveFlow() {
       edges.push({ src: nodeIdToAgent[nid], dst: nodeIdToAgent[c.node] });
     }
   }
-  await fetch(`${API}/flow`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ nodes, edges, start_node: startNodeId }) });
+  const fd = flows.find(f => f.id === currentFlowId);
+  const name = fd ? fd.name : 'Default';
+  await fetch(`${API}/flows/${currentFlowId}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ id: currentFlowId, name, nodes, edges, start_node: startNodeId }) });
+  // Update local cache
+  if (fd) { fd.nodes = nodes; fd.edges = edges; fd.start_node = startNodeId; }
   document.getElementById('flow-info').textContent = `✓ Salvo: ${nodes.length} nós, ${edges.length} conexões, início: ${startNodeId}`;
 }
 
@@ -576,7 +662,8 @@ async function openSession() {
   document.getElementById('run-agents').innerHTML = '';
   chatHistory = [];
 
-  await fetch(`${API}/session/open/${pid}`, { method: 'POST' });
+  const flowId = document.getElementById('run-flow-select').value || null;
+  await fetch(`${API}/session/open/${pid}`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({flow_id: flowId}) });
 
   // Start SSE
   if (eventSource) eventSource.close();
@@ -859,6 +946,7 @@ function isNearBottom(el, threshold=100) { return (el.scrollHeight - el.scrollTo
 document.addEventListener('keydown', e => { if (e.key==='Escape') { closeModal(); closeProjectModal(); } });
 loadAgents();
 loadProjects();
+loadFlows();
 </script>
 </body>
 </html>
