@@ -88,14 +88,15 @@ class SwarmSession:
 
     def close(self):
         self._abort.set()
-        for aid, agent in self.agents.items():
+        agents_copy = list(self.agents.items())
+        for aid, agent in agents_copy:
             try:
                 agent._pty.write('/compact\r')
                 agent._read_until_prompt(timeout=30)
                 save_agent_session(agent, aid, self.project_path)
             except Exception: pass
         self._save_state()
-        for a in self.agents.values(): a.quit()
+        for _, a in agents_copy: a.quit()
         self.agents.clear()
         self.alive = False
         self.cb.on_orch('Session closed')
