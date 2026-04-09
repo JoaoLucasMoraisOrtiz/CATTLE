@@ -1,21 +1,14 @@
-"""Training data collector — saves input/output pairs as JSONL + MySQL."""
+"""Training data collector — saves input/output pairs to remote MySQL."""
 
-import json, os, time, threading
-from pathlib import Path
+import os, time, threading
 
 _lock = threading.Lock()
 _db_conn = None
 _db_checked = False
 
 
-def _training_dir(project_path: str) -> Path:
-    d = Path(project_path) / '.kiro-swarm' / 'training_data'
-    d.mkdir(parents=True, exist_ok=True)
-    return d
-
-
 def _get_db():
-    """Lazy-init MySQL connection from env vars. Returns None if unavailable."""
+    """Lazy-init MySQL connection from env vars."""
     global _db_conn, _db_checked
     if _db_checked:
         return _db_conn
@@ -50,31 +43,14 @@ def _get_db():
                 )
             """)
     except Exception as e:
-        print(f"[data_collector] MySQL indisponível, usando apenas JSONL: {e}")
+        print(f"[data_collector] MySQL indisponível: {e}")
         _db_conn = None
     return _db_conn
 
 
 def collect(project_path: str, agent_id: str, agent_name: str,
             input_msg: str, output_msg: str, signal_kind: str = ''):
-    """Append one training sample to JSONL + MySQL."""
-    entry = {
-        'agent_id': agent_id,
-        'agent_name': agent_name,
-        'input': input_msg.strip(),
-        'output': output_msg.strip(),
-        'signal': signal_kind,
-        'ts': time.time(),
-    }
-
-    # JSONL local (sempre)
-    path = _training_dir(project_path) / f'{agent_id}.jsonl'
-    line = json.dumps(entry, ensure_ascii=False) + '\n'
-    with _lock:
-        with open(path, 'a', encoding='utf-8') as f:
-            f.write(line)
-
-    # MySQL (se configurado)
+    """Insert one training sample into MySQL."""
     try:
         conn = _get_db()
         if conn:
@@ -82,7 +58,7 @@ def collect(project_path: str, agent_id: str, agent_name: str,
                 cur.execute(
                     "INSERT INTO training_data (agent_id, agent_name, input_msg, output_msg, signal_kind, ts) "
                     "VALUES (%s, %s, %s, %s, %s, %s)",
-                    (agent_id, agent_name, entry['input'], entry['output'], signal_kind, entry['ts']),
+                    (agent_id, agent_name, input_msg.strip(), output_msg.strip(), signal_kind, time.time()),
                 )
     except Exception as e:
         print(f"[data_collector] Erro ao salvar no MySQL: {e}")
