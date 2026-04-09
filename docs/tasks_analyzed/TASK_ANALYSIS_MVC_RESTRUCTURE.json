@@ -1,0 +1,197 @@
+{
+  "taskId": "mvc-restructure",
+  "resumo": {
+    "objetivo": "Reestruturar o projeto ReDo! de flat-files na raiz para arquitetura MVC com package Python organizado e frontend modularizado",
+    "problema": "15 módulos Python flat na raiz sem package structure. Um HTML monolítico de 1291 linhas (71KB) com HTML+CSS+JS misturados. server.py mistura rotas com lógica. Imports frágeis entre módulos. Difícil manutenção e expansão.",
+    "resultadoEsperado": "Package `app/` com separação Models/Controllers/Services/Core. Frontend split em HTML shell + CSS + JS modules. Entry points atualizados. Zero breaking changes na funcionalidade."
+  },
+  "arquivosRelevantes": [
+    {"caminho": "server.py", "motivo": "Monolito de rotas — será decomposto em controllers/ + main.py", "acoes": ["decompose", "delete"]},
+    {"caminho": "session.py", "motivo": "SwarmSession — move para app/services/session_service.py", "acoes": ["move", "modify"]},
+    {"caminho": "orchestrator.py", "motivo": "run_swarm — move para app/services/orchestrator.py", "acoes": ["move", "modify"]},
+    {"caminho": "config.py", "motivo": "Constantes — move para app/config.py", "acoes": ["move"]},
+    {"caminho": "agent.py", "motivo": "Agent class — move para app/core/agent.py", "acoes": ["move", "modify"]},
+    {"caminho": "pty_agent.py", "motivo": "PtyProcess — move para app/core/pty_agent.py", "acoes": ["move", "modify"]},
+    {"caminho": "protocol.py", "motivo": "Signal + parse — split: dataclass → models/, parse → core/", "acoes": ["decompose"]},
+    {"caminho": "output_parser.py", "motivo": "Move para app/core/output_parser.py", "acoes": ["move", "modify"]},
+    {"caminho": "registry.py", "motivo": "Split: AgentDef → models/, CRUD → services/", "acoes": ["decompose"]},
+    {"caminho": "flow.py", "motivo": "Split: Node/Edge/Flow/FlowDef → models/, CRUD → services/", "acoes": ["decompose"]},
+    {"caminho": "projects.py", "motivo": "Split: Project → models/, CRUD → services/", "acoes": ["decompose"]},
+    {"caminho": "headers.py", "motivo": "Split: HeaderDef → models/, CRUD+compose → services/", "acoes": ["decompose"]},
+    {"caminho": "settings.py", "motivo": "Move para app/services/settings_service.py", "acoes": ["move"]},
+    {"caminho": "god.py", "motivo": "Move para app/core/god.py", "acoes": ["move", "modify"]},
+    {"caminho": "checkpoint.py", "motivo": "Move para app/core/checkpoint.py", "acoes": ["move"]},
+    {"caminho": "swarm_state.py", "motivo": "Move para app/core/swarm_state.py", "acoes": ["move", "modify"]},
+    {"caminho": "logger.py", "motivo": "Move para app/utils/logger.py", "acoes": ["move"]},
+    {"caminho": "data_collector.py", "motivo": "Move para app/services/data_collector.py", "acoes": ["move", "modify"]},
+    {"caminho": "app.py", "motivo": "TUI — move para app/tui/app.py", "acoes": ["move", "modify"]},
+    {"caminho": "static/index.html", "motivo": "Monolito 1291 linhas — decompor em HTML shell + CSS + JS modules", "acoes": ["decompose"]},
+    {"caminho": "run.sh", "motivo": "Atualizar paths dos entry points", "acoes": ["modify"]}
+  ],
+  "caminhoDosDados": {
+    "entrada": "Nenhuma mudança na interface pública (API REST, CLI args, TUI)",
+    "processamento": [
+      "1. Requests HTTP → app/controllers/ (rotas thin) → app/services/ (lógica) → app/core/ (engine)",
+      "2. CLI → app/services/orchestrator.py → app/core/",
+      "3. TUI → app/tui/app.py → app/services/orchestrator.py → app/core/"
+    ],
+    "armazenamento": "Sem mudança — ~/.kiro-swarm/ continua sendo o diretório de dados",
+    "recuperacao": "Sem mudança — mesmas funções load/save, apenas em novos paths de import",
+    "exibicao": "Frontend idêntico visualmente, mas código split em módulos JS separados"
+  },
+  "codigoAModificar": [
+    {
+      "arquivo": "server.py → app/controllers/*.py + app/main.py",
+      "classe": null,
+      "metodo": "Todas as rotas @app.get/post/put/delete",
+      "motivo": "Decompor monolito de rotas em controllers por domínio",
+      "mudancas": [
+        "Extrair rotas de agents → app/controllers/agents.py (APIRouter)",
+        "Extrair rotas de flows → app/controllers/flows.py",
+        "Extrair rotas de projects → app/controllers/projects.py",
+        "Extrair rotas de headers → app/controllers/headers.py",
+        "Extrair rotas de settings → app/controllers/settings.py",
+        "Extrair rotas de session → app/controllers/session.py",
+        "Criar app/main.py com create_app() factory que inclui todos os routers"
+      ]
+    },
+    {
+      "arquivo": "registry.py → app/models/agent.py + app/services/registry.py",
+      "classe": "AgentDef",
+      "metodo": "load, save, add, remove, update, get",
+      "motivo": "Separar dataclass (model) da lógica de persistência (service)",
+      "mudancas": [
+        "AgentDef dataclass → app/models/agent.py",
+        "Funções CRUD → app/services/registry.py (importa AgentDef de models)"
+      ]
+    },
+    {
+      "arquivo": "flow.py → app/models/flow.py + app/services/flow_service.py",
+      "classe": "Node, Edge, Flow, FlowDef",
+      "metodo": "load_all, save_all, get, add, update, remove, migrate",
+      "motivo": "Separar dataclasses (models) da lógica de persistência (service)",
+      "mudancas": [
+        "Node, Edge, Flow, FlowDef → app/models/flow.py (com métodos de instância como targets_for)",
+        "Funções CRUD + migrate → app/services/flow_service.py"
+      ]
+    },
+    {
+      "arquivo": "protocol.py → app/models/protocol.py + app/core/protocol.py",
+      "classe": "Signal",
+      "metodo": "parse()",
+      "motivo": "Separar dataclass do parser",
+      "mudancas": [
+        "Signal dataclass → app/models/protocol.py",
+        "parse() function → app/core/protocol.py"
+      ]
+    },
+    {
+      "arquivo": "headers.py → app/models/header.py + app/services/header_service.py",
+      "classe": "HeaderDef",
+      "metodo": "load_all, add, update, remove, compose, ensure_defaults",
+      "motivo": "Separar dataclass da lógica",
+      "mudancas": [
+        "HeaderDef + constantes de tipo → app/models/header.py",
+        "CRUD + compose + ensure_defaults → app/services/header_service.py"
+      ]
+    },
+    {
+      "arquivo": "session.py → app/services/session_service.py",
+      "classe": "SwarmSession, EventCallback",
+      "metodo": "open, close, send_to_swarm, send_to_agent, _run_handoff_chain, etc.",
+      "motivo": "Mover para services com imports atualizados",
+      "mudancas": [
+        "Atualizar todos os imports: from app.core.agent import Agent, from app.models.flow import Flow, etc.",
+        "EventCallback pode ir para app/models/schemas.py ou ficar em session_service.py"
+      ]
+    },
+    {
+      "arquivo": "agent.py → app/core/agent.py",
+      "classe": "Agent",
+      "metodo": "start, send, quit",
+      "motivo": "Mover para core com imports atualizados",
+      "mudancas": ["from app.core.pty_agent import PtyProcess", "from app.core.output_parser import ..."]
+    },
+    {
+      "arquivo": "static/index.html → static/index.html + css/app.css + js/*.js",
+      "classe": null,
+      "metodo": null,
+      "motivo": "Decompor monolito frontend",
+      "mudancas": [
+        "Extrair <style> → static/css/app.css",
+        "Extrair <script> → static/js/ (app.js, api.js, state.js, utils.js, agents.js, flow.js, headers.js, run.js, projects.js)",
+        "index.html fica como shell com <link> e <script src> tags"
+      ]
+    }
+  ],
+  "pontosDeQuebra": [
+    {
+      "descricao": "Imports circulares entre app/services/ e app/core/",
+      "severidade": "alta",
+      "deteccao": "App não inicia — ImportError",
+      "mitigacao": "Models são puros (sem imports de services/core). Services importam core, nunca o contrário. Core importa apenas models e config."
+    },
+    {
+      "descricao": "Path do static/ relativo ao novo app/main.py",
+      "severidade": "alta",
+      "deteccao": "Frontend retorna 404",
+      "mitigacao": "Usar Path(__file__).parent.parent / 'static' para resolver path absoluto"
+    },
+    {
+      "descricao": "JS files não carregam por ordem de dependência",
+      "severidade": "media",
+      "deteccao": "ReferenceError no console do browser",
+      "mitigacao": "Carregar na ordem: utils.js → state.js → api.js → componentes → app.js (último)"
+    },
+    {
+      "descricao": "__pycache__ stale com imports antigos",
+      "severidade": "media",
+      "deteccao": "ModuleNotFoundError para módulos que já foram movidos",
+      "mitigacao": "Limpar todos os __pycache__ da raiz antes de testar"
+    },
+    {
+      "descricao": "TUI (Textual) importa de paths antigos",
+      "severidade": "media",
+      "deteccao": "./run.sh tui falha com ImportError",
+      "mitigacao": "Atualizar todos os imports em app/tui/app.py"
+    },
+    {
+      "descricao": "orchestrator.py CLI mode perde o __main__ guard",
+      "severidade": "baixa",
+      "deteccao": "./run.sh run não funciona",
+      "mitigacao": "Manter if __name__ == '__main__' em app/services/orchestrator.py"
+    },
+    {
+      "descricao": "Drawflow JS library não inicializa após split",
+      "severidade": "media",
+      "deteccao": "Tab Flow não renderiza canvas",
+      "mitigacao": "Manter CDN imports no <head> do index.html, Drawflow é global"
+    },
+    {
+      "descricao": "SSE EventSource path muda",
+      "severidade": "baixa",
+      "deteccao": "Streaming não funciona",
+      "mitigacao": "API paths não mudam (/api/*), apenas a organização interna do backend"
+    },
+    {
+      "descricao": "swarm_state.py importa Agent circularmente",
+      "severidade": "media",
+      "deteccao": "ImportError circular",
+      "mitigacao": "swarm_state.py em core/ pode importar Agent de core/agent.py sem circular. resume_agent() usa import local se necessário."
+    }
+  ],
+  "ordemDeExecucao": [
+    "1. Criar estrutura de diretórios + __init__.py",
+    "2. app/config.py (sem dependências)",
+    "3. app/models/ (dependem só de stdlib + config)",
+    "4. app/core/ (dependem de models + config)",
+    "5. app/services/ (dependem de models + core + config)",
+    "6. app/controllers/ (dependem de services + models)",
+    "7. app/main.py (agrega controllers + monta static)",
+    "8. app/utils/logger.py (sem dependências pesadas)",
+    "9. app/tui/app.py (depende de services)",
+    "10. Frontend split (HTML/CSS/JS)",
+    "11. run.sh + entry points",
+    "12. Limpeza de arquivos antigos"
+  ]
+}
