@@ -341,8 +341,8 @@ function renderAgentBoxes() {
     const costHtml = costEntry ? `<div class="text-[10px] text-emerald-400/70">$${costEntry.cost_usd.toFixed(4)}</div>` : '';
     return `<div onclick="insertAgentMention('${escHtml(name)}')"
       draggable="true" data-run-agent="${escHtml(name)}"
-      ondragstart="_dragRunAgent=this.dataset.runAgent;this.classList.add('dragging')"
-      ondragend="this.classList.remove('dragging')"
+      ondragstart="_dragRunAgent=this.dataset.runAgent;this.classList.add('dragging');event.dataTransfer.setData('text/plain','')"
+      ondragend="_dragRunAgent=null;this.classList.remove('dragging')"
       ondragover="event.preventDefault();this.classList.add('drag-over')"
       ondragleave="this.classList.remove('drag-over')"
       ondrop="event.preventDefault();this.classList.remove('drag-over');_dropRunAgent(this.dataset.runAgent)"

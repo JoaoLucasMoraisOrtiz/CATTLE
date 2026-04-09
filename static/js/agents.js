@@ -20,8 +20,8 @@ function renderAgents() {
   el.innerHTML = searchHtml + filtered.map(a => `
     <div class="group flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-surface/60 cursor-pointer transition"
       draggable="true" data-agent-id="${a.id}"
-      ondragstart="_dragAgentId=this.dataset.agentId;this.classList.add('dragging')"
-      ondragend="this.classList.remove('dragging')"
+      ondragstart="_dragAgentId=this.dataset.agentId;this.classList.add('dragging');event.dataTransfer.setData('text/plain','')"
+      ondragend="_dragAgentId=null;this.classList.remove('dragging')"
       ondragover="event.preventDefault();this.classList.add('drag-over')"
       ondragleave="this.classList.remove('drag-over')"
       ondrop="event.preventDefault();this.classList.remove('drag-over');_dropAgent(this.dataset.agentId)"
