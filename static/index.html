@@ -203,9 +203,9 @@
       <button id="scroll-to-bottom" aria-label="Rolar para o final">↓</button>
       <div class="px-4 py-3 border-t border-border bg-card/20">
         <div class="flex gap-3 max-w-3xl mx-auto">
-          <input id="chat-input" type="text" placeholder="Mensagem para o swarm... (@agente para falar direto)"
-            class="flex-1 bg-surface border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-accent/50 placeholder-muted transition"
-            onkeydown="if(event.key==='Enter')sendChat()" disabled>
+          <textarea id="chat-input" rows="1" placeholder="Mensagem para o swarm... (@agente para falar direto)"
+            class="flex-1 bg-surface border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-accent/50 placeholder-muted transition resize-none overflow-hidden"
+            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px'" disabled></textarea>
           <button id="btn-send" onclick="sendChat()" disabled
             class="px-4 py-2.5 bg-accent hover:bg-accentHover text-white text-sm font-medium rounded-xl transition disabled:opacity-30">
             Enviar</button>

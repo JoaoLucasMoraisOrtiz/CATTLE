@@ -272,13 +272,24 @@ function updateAgentBox(name, status, text) {
   renderAgentBoxes();
 }
 
+function insertAgentMention(name) {
+  const input = document.getElementById('chat-input');
+  const a = agents.find(x => x.name === name);
+  const id = a ? a.id : name;
+  const mention = `@${id} `;
+  // Replace existing @mention or prepend
+  input.value = input.value.replace(/^@\w+\s*/, '') ;
+  input.value = mention + input.value;
+  input.focus();
+}
+
 function renderAgentBoxes() {
   const el = document.getElementById('run-agents');
   el.innerHTML = Object.entries(agentStatus).filter(([n]) => n !== 'GOD').map(([name, s]) => {
     const c = getColor(name);
     const isSel = chatTarget === name;
     const isActive = s.status === 'working';
-    return `<div onclick="selectChatTarget('${escHtml(name)}')"
+    return `<div onclick="insertAgentMention('${escHtml(name)}')"
       class="agent-box flex flex-col gap-1 px-3 py-2.5 rounded-lg border cursor-pointer transition ${isSel ? 'border-accent/50 bg-accent/5' : 'border-border bg-surface hover:border-accent/20'}">
       <div class="flex items-center gap-2">
         <span class="w-2 h-2 rounded-full ${isActive?'running':''}" style="background:${c}"></span>
