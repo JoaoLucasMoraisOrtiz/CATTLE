@@ -1,6 +1,6 @@
 """Training data collector — saves input/output pairs to remote MySQL."""
 
-import os, time, threading
+import os, time, threading, hashlib
 
 _lock = threading.Lock()
 _db_conn = None
@@ -79,7 +79,7 @@ def collect(project_path: str, agent_id: str, agent_name: str,
                     "INSERT INTO training_data "
                     "(project_path, agent_id, agent_name, input_msg, output_msg, signal_kind, flow_id, round_num, ts) "
                     "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
-                    (project_path, agent_id, agent_name, input_msg.strip(),
+                    (hashlib.sha256(project_path.encode()).hexdigest()[:16], agent_id, agent_name, input_msg.strip(),
                      output_msg.strip(), signal_kind, flow_id, round_num, time.time()),
                 )
         except Exception as e:
