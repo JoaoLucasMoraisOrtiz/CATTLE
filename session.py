@@ -8,7 +8,7 @@ from protocol import parse
 from flow import Flow, Node, load as load_flow
 from checkpoint import GitCheckpoint
 from swarm_state import save_swarm, SwarmState, save_agent_session, append_chat_message, load_chat_history, _project_dir
-from config import PROTOCOL_INSTRUCTIONS, MAX_HANDOFF_ROUNDS, MIN_RESPONSE_LEN, MAX_RETRIES
+from config import PROTOCOL_INSTRUCTIONS, MAX_HANDOFF_ROUNDS, MIN_RESPONSE_LEN, MAX_RETRIES, MAX_SIGNAL_NUDGES, NUDGE_MESSAGE
 import flow as flowmod
 import headers as hmod
 import data_collector
