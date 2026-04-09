@@ -3,3 +3,5 @@ fastapi>=0.100
 uvicorn>=0.20
 sse-starlette>=1.0
 textual>=0.40
+pymysql>=1.1
+python-dotenv>=1.0
