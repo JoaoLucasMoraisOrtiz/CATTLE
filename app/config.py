@@ -13,8 +13,7 @@ NUDGE_MESSAGE = "Se você já finalizou suas tasks, responda como o protocolo pe
 
 HOME_ALLOWLIST = {'.config', '.local', '.bashrc', '.profile', '.zshrc'}
 
-DEFAULT_PROTOCOL_HEADER_ID = 'default-protocol'
-DEFAULT_WRAPPER_HEADER_ID = 'default-wrapper'
+# Header IDs moved to app.models.header (single source of truth)
 
 PROTOCOL_INSTRUCTIONS = """
 ## Protocolo de comunicação

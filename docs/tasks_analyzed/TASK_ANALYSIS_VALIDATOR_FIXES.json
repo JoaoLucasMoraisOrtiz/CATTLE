@@ -1,0 +1,124 @@
+{
+  "id": "validator-fixes-10",
+  "title": "Correção dos 10 erros encontrados pelo Validator na reestruturação MVC",
+  "created": "2026-04-09T09:09:00-03:00",
+  "status": "in_progress",
+  "summary": "3 bugs críticos (crash/XSS) + 7 issues menores (duplicação, hardcode, thread-safety)",
+  "critical": [
+    {
+      "id": "C1",
+      "title": "return_stack[-1][0] indexação incorreta",
+      "file": "app/services/session_service.py",
+      "line": 234,
+      "severity": "critical",
+      "impact": "Crash em flows com return edges — return_stack contém strings, não tuples",
+      "fix": "return_stack[-1][0] → return_stack[-1]",
+      "risk": "Nenhum — fix pontual, sem side effects",
+      "assigned_to": "architect",
+      "status": "pending"
+    },
+    {
+      "id": "C2",
+      "title": "HeaderIn falta campos type e is_default",
+      "file": "app/models/schemas.py",
+      "line": 42,
+      "severity": "critical",
+      "impact": "API rejeita criação/edição de headers com type ou is_default no body",
+      "fix": "Adicionar type: str = 'protocol' e is_default: bool = False ao HeaderIn",
+      "risk": "Nenhum — campos opcionais com defaults",
+      "assigned_to": "architect",
+      "status": "pending"
+    },
+    {
+      "id": "C3",
+      "title": "escHtml() não escapa aspas",
+      "file": "static/js/utils.js",
+      "line": 5,
+      "severity": "critical",
+      "impact": "XSS risk + quebra de atributos HTML quando valores contêm aspas",
+      "fix": "Adicionar .replace(/\"/g,'&quot;').replace(/'/g,'&#39;')",
+      "risk": "Nenhum — extensão pura da função",
+      "assigned_to": "architect",
+      "status": "pending"
+    }
+  ],
+  "minor": [
+    {
+      "id": "M4",
+      "title": "Constante DEFAULT_PROTOCOL duplicada",
+      "files": ["app/config.py", "app/models/header.py"],
+      "severity": "minor",
+      "impact": "Confusão e risco de divergência entre DEFAULT_PROTOCOL_HEADER_ID e DEFAULT_PROTOCOL_ID",
+      "fix": "Remover de header.py, importar de config.py em todos os consumidores",
+      "assigned_to": "analyst",
+      "status": "pending"
+    },
+    {
+      "id": "M5",
+      "title": "MCP_PRESETS paths hardcoded",
+      "file": "static/js/state.js",
+      "severity": "minor",
+      "impact": "Quebra em qualquer máquina que não seja o ambiente de dev original",
+      "fix": "Usar paths relativos ao projeto ou carregar de /api/settings",
+      "assigned_to": "analyst",
+      "status": "pending"
+    },
+    {
+      "id": "M6",
+      "title": "autoLayout() só atualiza conexões do primeiro nó",
+      "file": "static/js/flow.js",
+      "severity": "minor",
+      "impact": "Conexões de nós 2..N ficam desalinhadas após auto-layout",
+      "fix": "Iterar todos os nós com editor.updateConnectionNodes()",
+      "assigned_to": "analyst",
+      "status": "pending"
+    },
+    {
+      "id": "M7",
+      "title": "_project_dir exportada como função privada",
+      "file": "app/core/swarm_state.py",
+      "severity": "minor",
+      "impact": "Convenção Python violada — prefixo _ indica privado mas é importada externamente",
+      "fix": "Renomear para project_dir() e atualizar importadores",
+      "assigned_to": "analyst",
+      "status": "pending"
+    },
+    {
+      "id": "M8",
+      "title": "Lógica duplicada session_service ↔ orchestrator",
+      "files": ["app/services/session_service.py", "app/services/orchestrator.py"],
+      "severity": "minor",
+      "impact": "Bug corrigido num não se propaga pro outro. Manutenção dobrada.",
+      "fix": "Extrair lógica comum (handoff chain, retry, spawn, compose persona) para módulo compartilhado",
+      "assigned_to": "analyst",
+      "status": "pending"
+    },
+    {
+      "id": "M9",
+      "title": "Estado mutável module-level em controllers/session.py",
+      "file": "app/controllers/session.py",
+      "severity": "minor",
+      "impact": "Não thread-safe para múltiplas instâncias ou testes paralelos",
+      "fix": "Encapsular active_session, session_events, session_loop em classe SessionState",
+      "assigned_to": "analyst",
+      "status": "pending"
+    },
+    {
+      "id": "M10",
+      "title": "Frontend split incompleto",
+      "file": "static/js/",
+      "severity": "minor",
+      "impact": "Faltavam flow.js, headers.js, run.js, app.js — agora criados",
+      "fix": "Já resolvido na sessão anterior",
+      "assigned_to": "architect",
+      "status": "done"
+    }
+  ],
+  "execution_order": [
+    {"step": 1, "ids": ["C1", "C2", "C3"], "agent": "architect", "reason": "Bugs críticos — fixes pontuais sem dependência entre si"},
+    {"step": 2, "ids": ["M4", "M5", "M6", "M7"], "agent": "analyst", "reason": "Fixes isolados, podem ser paralelos"},
+    {"step": 3, "ids": ["M8"], "agent": "analyst", "reason": "Refactor maior — depende de M4 estar resolvido"},
+    {"step": 4, "ids": ["M9"], "agent": "analyst", "reason": "Refactor de controller — pode ser feito após M8"}
+  ],
+  "handoff_chain": "architect (C1-C3) → consultor (atualizar KB) → analyst (M4-M9)"
+}

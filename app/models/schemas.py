@@ -43,6 +43,8 @@ class HeaderIn(BaseModel):
     name: str
     content: str
     description: str = ''
+    type: str = 'protocol'
+    is_default: bool = False
 
 
 class OpenSessionIn(BaseModel):

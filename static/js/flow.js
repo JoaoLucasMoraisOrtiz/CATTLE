@@ -309,5 +309,5 @@ function autoLayout() {
     const el = document.getElementById('node-' + id);
     if (el) { el.style.left = x + 'px'; el.style.top = y + 'px'; raw[id].pos_x = x; raw[id].pos_y = y; }
   });
-  editor.updateConnectionNodes('node-' + ids[0]);
+  ids.forEach(id => editor.updateConnectionNodes('node-' + id));
 }

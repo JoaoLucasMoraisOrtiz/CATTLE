@@ -12,7 +12,7 @@ from app.models.header import DEFAULT_PROTOCOL_ID
 from app.core.agent import Agent
 from app.core.protocol import parse
 from app.core.checkpoint import GitCheckpoint
-from app.core.swarm_state import save_swarm, SwarmState, save_agent_session, append_chat_message, load_chat_history, _project_dir
+from app.core.swarm_state import save_swarm, SwarmState, save_agent_session, append_chat_message, load_chat_history, project_dir
 from app.config import PROTOCOL_INSTRUCTIONS, MAX_HANDOFF_ROUNDS, MIN_RESPONSE_LEN, MAX_RETRIES, MAX_SIGNAL_NUDGES, NUDGE_MESSAGE
 from app.services import registry, flow_service, header_service, data_collector
 
@@ -231,7 +231,7 @@ class SwarmSession:
             if h: self.cb.on_orch(f'📌 {h[:8]}')
             self._save_state()
             self._auto_compact(current_id, agent)
-            if return_stack and return_stack[-1][0] != current_id:
+            if return_stack and return_stack[-1] != current_id:
                 sender_id = return_stack.pop()
                 sender_name = self.agent_defs.get(sender_id, defn).name
                 if signal.kind == 'handoff' and signal.target != sender_id:
@@ -433,7 +433,7 @@ class SwarmSession:
 
     def _save_state(self):
         try:
-            path = _project_dir(self.project_path) / 'swarm_state.json'
+            path = project_dir(self.project_path) / 'swarm_state.json'
             path.write_text(json.dumps({
                 'round_num': self.round_num,
                 'current_agent_id': '',

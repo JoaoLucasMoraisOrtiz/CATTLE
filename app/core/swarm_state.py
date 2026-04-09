@@ -22,7 +22,7 @@ class SwarmState:
     project_dir: str
 
 
-def _project_dir(workdir: str) -> Path:
+def project_dir(workdir: str) -> Path:
     h = hashlib.sha256(os.path.abspath(workdir).encode()).hexdigest()[:12]
     name = os.path.basename(os.path.abspath(workdir))
     d = SWARM_HOME / 'sessions' / f'{name}-{h}'
@@ -31,7 +31,7 @@ def _project_dir(workdir: str) -> Path:
 
 
 def _agent_save_path(workdir: str, agent_id: str) -> str:
-    return str(_project_dir(workdir) / f'agent-{agent_id}')
+    return str(project_dir(workdir) / f'agent-{agent_id}')
 
 
 def save_agent_session(agent, agent_id: str, workdir: str) -> bool:
@@ -49,7 +49,7 @@ def save_agent_session(agent, agent_id: str, workdir: str) -> bool:
 
 
 def save_swarm(workdir: str, state: SwarmState, live_agents: dict) -> str:
-    d = _project_dir(workdir)
+    d = project_dir(workdir)
     saved = []
     for aid, agent in live_agents.items():
         if save_agent_session(agent, aid, workdir):
@@ -62,7 +62,7 @@ def save_swarm(workdir: str, state: SwarmState, live_agents: dict) -> str:
 
 
 def load_swarm_state(workdir: str) -> SwarmState | None:
-    path = _project_dir(workdir) / 'swarm_state.json'
+    path = project_dir(workdir) / 'swarm_state.json'
     if not path.exists():
         return None
     data = json.loads(path.read_text())
@@ -92,13 +92,13 @@ def resume_agent(agent_id: str, name: str, workdir: str, model: str | None = Non
 
 
 def append_chat_message(workdir: str, msg: dict) -> None:
-    path = _project_dir(workdir) / 'chat_history.jsonl'
+    path = project_dir(workdir) / 'chat_history.jsonl'
     with open(path, 'a', encoding='utf-8') as f:
         f.write(json.dumps(msg, ensure_ascii=False) + '\n')
 
 
 def load_chat_history(workdir: str) -> list[dict]:
-    path = _project_dir(workdir) / 'chat_history.jsonl'
+    path = project_dir(workdir) / 'chat_history.jsonl'
     if not path.exists():
         return []
     try:

@@ -22,7 +22,7 @@ const returnEdges = new Set();
 const DEFAULT_HEADER_IDS = ['default-protocol', 'default-wrapper'];
 
 const MCP_PRESETS = {
-  browser:   { command: 'uv', args: ['--directory', '/mnt/c/Users/jlortiz/Desktop/testes/browser-mcp', 'run', 'python', 'server.py'] },
-  dataflow:  { command: 'uv', args: ['--directory', '/mnt/c/Users/jlortiz/Desktop/testes/dataflow-mcp', 'run', 'python', 'server.py'] },
-  knowledge: { command: 'uv', args: ['--directory', '/mnt/c/Users/jlortiz/Desktop/testes/knowledge-mcp', 'run', 'python', 'server.py'] },
+  browser:   { command: 'uv', args: ['--directory', '../browser-mcp', 'run', 'python', 'server.py'] },
+  dataflow:  { command: 'uv', args: ['--directory', '../dataflow-mcp', 'run', 'python', 'server.py'] },
+  knowledge: { command: 'uv', args: ['--directory', '../knowledge-mcp', 'run', 'python', 'server.py'] },
 };

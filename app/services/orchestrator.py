@@ -17,7 +17,7 @@ from app.core.swarm_state import SwarmState, save_swarm, load_swarm_state, resum
 from app.config import (
     PROTOCOL_INSTRUCTIONS, GOD_PERSONA,
     MAX_HANDOFF_ROUNDS, MIN_RESPONSE_LEN, MAX_RETRIES,
-    DEFAULT_PROTOCOL_HEADER_ID, MAX_SIGNAL_NUDGES, NUDGE_MESSAGE,
+    MAX_SIGNAL_NUDGES, NUDGE_MESSAGE,
 )
 from app.utils.logger import Logger
 from app.services import registry, flow_service, header_service, data_collector
@@ -34,7 +34,29 @@ def _build_agent_list_for(agent_id: str, agents: list[AgentDef], flow: Flow) -> 
 def _init_agent(defn: AgentDef, agent_list: str, workdir: str, log: Logger, header_ids: list[str] | None = None) -> Agent:
     agent = Agent(defn.name, workdir, defn.model)
     agent.start()
-    hids = header_ids or [DEFAULT_PROTOCOL_HEADER_ID]
+    hids = header_ids or [DEFAULT_PROTOCOL_ID]
+    ctx = {'agent_name': defn.name, 'agent_persona': defn.persona, 'agent_list': agent_list}
+    composed = header_service.compose(hids, ctx)
+    if not composed.strip():
+        composed = defn.persona + '\n\n' + PROTOCOL_INSTRUCTIONS.format(agent_list=agent_list)
+    persona = composed + '\n\nResponda apenas: "Entendido." Nada mais.'
+    agent.send(persona)
+    log.agent(defn.name, 'ready', f'workdir: {workdir}')
+    return agent
+
+
+def _build_agent_list_for(agent_id: str, agents: list[AgentDef], flow: Flow) -> str:
+    targets = flow.targets_for(agent_id)
+    visible = [a for a in agents if a.id in targets]
+    if not visible:
+        return "(nenhum — você é o agente final, use @done)"
+    return '\n'.join(f'- {a.id}: {a.name} — {a.persona[:80]}...' for a in visible)
+
+
+def _init_agent(defn: AgentDef, agent_list: str, workdir: str, log: Logger, header_ids: list[str] | None = None) -> Agent:
+    agent = Agent(defn.name, workdir, defn.model)
+    agent.start()
+    hids = header_ids or [DEFAULT_PROTOCOL_ID]
     ctx = {'agent_name': defn.name, 'agent_persona': defn.persona, 'agent_list': agent_list}
     composed = header_service.compose(hids, ctx)
     if not composed.strip():
@@ -66,7 +88,7 @@ def _resolve_header_ids(nid: str, flow, flow_def) -> list[str]:
         return node.header_ids
     if flow_def and flow_def.default_header_ids:
         return flow_def.default_header_ids
-    return [DEFAULT_PROTOCOL_HEADER_ID]
+    return [DEFAULT_PROTOCOL_ID]
 
 
 def run_swarm(question: str, workdir: str = '.', flow: Flow | None = None, log: Logger | None = None, resume: bool = False, flow_id: str | None = None) -> list[dict]:
