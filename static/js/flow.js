@@ -1,7 +1,9 @@
 /* ReDo! — Flow (Drawflow) management */
 
 async function loadFlows() {
-  flows = await (await fetch(`${API}/flows`)).json();
+  const r = await apiGet(`${API}/flows`);
+  if (!r.ok) return;
+  flows = r.data;
   const opts = flows.map(f => `<option value="${f.id}">${escHtml(f.name)}</option>`).join('');
   for (const sel of [document.getElementById('flow-select'), document.getElementById('run-flow-select')]) {
     const cur = sel.value;
@@ -22,19 +24,14 @@ async function createFlow() {
   const name = prompt('Nome do novo flow:');
   if (!name) return;
   const id = slugify(name);
-  await fetch(`${API}/flows`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id, name, nodes:[], edges:[], start_node:''}) });
-  await loadFlows();
-  currentFlowId = id;
-  document.getElementById('flow-select').value = id;
-  if (drawflowReady) loadFlow();
+  const r = await apiPost(`${API}/flows`, {id, name, nodes:[], edges:[], start_node:''});
+  if (r.ok) { showToast('Flow criado', 'success'); await loadFlows(); currentFlowId = id; document.getElementById('flow-select').value = id; if (drawflowReady) loadFlow(); }
 }
 
 async function deleteFlow() {
   if (!currentFlowId || !confirm('Remover este flow?')) return;
-  await fetch(`${API}/flows/${currentFlowId}`, {method:'DELETE'});
-  currentFlowId = null;
-  await loadFlows();
-  if (drawflowReady) { if (currentFlowId) loadFlow(); else editor.clear(); }
+  const r = await apiDelete(`${API}/flows/${currentFlowId}`);
+  if (r.ok) { currentFlowId = null; await loadFlows(); if (drawflowReady) { if (currentFlowId) loadFlow(); else editor.clear(); } }
 }
 
 async function renameFlow() {
@@ -44,8 +41,8 @@ async function renameFlow() {
   const name = prompt('Novo nome:', fd.name);
   if (!name || name === fd.name) return;
   fd.name = name;
-  await fetch(`${API}/flows/${currentFlowId}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(fd) });
-  await loadFlows();
+  const r = await apiPut(`${API}/flows/${currentFlowId}`, fd);
+  if (r.ok) { showToast('Flow renomeado', 'success'); await loadFlows(); }
 }
 
 async function duplicateFlow() {
@@ -55,11 +52,8 @@ async function duplicateFlow() {
   const name = prompt('Nome da cópia:', fd.name + ' (cópia)');
   if (!name) return;
   const id = slugify(name);
-  await fetch(`${API}/flows`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({...fd, id, name}) });
-  await loadFlows();
-  currentFlowId = id;
-  document.getElementById('flow-select').value = id;
-  if (drawflowReady) loadFlow();
+  const r = await apiPost(`${API}/flows`, {...fd, id, name});
+  if (r.ok) { showToast('Flow duplicado', 'success'); await loadFlows(); currentFlowId = id; document.getElementById('flow-select').value = id; if (drawflowReady) loadFlow(); }
 }
 
 // ── Drawflow ─────────────────────────────────────────────────────────────
@@ -149,7 +143,6 @@ function initDrawflow() {
     document.getElementById('flow-info').textContent = `⚡ Início: ${n.name}`;
   });
 
-  // Edge panel
   const edgePanel = document.createElement('div');
   edgePanel.id = 'edge-panel';
   edgePanel.className = 'absolute z-50 bg-card border border-border rounded-xl shadow-lg p-3 text-xs hidden';
@@ -293,9 +286,11 @@ async function _doSaveFlow() {
     }
     const fd = flows.find(f => f.id === currentFlowId);
     const name = fd ? fd.name : 'Default';
-    await fetch(`${API}/flows/${currentFlowId}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ id: currentFlowId, name, nodes, edges, start_node: startNodeId, default_header_ids: flowDefaultHeaderIds }) });
-    if (fd) { fd.nodes = nodes; fd.edges = edges; fd.start_node = startNodeId; }
-    document.getElementById('flow-info').textContent = `✓ Salvo: ${nodes.length} nós, ${edges.length} conexões, início: ${startNodeId}`;
+    const r = await apiPut(`${API}/flows/${currentFlowId}`, { id: currentFlowId, name, nodes, edges, start_node: startNodeId, default_header_ids: flowDefaultHeaderIds });
+    if (r.ok) {
+      if (fd) { fd.nodes = nodes; fd.edges = edges; fd.start_node = startNodeId; }
+      document.getElementById('flow-info').textContent = `✓ Salvo: ${nodes.length} nós, ${edges.length} conexões, início: ${startNodeId}`;
+    }
   } finally { _saveFlowRunning = false; }
 }
 

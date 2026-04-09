@@ -8,6 +8,11 @@
 <script>tailwind.config={darkMode:'class',theme:{extend:{colors:{surface:'#0f0f13',card:'#16161d',border:'#2a2a35',accent:'#7c5cfc',accentHover:'#9b7fff',muted:'#6b6b80'}}}}</script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jerosoler/Drawflow@0.0.59/dist/drawflow.min.css">
 <script src="https://cdn.jsdelivr.net/gh/jerosoler/Drawflow@0.0.59/dist/drawflow.min.js"></script>
+<!-- Markdown + syntax highlighting + sanitizer -->
+<script defer src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/styles/github-dark-dimmed.min.css">
+<script defer src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/highlight.min.js"></script>
 <link rel="stylesheet" href="/static/css/app.css">
 </head>
 <body class="bg-surface text-gray-200 h-screen flex flex-col overflow-hidden">
@@ -20,25 +25,26 @@
     <span class="text-xs text-muted bg-surface px-2 py-0.5 rounded-full">v0.2</span>
   </div>
   <div class="flex items-center gap-4">
-    <div class="flex bg-surface rounded-lg p-0.5 text-xs">
-      <button onclick="switchTab('agents')" id="tab-agents" class="tab-btn px-3 py-1.5 rounded-md transition font-medium bg-accent/10 text-accent">Agentes</button>
-      <button onclick="switchTab('flow')" id="tab-flow" class="tab-btn px-3 py-1.5 rounded-md transition font-medium text-muted hover:text-white">Flow</button>
-      <button onclick="switchTab('headers')" id="tab-headers" class="tab-btn px-3 py-1.5 rounded-md transition font-medium text-muted hover:text-white">Headers</button>
-      <button onclick="switchTab('run')" id="tab-run" class="tab-btn px-3 py-1.5 rounded-md transition font-medium text-muted hover:text-white">Executar</button>
-    </div>
+    <nav role="tablist" aria-label="Navegação principal" class="flex bg-surface rounded-lg p-0.5 text-xs">
+      <button onclick="switchTab('agents')" id="tab-agents" role="tab" aria-selected="false" aria-controls="view-agents" class="tab-btn px-3 py-1.5 rounded-md transition font-medium text-muted hover:text-white">Agentes</button>
+      <button onclick="switchTab('flow')" id="tab-flow" role="tab" aria-selected="false" aria-controls="view-flow" class="tab-btn px-3 py-1.5 rounded-md transition font-medium text-muted hover:text-white">Flow</button>
+      <button onclick="switchTab('headers')" id="tab-headers" role="tab" aria-selected="false" aria-controls="view-headers" class="tab-btn px-3 py-1.5 rounded-md transition font-medium text-muted hover:text-white">Headers</button>
+      <button onclick="switchTab('run')" id="tab-run" role="tab" aria-selected="true" aria-controls="view-run" class="tab-btn px-3 py-1.5 rounded-md transition font-medium bg-accent/10 text-accent">Executar</button>
+    </nav>
     <div class="flex items-center gap-2 text-xs text-muted">
       <span id="status-dot" class="w-2 h-2 rounded-full bg-emerald-500"></span>
       <span id="status-text">Ready</span>
     </div>
+    <div id="sse-indicator" class="flex items-center gap-1"></div>
   </div>
 </header>
 
 <!-- ═══ TAB: Agents ═══ -->
-<div id="view-agents" class="flex-1 flex overflow-hidden">
+<div id="view-agents" role="tabpanel" aria-labelledby="tab-agents" class="flex-1 flex overflow-hidden hidden">
   <aside class="w-72 border-r border-border bg-card/30 flex flex-col">
     <div class="flex items-center justify-between px-4 py-3 border-b border-border">
       <span class="text-sm font-medium text-muted uppercase tracking-wider">Agentes</span>
-      <button onclick="openModal()" class="w-7 h-7 flex items-center justify-center rounded-lg bg-accent/10 text-accent hover:bg-accent/20 transition text-lg leading-none">+</button>
+      <button onclick="openModal()" aria-label="Novo agente" class="w-7 h-7 flex items-center justify-center rounded-lg bg-accent/10 text-accent hover:bg-accent/20 transition text-lg leading-none">+</button>
     </div>
     <div id="agent-list" class="flex-1 overflow-y-auto p-2 space-y-1"></div>
   </aside>
@@ -48,15 +54,15 @@
 </div>
 
 <!-- ═══ TAB: Flow ═══ -->
-<div id="view-flow" class="flex-1 flex-col overflow-hidden hidden">
+<div id="view-flow" role="tabpanel" aria-labelledby="tab-flow" class="flex-1 flex-col overflow-hidden hidden">
   <div class="flex items-center gap-3 px-4 py-2 border-b border-border bg-card/20 text-xs">
-    <select id="flow-select" onchange="onFlowSelect()" class="bg-surface border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent/50 transition min-w-[160px]">
+    <select id="flow-select" onchange="onFlowSelect()" aria-label="Selecionar flow" class="bg-surface border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent/50 transition min-w-[160px]">
       <option value="">Nenhum flow</option>
     </select>
     <button onclick="createFlow()" class="px-2 py-1.5 bg-accent/10 text-accent rounded-lg hover:bg-accent/20 transition font-medium">+ Novo</button>
     <button onclick="renameFlow()" class="px-2 py-1.5 bg-surface border border-border rounded-lg hover:border-accent/30 transition text-muted hover:text-white">Renomear</button>
     <button onclick="duplicateFlow()" class="px-2 py-1.5 bg-surface border border-border rounded-lg hover:border-accent/30 transition text-muted hover:text-white">Duplicar</button>
-    <button onclick="deleteFlow()" class="px-2 py-1.5 text-muted hover:text-red-400 rounded-lg hover:bg-red-500/10 transition">✕ Deletar</button>
+    <button onclick="deleteFlow()" aria-label="Deletar flow" class="px-2 py-1.5 text-muted hover:text-red-400 rounded-lg hover:bg-red-500/10 transition">✕ Deletar</button>
     <div class="border-l border-border h-5 mx-1"></div>
     <button onclick="autoLayout()" class="px-3 py-1.5 bg-surface border border-border rounded-lg hover:border-accent/30 transition text-muted hover:text-white">Auto Layout</button>
     <button onclick="saveFlow()" class="px-3 py-1.5 bg-accent/10 text-accent rounded-lg hover:bg-accent/20 transition font-medium">💾 Salvar</button>
@@ -70,7 +76,7 @@
     <div id="flow-help" class="w-64 border-l border-border bg-card/30 p-4 overflow-y-auto text-xs text-gray-400 space-y-3 transition-all">
       <div class="flex items-center justify-between">
         <span class="text-white font-medium text-sm">📖 Guia</span>
-        <button onclick="document.getElementById('flow-help').classList.add('hidden');document.getElementById('flow-help-btn').classList.remove('hidden')" class="text-muted hover:text-white">✕</button>
+        <button onclick="document.getElementById('flow-help').classList.add('hidden');document.getElementById('flow-help-btn').classList.remove('hidden')" aria-label="Fechar guia" class="text-muted hover:text-white">✕</button>
       </div>
       <div class="space-y-2.5 leading-relaxed">
         <div><span class="text-white">Adicionar agente</span><br>Arraste da paleta à esquerda para o canvas.</div>
@@ -82,12 +88,12 @@
         <div><span class="text-white">Remover nó</span><br>Selecione o nó → <span class="text-red-400">✕</span> aparece no canto.</div>
       </div>
     </div>
-    <button id="flow-help-btn" onclick="document.getElementById('flow-help').classList.remove('hidden');this.classList.add('hidden')" class="hidden absolute right-2 top-12 z-10 px-2 py-1 bg-card border border-border rounded-lg text-xs text-muted hover:text-white">📖</button>
+    <button id="flow-help-btn" onclick="document.getElementById('flow-help').classList.remove('hidden');this.classList.add('hidden')" class="hidden absolute right-2 top-12 z-10 px-2 py-1 bg-card border border-border rounded-lg text-xs text-muted hover:text-white" aria-label="Abrir guia">📖</button>
   </div>
 </div>
 
 <!-- ═══ TAB: Headers ═══ -->
-<div id="view-headers" class="flex-1 flex-col overflow-hidden hidden">
+<div id="view-headers" role="tabpanel" aria-labelledby="tab-headers" class="flex-1 flex-col overflow-hidden hidden">
   <div class="flex items-center gap-3 px-5 py-2 border-b border-border bg-card/20">
     <span class="text-sm font-medium text-muted uppercase tracking-wider">Header Templates</span>
     <button onclick="openHeaderModal()" class="px-3 py-1.5 bg-accent/10 text-accent text-xs rounded-lg hover:bg-accent/20 transition font-medium">+ Novo</button>
@@ -108,11 +114,11 @@
 </div>
 
 <!-- ═══ Header Modal ═══ -->
-<div id="header-modal" class="fixed inset-0 modal-bg z-50 hidden flex items-center justify-center">
+<div id="header-modal" role="dialog" aria-modal="true" aria-labelledby="header-modal-title" class="fixed inset-0 modal-bg z-50 hidden flex items-center justify-center">
   <div class="bg-card border border-border rounded-2xl w-[600px] max-h-[90vh] overflow-y-auto shadow-2xl">
     <div class="flex items-center justify-between px-6 py-4 border-b border-border">
       <h2 id="header-modal-title" class="text-base font-semibold text-white">Novo Header</h2>
-      <button onclick="closeHeaderModal()" class="text-muted hover:text-white transition">✕</button>
+      <button onclick="closeHeaderModal()" aria-label="Fechar" class="text-muted hover:text-white transition">✕</button>
     </div>
     <div class="p-6 space-y-4">
       <div class="grid grid-cols-2 gap-4">
@@ -147,17 +153,17 @@
 </div>
 
 <!-- ═══ TAB: Run ═══ -->
-<div id="view-run" class="flex-1 flex-col overflow-hidden hidden">
+<div id="view-run" role="tabpanel" aria-labelledby="tab-run" class="flex-1 flex-col overflow-hidden" style="display:flex">
   <div class="flex items-center gap-3 px-5 py-2 border-b border-border bg-card/20">
     <label class="text-xs text-muted">📂</label>
-    <select id="project-select" onchange="onProjectChange()" class="flex-1 bg-surface border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent/50 transition">
+    <select id="project-select" onchange="onProjectChange()" aria-label="Selecionar projeto" class="flex-1 bg-surface border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent/50 transition">
       <option value="">Selecione um projeto...</option>
     </select>
     <button onclick="openProjectModal()" class="px-3 py-1.5 bg-accent/10 text-accent text-xs rounded-lg hover:bg-accent/20 transition font-medium">+ Novo</button>
-    <button onclick="deleteProject()" class="px-2 py-1.5 text-muted hover:text-red-400 text-xs rounded-lg hover:bg-red-500/10 transition">✕</button>
+    <button onclick="deleteProject()" aria-label="Remover projeto" class="px-2 py-1.5 text-muted hover:text-red-400 text-xs rounded-lg hover:bg-red-500/10 transition">✕</button>
     <div class="border-l border-border h-5 mx-1"></div>
     <label class="text-xs text-muted">🔀</label>
-    <select id="run-flow-select" class="bg-surface border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent/50 transition min-w-[140px]">
+    <select id="run-flow-select" aria-label="Selecionar flow para execução" class="bg-surface border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent/50 transition min-w-[140px]">
       <option value="">Nenhum flow</option>
     </select>
     <button id="btn-open" onclick="openSession()" class="px-3 py-1.5 bg-emerald-500/10 text-emerald-400 text-xs rounded-lg hover:bg-emerald-500/20 transition font-medium hidden">⚡ Abrir</button>
@@ -194,7 +200,7 @@
         <div id="chat-messages" class="px-4 py-3 space-y-3 max-w-3xl mx-auto hidden"></div>
         <div id="raw-log" class="px-4 py-3 space-y-1 font-mono text-xs hidden"></div>
       </div>
-      <button id="scroll-to-bottom" aria-label="Scroll to bottom">↓</button>
+      <button id="scroll-to-bottom" aria-label="Rolar para o final">↓</button>
       <div class="px-4 py-3 border-t border-border bg-card/20">
         <div class="flex gap-3 max-w-3xl mx-auto">
           <input id="chat-input" type="text" placeholder="Mensagem para o swarm... (@agente para falar direto)"
@@ -210,11 +216,11 @@
 </div>
 
 <!-- ═══ Agent Modal ═══ -->
-<div id="modal" class="fixed inset-0 modal-bg z-50 hidden flex items-center justify-center">
+<div id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" class="fixed inset-0 modal-bg z-50 hidden flex items-center justify-center">
   <div class="bg-card border border-border rounded-2xl w-[520px] max-h-[90vh] overflow-y-auto shadow-2xl">
     <div class="flex items-center justify-between px-6 py-4 border-b border-border">
       <h2 id="modal-title" class="text-base font-semibold text-white">Novo Agente</h2>
-      <button onclick="closeModal()" class="text-muted hover:text-white transition">✕</button>
+      <button onclick="closeModal()" aria-label="Fechar" class="text-muted hover:text-white transition">✕</button>
     </div>
     <div class="p-6 space-y-4">
       <div class="grid grid-cols-2 gap-4">
@@ -253,11 +259,11 @@
 </div>
 
 <!-- ═══ Project Modal ═══ -->
-<div id="project-modal" class="fixed inset-0 modal-bg z-50 hidden flex items-center justify-center">
+<div id="project-modal" role="dialog" aria-modal="true" aria-labelledby="project-modal-title" class="fixed inset-0 modal-bg z-50 hidden flex items-center justify-center">
   <div class="bg-card border border-border rounded-2xl w-[400px] shadow-2xl">
     <div class="flex items-center justify-between px-6 py-4 border-b border-border">
-      <h2 class="text-base font-semibold text-white">Novo Projeto</h2>
-      <button onclick="closeProjectModal()" class="text-muted hover:text-white transition">✕</button>
+      <h2 id="project-modal-title" class="text-base font-semibold text-white">Novo Projeto</h2>
+      <button onclick="closeProjectModal()" aria-label="Fechar" class="text-muted hover:text-white transition">✕</button>
     </div>
     <div class="p-6 space-y-4">
       <div><label class="block text-xs text-muted mb-1.5">Nome</label>

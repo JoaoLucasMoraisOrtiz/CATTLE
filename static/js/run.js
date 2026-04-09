@@ -1,5 +1,8 @@
 /* ReDo! — Run tab: session, chat, agent grid, SSE */
 
+let _sseRetryDelay = 1000;
+const _SSE_MAX_DELAY = 30000;
+
 function getColor(name) {
   const a = agents.find(x => x.name === name);
   return a?.color || (name === 'GOD' ? '#fbbf24' : '#6b6b80');
@@ -20,6 +23,48 @@ function setSessionUI(open) {
     ? '<span class="w-2 h-2 rounded-full bg-emerald-500"></span><span class="text-sm text-white font-medium">Swarm ativo</span><span class="text-xs text-muted ml-2">Digite para enviar ao swarm, @agente para falar direto</span>'
     : '<span class="text-sm text-muted">Abra um projeto para começar</span>';
   setStatus(open ? 'Session open' : 'Ready', false);
+  _updateConnectionIndicator(open ? 'connected' : 'off');
+}
+
+// ── Connection indicator ─────────────────────────────────────────────────
+
+function _updateConnectionIndicator(state) {
+  let el = document.getElementById('sse-indicator');
+  if (!el) return;
+  const map = { connected: ['bg-emerald-500','Conectado'], reconnecting: ['bg-amber-400 running','Reconectando…'], off: ['bg-gray-500','Desconectado'] };
+  const [cls, txt] = map[state] || map.off;
+  el.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${cls}"></span><span class="text-[10px] text-muted">${txt}</span>`;
+}
+
+// ── SSE with exponential reconnect ───────────────────────────────────────
+
+function connectSSE() {
+  if (eventSource) eventSource.close();
+  eventSource = new EventSource(`${API}/session/events`);
+  _sseRetryDelay = 1000;
+  _updateConnectionIndicator('connected');
+
+  eventSource.addEventListener('orch', e => handleSSE('orch', JSON.parse(e.data)));
+  eventSource.addEventListener('agent', e => handleSSE('agent', JSON.parse(e.data)));
+  eventSource.addEventListener('error', e => {
+    try { handleSSE('error', JSON.parse(e.data)); } catch(ex){}
+    if (eventSource.readyState === EventSource.CLOSED) _reconnectSSE();
+  });
+  eventSource.addEventListener('summary', e => handleSSE('summary', JSON.parse(e.data)));
+  eventSource.addEventListener('done', e => handleSSE('done', {}));
+
+  eventSource.onerror = () => {
+    if (sessionOpen && eventSource.readyState === EventSource.CLOSED) _reconnectSSE();
+  };
+}
+
+function _reconnectSSE() {
+  _updateConnectionIndicator('reconnecting');
+  setTimeout(() => {
+    if (!sessionOpen) return;
+    connectSSE();
+  }, _sseRetryDelay);
+  _sseRetryDelay = Math.min(_sseRetryDelay * 2, _SSE_MAX_DELAY);
 }
 
 // ── Open / Close ─────────────────────────────────────────────────────────
@@ -27,6 +72,8 @@ function setSessionUI(open) {
 async function openSession() {
   const pid = document.getElementById('project-select').value;
   if (!pid) return;
+  const btn = document.getElementById('btn-open');
+  setLoading(btn, true);
   setStatus('Opening...', true);
   document.getElementById('chat-messages').innerHTML = '';
   document.getElementById('raw-log').innerHTML = '';
@@ -34,22 +81,17 @@ async function openSession() {
   chatHistory = [];
 
   const flowId = document.getElementById('run-flow-select').value || null;
-  await fetch(`${API}/session/open/${pid}`, { method: 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({flow_id: flowId}) });
+  const r = await apiPost(`${API}/session/open/${pid}`, {flow_id: flowId});
+  setLoading(btn, false);
+  if (!r.ok) { setStatus('Ready', false); return; }
 
-  if (eventSource) eventSource.close();
-  eventSource = new EventSource(`${API}/session/events`);
-  eventSource.addEventListener('orch', e => handleSSE('orch', JSON.parse(e.data)));
-  eventSource.addEventListener('agent', e => handleSSE('agent', JSON.parse(e.data)));
-  eventSource.addEventListener('error', e => { try { handleSSE('error', JSON.parse(e.data)); } catch(ex){} });
-  eventSource.addEventListener('summary', e => handleSSE('summary', JSON.parse(e.data)));
-  eventSource.addEventListener('done', e => handleSSE('done', {}));
-
+  connectSSE();
   setSessionUI(true);
 }
 
 async function closeSession() {
   if (eventSource) { eventSource.close(); eventSource = null; }
-  await fetch(`${API}/session/close`, { method: 'POST' });
+  await apiPost(`${API}/session/close`);
   setSessionUI(false);
   document.getElementById('run-agents').innerHTML = '';
 }
@@ -65,7 +107,7 @@ function onProjectChange() {
 async function stopAgent(name) {
   const a = agents.find(x => x.name === name);
   const id = a ? a.id : name;
-  await fetch(`${API}/session/interrupt/${encodeURIComponent(id)}`, {method:'POST'});
+  await apiPost(`${API}/session/interrupt/${encodeURIComponent(id)}`);
 }
 
 async function sendChat() {
@@ -81,10 +123,7 @@ async function sendChat() {
   addChatBubble('user', msg, agent_id ? `→ ${agent_id}` : '→ swarm');
   setStatus('Working...', true);
 
-  await fetch(`${API}/session/message`, {
-    method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ text: msg, agent_id })
-  });
+  await apiPost(`${API}/session/message`, { text: msg, agent_id });
 }
 
 // ── Agent grid (Swarm view) ───────────────────────────────────────────────
@@ -103,7 +142,7 @@ function ensureGridPanel(name) {
       <span class="w-2 h-2 rounded-full" style="background:${c}" id="grid-dot-${escHtml(name)}"></span>
       <span class="text-xs font-medium text-white">${escHtml(name)}</span>
       <span class="text-[10px] text-muted ml-auto" id="grid-status-${escHtml(name)}">Pronto</span>
-      <button class="hidden text-[10px] text-red-400 hover:text-red-300 ml-1 px-1 rounded hover:bg-red-500/10" id="grid-stop-${escHtml(name)}" onclick="event.stopPropagation();stopAgent('${escHtml(name)}')">⏹</button>
+      <button class="hidden text-[10px] text-red-400 hover:text-red-300 ml-1 px-1 rounded hover:bg-red-500/10" id="grid-stop-${escHtml(name)}" onclick="event.stopPropagation();stopAgent('${escHtml(name)}')" aria-label="Parar ${escHtml(name)}">⏹</button>
     </div>
     <div class="flex-1 overflow-y-auto p-3 font-mono text-xs text-gray-400 whitespace-pre-wrap" id="grid-content-${escHtml(name)}"></div>`;
   grid.appendChild(div);
@@ -134,6 +173,24 @@ function showView(view) {
   document.getElementById('agent-grid').classList.toggle('hidden', view !== 'grid');
   document.getElementById('chat-messages').classList.toggle('hidden', view !== 'chat');
   document.getElementById('raw-log').classList.toggle('hidden', view !== 'log');
+}
+
+// ── Markdown rendering ───────────────────────────────────────────────────
+
+function renderMarkdown(text) {
+  if (typeof marked === 'undefined') return escHtml(text);
+  try {
+    const html = marked.parse(text, { breaks: true });
+    return typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(html) : html;
+  } catch { return escHtml(text); }
+}
+
+function copyBubbleText(btn) {
+  const bubble = btn.closest('.chat-bubble');
+  const src = bubble?.dataset.raw || bubble?.textContent || '';
+  navigator.clipboard.writeText(src).then(() => {
+    btn.textContent = '✓'; setTimeout(() => { btn.textContent = '📋'; }, 1500);
+  });
 }
 
 // ── Chat rendering ───────────────────────────────────────────────────────
@@ -170,9 +227,13 @@ function appendBubble(type, text, label) {
     </div></div>`;
   } else if (type === 'agent') {
     const c = getColor(label);
-    div.innerHTML = `<div class="flex justify-start"><div class="max-w-[75%] bg-card border border-border rounded-xl rounded-tl-sm px-4 py-2.5">
-      <div class="text-[10px] mb-1" style="color:${c}">${ts()} ${escHtml(label||'')}</div>
-      <div class="text-sm text-gray-300 whitespace-pre-wrap">${escHtml(text)}</div>
+    const rendered = renderMarkdown(text);
+    div.innerHTML = `<div class="flex justify-start"><div class="chat-bubble max-w-[75%] bg-card border border-border rounded-xl rounded-tl-sm px-4 py-2.5 relative group" data-raw="${escHtml(text)}">
+      <div class="flex items-center justify-between text-[10px] mb-1">
+        <span style="color:${c}">${ts()} ${escHtml(label||'')}</span>
+        <button onclick="copyBubbleText(this)" class="opacity-0 group-hover:opacity-100 text-muted hover:text-white transition text-xs ml-2" aria-label="Copiar">📋</button>
+      </div>
+      <div class="text-sm text-gray-300 chat-md">${rendered}</div>
     </div></div>`;
   } else if (type === 'summary') {
     div.innerHTML = `<div class="flex justify-center"><div class="bg-emerald-500/5 border border-emerald-500/20 rounded-xl px-4 py-2.5 max-w-[80%]">
@@ -184,6 +245,12 @@ function appendBubble(type, text, label) {
   }
 
   el.appendChild(div);
+
+  // highlight code blocks if hljs available
+  if (type === 'agent' && typeof hljs !== 'undefined') {
+    div.querySelectorAll('pre code').forEach(block => hljs.highlightElement(block));
+  }
+
   const scroll = document.getElementById('chat-scroll');
   if (isNearBottom(scroll)) scroll.scrollTop = scroll.scrollHeight;
 }
@@ -300,10 +367,10 @@ function handleSSE(type, data) {
 // ── Settings ─────────────────────────────────────────────────────────────
 
 async function loadSettings() {
-  const s = await (await fetch(`${API}/settings`)).json();
-  document.getElementById('toggle-data-collection').checked = s.data_collection !== false;
+  const r = await apiGet(`${API}/settings`);
+  if (r.ok) document.getElementById('toggle-data-collection').checked = r.data.data_collection !== false;
 }
 
 async function toggleDataCollection(val) {
-  await fetch(`${API}/settings`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({key:'data_collection', value:val}) });
+  await apiPut(`${API}/settings`, {key:'data_collection', value:val});
 }

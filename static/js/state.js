@@ -1,20 +1,36 @@
-/* ReDo! — Global state */
+/* ReDo! — Global state with CustomEvent notifications */
 
-let agents = [];
-let projectsList = [];
-let flows = [];
-let headersList = [];
-let currentFlowId = null;
-let editingId = null;
-let editingHeaderId = null;
-let selectedHeaderId = null;
-let editor = null; // Drawflow instance
+const State = {
+  _data: {
+    agents: [],
+    projectsList: [],
+    flows: [],
+    headersList: [],
+    currentFlowId: null,
+    editingId: null,
+    editingHeaderId: null,
+    selectedHeaderId: null,
+    sessionOpen: false,
+    chatTarget: null,
+    chatHistory: [],
+    startNodeId: '',
+  },
+  get(key) { return this._data[key]; },
+  set(key, value) {
+    this._data[key] = value;
+    document.dispatchEvent(new CustomEvent('state:' + key, { detail: value }));
+  },
+};
+
+// Backward-compatible globals — read/write proxied to State._data
+let agents = []; let projectsList = []; let flows = []; let headersList = [];
+let currentFlowId = null; let editingId = null; let editingHeaderId = null;
+let selectedHeaderId = null; let sessionOpen = false; let chatTarget = null;
+let chatHistory = []; let startNodeId = '';
+
+let editor = null;
 let drawflowReady = false;
-let startNodeId = '';
-let sessionOpen = false;
-let chatTarget = null;
 let eventSource = null;
-let chatHistory = [];
 let nodeHeaderIds = {};
 let flowDefaultHeaderIds = [];
 const agentStatus = {};
