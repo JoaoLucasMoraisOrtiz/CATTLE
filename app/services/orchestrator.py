@@ -34,6 +34,35 @@ def _init_agent(defn: AgentDef, agent_list: str, workdir: str, log: Logger, head
     return agent
 
 
+def _handle_signal(signal, current_id, defn, flow, log, agent_map=None, return_stack=None):
+    """Returns (action, next_id, next_msg). action: 'continue' | 'break'."""
+    if signal.kind == 'handoff':
+        allowed = flow.targets_for(current_id)
+        if signal.target not in allowed:
+            log.error(f'Handoff to "{signal.target}" blocked by flow')
+            return ('break', '', '')
+        if return_stack is not None and flow.edge_returns(current_id, signal.target):
+            return_stack.append(current_id)
+            log.orch(f'↩ {signal.target} (retorno obrigatório para {defn.name})')
+        else:
+            log.orch(f'Handoff → {signal.target}: {signal.summary}')
+        msg = (
+            f"O agente {defn.name} completou sua parte e passou para você:\n\n"
+            f"---\n{signal.clean_response}\n---\n\n"
+            f"Contexto do handoff: {signal.summary}"
+        )
+        return ('continue', signal.target, msg)
+    elif signal.kind == 'done':
+        if return_stack:
+            sender_id = return_stack.pop()
+            sender_name = agent_map[sender_id].name if agent_map and sender_id in agent_map else sender_id
+            log.orch(f'↩ {defn.name} finalizou, retornando para {sender_name}')
+            return ('continue', sender_id, f"[Retorno de {defn.name}] {signal.summary}")
+        log.orch(f'Done! {defn.name}: {signal.summary}')
+        return ('break', '', '')
+    return ('break', '', '')
+
+
 def _send_with_retry(agent: Agent, message: str, log: Logger) -> str:
     for attempt in range(MAX_RETRIES + 1):
         try:
@@ -112,6 +141,7 @@ def run_swarm(question: str, workdir: str = '.', flow: Flow | None = None, log: 
         message = saved.pending_message if saved and saved.pending_message else question
         round_num = saved.round_num if saved else 0
         commit_hashes = saved.commit_hashes if saved else {}
+        return_stack = []
 
         while round_num < MAX_HANDOFF_ROUNDS:
             round_num += 1
@@ -192,50 +222,29 @@ def run_swarm(question: str, workdir: str = '.', flow: Flow | None = None, log: 
                 )
                 god.submit_review(round_num, summary)
 
-            if signal.kind == 'handoff':
-                allowed = flow.targets_for(current_id)
-                if signal.target not in allowed:
-                    log.error(f'Handoff to "{signal.target}" blocked by flow')
+            if signal.kind != 'none':
+                action, next_id, next_msg = _handle_signal(signal, current_id, defn, flow, log, agent_map, return_stack)
+                if action == 'break': break
+                message, current_id = next_msg, next_id
+                continue
+
+            # No signal — nudge
+            nudged = False
+            for _nudge in range(MAX_SIGNAL_NUDGES):
+                log.orch(f'⚠ No signal from {defn.name}, nudging...')
+                nudge_resp = _send_with_retry(current, NUDGE_MESSAGE, log)
+                signal = parse(nudge_resp)
+                log.agent(defn.name, '→ nudge response', signal.clean_response)
+                log.record(round_num, defn.name, signal.clean_response)
+                if signal.kind != 'none':
+                    nudged = True
                     break
-                log.orch(f'Handoff → {signal.target}: {signal.summary}')
-                message = (
-                    f"O agente {defn.name} completou sua parte e passou para você:\n\n"
-                    f"---\n{signal.clean_response}\n---\n\n"
-                    f"Contexto do handoff: {signal.summary}"
-                )
-                current_id = signal.target
-            elif signal.kind == 'done':
-                log.orch(f'Done! {defn.name}: {signal.summary}')
+            if not nudged:
+                log.orch(f'No signal from {defn.name} after nudge, treating as done')
                 break
-            else:
-                nudged = False
-                for _nudge in range(MAX_SIGNAL_NUDGES):
-                    log.orch(f'⚠ No signal from {defn.name}, nudging...')
-                    nudge_resp = _send_with_retry(current, NUDGE_MESSAGE, log)
-                    signal = parse(nudge_resp)
-                    log.agent(defn.name, '→ nudge response', signal.clean_response)
-                    log.record(round_num, defn.name, signal.clean_response)
-                    if signal.kind != 'none':
-                        nudged = True
-                        break
-                if not nudged:
-                    log.orch(f'No signal from {defn.name} after nudge, treating as done')
-                    break
-                if signal.kind == 'handoff':
-                    allowed = flow.targets_for(current_id)
-                    if signal.target not in allowed:
-                        log.error(f'Handoff to "{signal.target}" blocked by flow')
-                        break
-                    log.orch(f'Handoff → {signal.target}: {signal.summary}')
-                    message = (
-                        f"O agente {defn.name} completou sua parte e passou para você:\n\n"
-                        f"---\n{signal.clean_response}\n---\n\n"
-                        f"Contexto do handoff: {signal.summary}"
-                    )
-                    current_id = signal.target
-                elif signal.kind == 'done':
-                    log.orch(f'Done! {defn.name}: {signal.summary}')
-                    break
+            action, next_id, next_msg = _handle_signal(signal, current_id, defn, flow, log, agent_map, return_stack)
+            if action == 'break': break
+            message, current_id = next_msg, next_id
 
         log.orch('Swarm complete!')
 

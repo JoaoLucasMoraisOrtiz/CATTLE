@@ -34,6 +34,7 @@ class SwarmSession:
         self.cb = cb or EventCallback()
         self.flow_id = flow_id
         self.agents = {}
+        self._lock = threading.Lock()
         self.agent_defs = {}
         self.git = GitCheckpoint(self.project_path)
         self.flow = Flow()
@@ -88,7 +89,8 @@ class SwarmSession:
         for t in threads:
             t.join()
 
-        self.agents = results
+        with self._lock:
+            self.agents = results
         self.alive = True
         self._opening = False
         self.cb.on_orch(f'{len(self.agents)} agents ready')
@@ -100,7 +102,8 @@ class SwarmSession:
 
     def close(self):
         self._abort.set()
-        agents_copy = list(self.agents.items())
+        with self._lock:
+            agents_copy = list(self.agents.items())
         for aid, agent in agents_copy:
             try:
                 agent._pty.write('/compact\r')
@@ -109,28 +112,35 @@ class SwarmSession:
             except Exception: pass
         self._save_state()
         for _, a in agents_copy: a.quit()
-        self.agents.clear()
+        with self._lock:
+            self.agents.clear()
         self.alive = False
         self.cb.on_orch('Session closed')
 
     def abort(self):
         self._abort.set()
-        for agent in self.agents.values():
+        with self._lock:
+            agents_copy = list(self.agents.values())
+        for agent in agents_copy:
             try: agent._pty.interrupt()
             except Exception: pass
         self.cb.on_orch('⏹ Operação abortada')
 
     def interrupt_agent(self, agent_id):
-        match = next((aid for aid in self.agents if aid.lower() == agent_id.lower()), None)
-        if match and match in self.agents:
-            self.agents[match]._pty.interrupt()
+        with self._lock:
+            match = next((aid for aid in self.agents if aid.lower() == agent_id.lower()), None)
+            agent = self.agents.get(match) if match else None
+        if agent:
+            agent._pty.interrupt()
             name = self.agent_defs.get(match, match).name
             self.cb.on_orch(f'⏹ {name} interrompido')
 
     def restart_agent(self, agent_id):
         defn = self.agent_defs.get(agent_id)
         if not defn: self.cb.on_error(f'Agent {agent_id} not found'); return
-        if agent_id in self.agents: self.agents[agent_id].quit()
+        with self._lock:
+            old = self.agents.get(agent_id)
+        if old: old.quit()
         self.cb.on_orch(f'🔄 Restarting {defn.name}...')
         self._spawn_agent(agent_id, defn, list(self.agent_defs.values()))
 
@@ -143,7 +153,9 @@ class SwarmSession:
         if self._compacting: self.cb.on_error('⏳ Aguarde — compactando contexto dos agentes...'); return
         self._abort.clear()
         start_id = self.flow.start_agent()
-        if not start_id or start_id not in self.agents:
+        with self._lock:
+            has_start = start_id and start_id in self.agents
+        if not has_start:
             self.cb.on_error('No start agent in flow'); return
         self._chat('user', message)
         self._run_handoff_chain(start_id, message)
@@ -157,7 +169,8 @@ class SwarmSession:
             return
         if not self.alive: self.cb.on_error('Session not open'); return
         if self._compacting: self.cb.on_error('⏳ Aguarde — compactando contexto dos agentes...'); return
-        match = next((aid for aid in self.agents if aid.lower() == agent_id.lower()), agent_id)
+        with self._lock:
+            match = next((aid for aid in self.agents if aid.lower() == agent_id.lower()), agent_id)
         if match in self._busy:
             self.cb.on_orch(f'⏳ {self.agent_defs.get(match, agent_id).name} ocupado — mensagem na fila')
             self._agent_queues.setdefault(match, []).append(message)
@@ -168,7 +181,8 @@ class SwarmSession:
     def _do_send_to_agent(self, match, message):
         self._busy.add(match)
         try:
-            agent = self.agents.get(match)
+            with self._lock:
+                agent = self.agents.get(match)
             defn = self.agent_defs.get(match)
             if not agent or not defn:
                 self.cb.on_error(f'Agent {match} not found'); self.cb.on_done(); return
@@ -176,7 +190,8 @@ class SwarmSession:
             self._chat('user', message, defn.name)
             try:
                 response = self._send_with_retry(agent, message)
-                agent = self.agents.get(match, agent)
+                with self._lock:
+                    agent = self.agents.get(match, agent)
             except Exception as e:
                 self.cb.on_error(f'{defn.name}: {e}'); self.cb.on_done(); return
             signal = parse(response)
@@ -185,7 +200,9 @@ class SwarmSession:
             self._chat('agent', signal.clean_response, defn.name)
             self._save_state()
             self._auto_compact(match, agent)
-            if signal.kind == 'handoff' and signal.target in self.agents:
+            with self._lock:
+                target_exists = signal.kind == 'handoff' and signal.target in self.agents
+            if target_exists:
                 self.cb.on_orch(f'→ {signal.target}: {signal.summary}')
                 msg = self._handoff_msg(defn.name, signal)
                 self._run_handoff_chain(signal.target, msg)
@@ -244,14 +261,16 @@ class SwarmSession:
             self._busy.add(current_id)
             used_agents.add(current_id)
             self.round_num += 1
-            agent = self.agents.get(current_id)
+            with self._lock:
+                agent = self.agents.get(current_id)
             defn = self.agent_defs.get(current_id)
             if not agent or not defn: self.cb.on_error(f'Agent {current_id} not available'); break
             self.cb.on_orch(f'Round {self.round_num}: {defn.name}')
             self.cb.on_agent(defn.name, '← prompt', msg[:300] + ('...' if len(msg) > 300 else ''))
             try:
                 response = self._send_with_retry(agent, msg)
-                agent = self.agents.get(current_id, agent)
+                with self._lock:
+                    agent = self.agents.get(current_id, agent)
             except Exception as e: self.cb.on_error(f'{defn.name}: {e}'); break
             if self._abort.is_set(): self.cb.on_orch('⏹ Abortado'); break
             signal = parse(response)
@@ -281,7 +300,8 @@ class SwarmSession:
                 self.cb.on_orch(f'⚠ No signal from {defn.name}, nudging...')
                 try:
                     nudge_resp = self._send_with_retry(agent, NUDGE_MESSAGE)
-                    agent = self.agents.get(current_id, agent)
+                    with self._lock:
+                        agent = self.agents.get(current_id, agent)
                 except Exception as e:
                     self.cb.on_error(f'{defn.name} nudge failed: {e}'); break
                 signal = parse(nudge_resp)
@@ -290,14 +310,9 @@ class SwarmSession:
                 if signal.kind != 'none':
                     nudged = True
                     break
-            if nudged:
-                action, next_id, next_msg = self._handle_signal(signal, current_id, defn, return_stack)
-                if action == 'break': break
-                current_id, msg = next_id, next_msg
-            else:
-                action, next_id, next_msg = self._handle_signal(signal, current_id, defn, return_stack)
-                if action == 'break': break
-                current_id, msg = next_id, next_msg
+            action, next_id, next_msg = self._handle_signal(signal, current_id, defn, return_stack)
+            if action == 'break': break
+            current_id, msg = next_id, next_msg
         self._busy -= used_agents
 
     def _spawn_agent(self, nid, defn, all_defs):
@@ -310,7 +325,8 @@ class SwarmSession:
         agent.start()
         agent._persona = persona
         agent._persona_sent = False
-        self.agents[nid] = agent
+        with self._lock:
+            self.agents[nid] = agent
         self.cb.on_agent(defn.name, 'ready', '')
 
     def _resolve_header_ids(self, node_id: str) -> list[str]:
@@ -351,16 +367,17 @@ class SwarmSession:
         return message
 
     def _send_with_retry(self, agent, message):
-        message = self._wrap_first_message(agent, message)
         if not agent._pty.is_alive():
-            agent_id = next((k for k, v in self.agents.items() if v is agent), None)
+            with self._lock:
+                agent_id = next((k for k, v in self.agents.items() if v is agent), None)
             if agent_id:
                 defn = self.agent_defs.get(agent_id)
                 if defn:
                     self.cb.on_orch(f'🔄 {defn.name} was idle/dead — restarting...')
                     self._spawn_agent(agent_id, defn, list(self.agent_defs.values()))
-                    agent = self.agents[agent_id]
-                    message = self._wrap_first_message(agent, message)
+                    with self._lock:
+                        agent = self.agents[agent_id]
+        message = self._wrap_first_message(agent, message)
         for attempt in range(MAX_RETRIES + 1):
             if self._abort.is_set(): raise RuntimeError('Aborted')
             try:
@@ -374,7 +391,8 @@ class SwarmSession:
     def _compact_all(self):
         self._compacting = True
         self.cb.on_orch('🗜 Compactando contexto de todos os agentes...')
-        agents_copy = list(self.agents.items())
+        with self._lock:
+            agents_copy = list(self.agents.items())
         def do_compact(aid, agent):
             try:
                 name = self.agent_defs.get(aid, agent).name
@@ -405,12 +423,14 @@ class SwarmSession:
 
     def _save_state(self):
         try:
+            with self._lock:
+                agent_ids = list(self.agents.keys())
             path = project_dir(self.project_path) / 'swarm_state.json'
             path.write_text(json.dumps({
                 'round_num': self.round_num,
                 'current_agent_id': '',
                 'pending_message': '',
-                'agent_ids': list(self.agents.keys()),
+                'agent_ids': agent_ids,
                 'commit_hashes': {},
                 'project_dir': self.project_path,
             }, indent=2))
