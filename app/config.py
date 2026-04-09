@@ -13,6 +13,11 @@ NUDGE_MESSAGE = "Se você já finalizou suas tasks, responda como o protocolo pe
 
 HOME_ALLOWLIST = {'.config', '.local', '.bashrc', '.profile', '.zshrc'}
 
+# Environment Manager MCP
+ENV_MCP_BUFFER_LINES = 500
+ENV_MCP_TIMEOUT = 300
+ENV_MCP_AUTO_INJECT = True
+
 # Header IDs moved to app.models.header (single source of truth)
 
 PROTOCOL_INSTRUCTIONS = """

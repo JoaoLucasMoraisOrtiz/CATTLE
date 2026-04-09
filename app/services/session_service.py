@@ -1,7 +1,9 @@
 """SwarmSession — persistent agents, chat-style messaging, auto-save, auto-compact."""
 
+import hashlib
 import os
 import re
+import shutil
 import time
 import threading
 import json
@@ -112,6 +114,9 @@ class SwarmSession:
             except Exception: pass
         self._save_state()
         for _, a in agents_copy: a.quit()
+        # E5: cleanup env-manager state dir
+        env_dir = f"/tmp/kiro-env-{hashlib.md5(self.project_path.encode()).hexdigest()[:12]}"
+        shutil.rmtree(env_dir, ignore_errors=True)
         with self._lock:
             self.agents.clear()
         self.alive = False

@@ -1,5 +1,6 @@
 """PTY lifecycle — spawn kiro-cli, raw read/write, quit."""
 
+import hashlib
 import json
 import os
 import shutil
@@ -7,10 +8,10 @@ import tempfile
 import time
 import pexpect
 
-from app.config import HOME_ALLOWLIST
+from app.config import HOME_ALLOWLIST, ENV_MCP_AUTO_INJECT, ENV_MCP_TIMEOUT
 
 
-def make_clean_env(mcps: dict | None = None) -> tuple[dict, str]:
+def make_clean_env(mcps: dict | None = None, workdir: str | None = None) -> tuple[dict, str]:
     real_home = os.path.expanduser('~')
     tmp = tempfile.mkdtemp(prefix='kiro_agent_')
     for item in os.listdir(real_home):
@@ -18,13 +19,22 @@ def make_clean_env(mcps: dict | None = None) -> tuple[dict, str]:
             src = os.path.join(real_home, item)
             if os.path.exists(src):
                 os.symlink(src, os.path.join(tmp, item))
+    merged = dict(mcps or {})
+    if workdir and ENV_MCP_AUTO_INJECT:
+        state_dir = f"/tmp/kiro-env-{hashlib.md5(workdir.encode()).hexdigest()[:12]}"
+        script = os.path.abspath(os.path.join(os.path.dirname(__file__), "env_mcp_server.py"))
+        merged["env-manager"] = {
+            "command": "python3",
+            "args": [script, "--state-dir", state_dir],
+            "timeout": ENV_MCP_TIMEOUT,
+        }
     real_kiro = os.path.join(real_home, '.kiro')
     if os.path.exists(real_kiro):
         shutil.copytree(real_kiro, os.path.join(tmp, '.kiro'))
         mcp_path = os.path.join(tmp, '.kiro', 'settings', 'mcp.json')
         os.makedirs(os.path.dirname(mcp_path), exist_ok=True)
         with open(mcp_path, 'w') as f:
-            f.write(json.dumps({"mcpServers": mcps or {}}))
+            f.write(json.dumps({"mcpServers": merged}))
     env = os.environ.copy()
     env['HOME'] = tmp
     return env, tmp
@@ -39,7 +49,7 @@ class PtyProcess:
         self._tmp_home: str | None = None
 
     def spawn(self) -> None:
-        env, self._tmp_home = make_clean_env(self.mcps)
+        env, self._tmp_home = make_clean_env(self.mcps, self.workdir)
         cmd = 'kiro-cli chat --wrap never -a'
         if self.model:
             cmd += f' --model {self.model}'
