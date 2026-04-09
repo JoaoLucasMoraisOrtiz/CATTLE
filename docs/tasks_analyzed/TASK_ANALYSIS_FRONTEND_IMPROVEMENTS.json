@@ -1,0 +1,186 @@
+{
+  "taskId": "frontend-improvements",
+  "resumo": {
+    "objetivo": "Melhorar resiliência, UX, acessibilidade e qualidade do frontend do ReDo!",
+    "problema": "Frontend funcional mas frágil: zero error handling em fetch, SSE sem reconnect, sem loading states, sem toasts, sem ARIA, sem responsividade, sem markdown no chat, estado global em variáveis soltas.",
+    "resultadoEsperado": "Frontend resiliente com error handling centralizado, feedback visual completo (toasts, loading), acessibilidade WCAG básica, markdown rendering no chat, e código mais organizado."
+  },
+  "arquivosRelevantes": [
+    {"caminho": "static/js/api.js", "motivo": "Novo módulo — fetch wrapper centralizado com error handling e loading states", "acoes": ["create"]},
+    {"caminho": "static/js/utils.js", "motivo": "Adicionar sistema de toasts e helpers de loading/validação", "acoes": ["modify"]},
+    {"caminho": "static/js/state.js", "motivo": "Refatorar variáveis soltas para objeto State com eventos", "acoes": ["modify"]},
+    {"caminho": "static/js/agents.js", "motivo": "Usar api.js, adicionar busca, loading states, validação no modal", "acoes": ["modify"]},
+    {"caminho": "static/js/headers.js", "motivo": "Usar api.js, adicionar busca/filtro por tipo, loading states", "acoes": ["modify"]},
+    {"caminho": "static/js/flow.js", "motivo": "Usar api.js, loading states nas operações de flow", "acoes": ["modify"]},
+    {"caminho": "static/js/run.js", "motivo": "SSE reconnect, markdown rendering, copy-to-clipboard, loading states", "acoes": ["modify"]},
+    {"caminho": "static/js/projects.js", "motivo": "Usar api.js, validação de formulário, loading states", "acoes": ["modify"]},
+    {"caminho": "static/js/app.js", "motivo": "ARIA tabs com keyboard nav, inicialização do toast container", "acoes": ["modify"]},
+    {"caminho": "static/css/app.css", "motivo": "Estilos para toasts, loading skeletons, validação, responsive breakpoints", "acoes": ["modify"]},
+    {"caminho": "static/index.html", "motivo": "ARIA attributes, semantic HTML, toast container, CDN imports (marked, hljs, DOMPurify)", "acoes": ["modify"]}
+  ],
+  "caminhoDosDados": {
+    "entrada": "Interações do usuário via UI (cliques, formulários, chat input)",
+    "processamento": [
+      "1. Todas as chamadas HTTP passam por api.js (fetch wrapper com try/catch, toast em erro, loading automático)",
+      "2. SSE em run.js com reconnect exponencial (1s→2s→4s→max 30s) e indicador visual de conexão",
+      "3. Respostas de agentes no chat passam por marked.js → DOMPurify antes de renderizar",
+      "4. Mudanças de estado emitem CustomEvents que os módulos escutam para re-render"
+    ],
+    "armazenamento": "Sem mudança — dados continuam no backend via API REST",
+    "recuperacao": "Sem mudança — mesmos endpoints, apenas o frontend trata erros graciosamente",
+    "exibicao": "Toasts para feedback, skeletons durante loading, markdown no chat, ARIA para screen readers"
+  },
+  "codigoAModificar": [
+    {
+      "arquivo": "static/js/api.js",
+      "classe": null,
+      "metodo": "apiGet, apiPost, apiPut, apiDelete",
+      "motivo": "Centralizar todas as chamadas fetch com error handling uniforme",
+      "mudancas": [
+        "Criar funções apiGet(url), apiPost(url, body), apiPut(url, body), apiDelete(url)",
+        "Cada função: try/catch, verifica response.ok, chama showToast em erro, retorna {ok, data, error}",
+        "Flag de loading opcional para desabilitar botões durante request"
+      ]
+    },
+    {
+      "arquivo": "static/js/utils.js",
+      "classe": null,
+      "metodo": "showToast, hideToast, setLoading, validateRequired",
+      "motivo": "Adicionar sistema de feedback visual reutilizável",
+      "mudancas": [
+        "Adicionar showToast(message, type='info', duration=4000) — cria elemento no toast-container",
+        "Adicionar setLoading(buttonEl, loading) — troca texto por spinner e desabilita",
+        "Adicionar validateRequired(fields) — retorna true/false e marca campos inválidos com borda vermelha"
+      ]
+    },
+    {
+      "arquivo": "static/js/state.js",
+      "classe": null,
+      "metodo": "State (objeto)",
+      "motivo": "Encapsular estado global com notificação de mudanças",
+      "mudancas": [
+        "Criar objeto State com propriedades: agents, flows, headersList, projectsList, sessionOpen, chatTarget, etc.",
+        "Métodos set(key, value) que disparam CustomEvent('state:key')",
+        "Módulos escutam eventos ao invés de acessar variáveis globais diretamente"
+      ]
+    },
+    {
+      "arquivo": "static/js/agents.js",
+      "classe": null,
+      "metodo": "loadAgents, saveAgent, deleteAgent, renderAgents",
+      "motivo": "Usar api.js, adicionar busca e feedback visual",
+      "mudancas": [
+        "Substituir fetch() direto por apiGet/apiPost/apiPut/apiDelete",
+        "Adicionar campo de busca no topo da lista de agentes",
+        "Adicionar validação visual no modal (campos obrigatórios)",
+        "Loading state no botão Salvar durante saveAgent()"
+      ]
+    },
+    {
+      "arquivo": "static/js/headers.js",
+      "classe": null,
+      "metodo": "loadHeaders, saveHeader, deleteHeader, renderHeaders",
+      "motivo": "Usar api.js, adicionar busca/filtro e feedback visual",
+      "mudancas": [
+        "Substituir fetch() direto por apiGet/apiPost/apiPut/apiDelete",
+        "Adicionar campo de busca + filtro por tipo (protocol/wrapper/handoff)",
+        "Loading state no botão Salvar",
+        "Validação visual no modal"
+      ]
+    },
+    {
+      "arquivo": "static/js/flow.js",
+      "classe": null,
+      "metodo": "loadFlows, createFlow, deleteFlow, saveFlow",
+      "motivo": "Usar api.js e adicionar feedback visual",
+      "mudancas": [
+        "Substituir fetch() direto por funções do api.js",
+        "Toast de confirmação ao salvar flow",
+        "Loading state durante operações"
+      ]
+    },
+    {
+      "arquivo": "static/js/run.js",
+      "classe": null,
+      "metodo": "openSession, handleSSE, addChatBubble, appendBubble",
+      "motivo": "SSE resiliente, markdown no chat, copy-to-clipboard",
+      "mudancas": [
+        "Criar connectSSE() com reconnect exponencial e indicador visual de conexão",
+        "Em appendBubble(): renderizar text via marked.parse() + DOMPurify.sanitize() para type=agent",
+        "Adicionar botão copy-to-clipboard em cada bubble de agente",
+        "Usar api.js para openSession, closeSession, sendChat"
+      ]
+    },
+    {
+      "arquivo": "static/js/projects.js",
+      "classe": null,
+      "metodo": "loadProjects, saveProject, deleteProject",
+      "motivo": "Usar api.js e validação de formulário",
+      "mudancas": [
+        "Substituir fetch() direto por funções do api.js",
+        "Validação: nome e path obrigatórios com feedback visual",
+        "Loading state no botão Criar"
+      ]
+    },
+    {
+      "arquivo": "static/js/app.js",
+      "classe": null,
+      "metodo": "switchTab",
+      "motivo": "Tabs acessíveis com ARIA e keyboard nav",
+      "mudancas": [
+        "switchTab() atualiza aria-selected nos tabs e aria-hidden nos panels",
+        "Adicionar keydown handler: ArrowLeft/ArrowRight navega entre tabs",
+        "Inicializar toast container no DOM"
+      ]
+    },
+    {
+      "arquivo": "static/css/app.css",
+      "classe": null,
+      "metodo": null,
+      "motivo": "Estilos para novos componentes e responsividade",
+      "mudancas": [
+        "Adicionar estilos para .toast-container, .toast, .toast-success/error/info/warning",
+        "Adicionar animação slideIn/slideOut para toasts",
+        "Adicionar .skeleton-loading para loading states",
+        "Adicionar .field-error para validação de formulários",
+        "Adicionar @media (max-width: 768px) para layout mobile básico"
+      ]
+    },
+    {
+      "arquivo": "static/index.html",
+      "classe": null,
+      "metodo": null,
+      "motivo": "ARIA, semantic HTML, novos CDN imports, toast container",
+      "mudancas": [
+        "Adicionar role='tablist' no container de tabs, role='tab' nos botões, role='tabpanel' nas views",
+        "Adicionar role='dialog' aria-modal='true' aria-labelledby nos modais",
+        "Adicionar aria-label nos botões de ícone (✕, ✎, +)",
+        "Adicionar <div id='toast-container'> antes do </body>",
+        "Adicionar CDN scripts: marked.min.js, highlight.min.js, purify.min.js",
+        "Adicionar <script src='/static/js/api.js'></script> na ordem correta (após utils, antes dos módulos)"
+      ]
+    }
+  ],
+  "estimativas": {
+    "fase1_resiliencia": "2-3 horas",
+    "fase2_ux": "4-5 horas",
+    "fase3_acessibilidade": "2-3 horas",
+    "fase4_responsividade": "3-4 horas",
+    "fase5_qualidade_codigo": "2-3 horas",
+    "total": "13-18 horas"
+  },
+  "execution_order": [
+    {"step": 1, "ids": ["api.js", "utils.js-toasts"], "agent": "analyst", "reason": "Fundação: fetch wrapper e toasts são pré-requisito para todas as outras fases"},
+    {"step": 2, "ids": ["agents.js", "headers.js", "flow.js", "projects.js"], "agent": "analyst", "reason": "Migrar todos os módulos para usar api.js — podem ser paralelos"},
+    {"step": 3, "ids": ["run.js-sse", "run.js-markdown"], "agent": "analyst", "reason": "SSE reconnect e markdown dependem do api.js estar pronto"},
+    {"step": 4, "ids": ["app.js-aria", "index.html-aria"], "agent": "analyst", "reason": "ARIA pode ser feito após a estrutura estar estável"},
+    {"step": 5, "ids": ["state.js-refactor"], "agent": "analyst", "reason": "Refactor de estado é o mais invasivo — fazer por último"},
+    {"step": 6, "ids": ["app.css-responsive"], "agent": "analyst", "reason": "Responsividade é a última camada, não bloqueia funcionalidade"}
+  ],
+  "riscos": [
+    {"risco": "marked.js + DOMPurify CDN aumentam tempo de carregamento", "mitigacao": "Usar versões minificadas, carregar com defer/async"},
+    {"risco": "Refactor de state.js pode quebrar todos os módulos", "mitigacao": "Fazer por último, manter backward compatibility com variáveis globais durante transição"},
+    {"risco": "ARIA incorreto é pior que nenhum ARIA", "mitigacao": "Testar com screen reader (NVDA/VoiceOver) após implementar"},
+    {"risco": "SSE reconnect pode causar duplicação de eventos", "mitigacao": "Limpar estado ao reconectar, server envia evento de sync"}
+  ]
+}
