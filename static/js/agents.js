@@ -1,6 +1,7 @@
 /* ReDo! — Agents CRUD */
 
 let _agentSearchTerm = '';
+let _dragAgentId = null;
 
 async function loadAgents() {
   const r = await apiGet(`${API}/agents`);
@@ -17,7 +18,15 @@ function renderAgents() {
     class="w-full bg-surface border border-border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-accent/50 transition"></div>`;
   if (!filtered.length) { el.innerHTML = searchHtml + '<p class="text-center text-muted text-xs py-8">Nenhum agente</p>'; return; }
   el.innerHTML = searchHtml + filtered.map(a => `
-    <div class="group flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-surface/60 cursor-pointer transition" onclick="editAgent('${a.id}')">
+    <div class="group flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-surface/60 cursor-pointer transition"
+      draggable="true" data-agent-id="${a.id}"
+      ondragstart="_dragAgentId=this.dataset.agentId;this.classList.add('dragging')"
+      ondragend="this.classList.remove('dragging')"
+      ondragover="event.preventDefault();this.classList.add('drag-over')"
+      ondragleave="this.classList.remove('drag-over')"
+      ondrop="event.preventDefault();this.classList.remove('drag-over');_dropAgent(this.dataset.agentId)"
+      onclick="editAgent('${a.id}')">
+      <span class="text-muted/40 text-xs select-none cursor-grab">⠿</span>
       <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:${a.color}"></span>
       <div class="flex-1 min-w-0">
         <div class="text-sm font-medium text-white truncate">${a.name}</div>
@@ -28,6 +37,17 @@ function renderAgents() {
         <button onclick="event.stopPropagation();deleteAgent('${a.id}')" aria-label="Remover ${escHtml(a.name)}" class="w-6 h-6 flex items-center justify-center rounded text-muted hover:text-red-400 hover:bg-red-500/10 transition text-xs">✕</button>
       </div>
     </div>`).join('');
+}
+
+function _dropAgent(targetId) {
+  if (!_dragAgentId || _dragAgentId === targetId) return;
+  const from = agents.findIndex(a => a.id === _dragAgentId);
+  const to = agents.findIndex(a => a.id === targetId);
+  if (from < 0 || to < 0) return;
+  const [moved] = agents.splice(from, 1);
+  agents.splice(to, 0, moved);
+  renderAgents();
+  renderPalette();
 }
 
 function openModal(agent = null) {

@@ -3,6 +3,8 @@
 let _sseRetryDelay = 1000;
 const _SSE_MAX_DELAY = 30000;
 let _costData = { agents: {}, total_usd: 0 };
+let _dragRunAgent = null;
+let _runAgentOrder = [];
 
 function getColor(name) {
   const a = agents.find(x => x.name === name);
@@ -100,6 +102,7 @@ async function closeSession() {
   document.getElementById('run-agents').innerHTML = '';
   document.getElementById('agent-grid').innerHTML = '';
   Object.keys(agentStatus).forEach(k => delete agentStatus[k]);
+  _runAgentOrder = [];
   _costData = { agents: {}, total_usd: 0 };
   updateCostHeader();
 }
@@ -322,18 +325,30 @@ function insertAgentMention(name) {
 
 function renderAgentBoxes() {
   const el = document.getElementById('run-agents');
-  el.innerHTML = Object.entries(agentStatus).filter(([n]) => n !== 'GOD').map(([name, s]) => {
+  // Sync order: add new agents, remove stale ones
+  const names = Object.keys(agentStatus).filter(n => n !== 'GOD');
+  names.forEach(n => { if (!_runAgentOrder.includes(n)) _runAgentOrder.push(n); });
+  _runAgentOrder = _runAgentOrder.filter(n => names.includes(n));
+
+  el.innerHTML = _runAgentOrder.map(name => {
+    const s = agentStatus[name];
     const c = getColor(name);
     const isSel = _selectedAgent === name;
     const isActive = s.status === 'working';
     const count = s.msgCount || 0;
     const badge = count ? `<span class="ml-auto text-[10px] bg-accent/20 text-accent px-1.5 rounded-full">${count}</span>` : '';
-    // Find cost for this agent by name
     const costEntry = Object.values(_costData.agents || {}).find(a => a.name === name);
     const costHtml = costEntry ? `<div class="text-[10px] text-emerald-400/70">$${costEntry.cost_usd.toFixed(4)}</div>` : '';
     return `<div onclick="insertAgentMention('${escHtml(name)}')"
+      draggable="true" data-run-agent="${escHtml(name)}"
+      ondragstart="_dragRunAgent=this.dataset.runAgent;this.classList.add('dragging')"
+      ondragend="this.classList.remove('dragging')"
+      ondragover="event.preventDefault();this.classList.add('drag-over')"
+      ondragleave="this.classList.remove('drag-over')"
+      ondrop="event.preventDefault();this.classList.remove('drag-over');_dropRunAgent(this.dataset.runAgent)"
       class="agent-box flex flex-col gap-1 px-3 py-2.5 rounded-lg border cursor-pointer transition ${isSel ? 'border-accent/50 bg-accent/5 shadow-[0_0_8px_rgba(124,92,252,0.3)]' : 'border-border bg-surface hover:border-accent/20'}">
       <div class="flex items-center gap-2">
+        <span class="text-muted/40 text-xs select-none cursor-grab">⠿</span>
         <span class="w-2 h-2 rounded-full ${isActive?'running':''}" style="background:${c}"></span>
         <span class="text-xs font-medium text-white">${escHtml(name)}</span>
         ${badge}
@@ -342,6 +357,16 @@ function renderAgentBoxes() {
       ${costHtml}
     </div>`;
   }).join('');
+}
+
+function _dropRunAgent(targetName) {
+  if (!_dragRunAgent || _dragRunAgent === targetName) return;
+  const from = _runAgentOrder.indexOf(_dragRunAgent);
+  const to = _runAgentOrder.indexOf(targetName);
+  if (from < 0 || to < 0) return;
+  _runAgentOrder.splice(from, 1);
+  _runAgentOrder.splice(to, 0, _dragRunAgent);
+  renderAgentBoxes();
 }
 
 function selectChatTarget(target) {

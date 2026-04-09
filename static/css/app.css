@@ -98,6 +98,11 @@ body { font-family: 'Inter', sans-serif; }
 .chat-md th, .chat-md td { border: 1px solid #2a2a35; padding: 4px 8px; }
 .chat-md th { background: #1a1a25; }
 
+/* ── Drag-and-drop ── */
+.drag-over { border: 1px dashed #7c5cfc !important; background: rgba(124,92,252,.06) !important; }
+[draggable="true"] { user-select: none; }
+[draggable="true"].dragging { opacity: .35; }
+
 /* ── SSE connection indicator ── */
 #sse-indicator { display: flex; align-items: center; gap: 4px; }
 
