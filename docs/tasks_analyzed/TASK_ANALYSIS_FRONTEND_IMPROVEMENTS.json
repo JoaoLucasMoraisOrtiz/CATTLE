@@ -6,8 +6,8 @@
     "resultadoEsperado": "Frontend resiliente com error handling centralizado, feedback visual completo (toasts, loading), acessibilidade WCAG básica, markdown rendering no chat, e código mais organizado."
   },
   "arquivosRelevantes": [
-    {"caminho": "static/js/api.js", "motivo": "Novo módulo — fetch wrapper centralizado com error handling e loading states", "acoes": ["create"]},
-    {"caminho": "static/js/utils.js", "motivo": "Adicionar sistema de toasts e helpers de loading/validação", "acoes": ["modify"]},
+    {"caminho": "static/js/api.js", "motivo": "Já existe — fetch wrapper centralizado com error handling e loading states", "acoes": ["exists"], "status": "done"},
+    {"caminho": "static/js/utils.js", "motivo": "Já possui sistema de toasts (showToast), setLoading e validateRequired", "acoes": ["exists"], "status": "done"},
     {"caminho": "static/js/state.js", "motivo": "Refatorar variáveis soltas para objeto State com eventos", "acoes": ["modify"]},
     {"caminho": "static/js/agents.js", "motivo": "Usar api.js, adicionar busca, loading states, validação no modal", "acoes": ["modify"]},
     {"caminho": "static/js/headers.js", "motivo": "Usar api.js, adicionar busca/filtro por tipo, loading states", "acoes": ["modify"]},
@@ -35,22 +35,24 @@
       "arquivo": "static/js/api.js",
       "classe": null,
       "metodo": "apiGet, apiPost, apiPut, apiDelete",
-      "motivo": "Centralizar todas as chamadas fetch com error handling uniforme",
+      "motivo": "JÁ IMPLEMENTADO — fetch wrapper centralizado com error handling uniforme",
+      "status": "done",
       "mudancas": [
-        "Criar funções apiGet(url), apiPost(url, body), apiPut(url, body), apiDelete(url)",
-        "Cada função: try/catch, verifica response.ok, chama showToast em erro, retorna {ok, data, error}",
-        "Flag de loading opcional para desabilitar botões durante request"
+        "[DONE] Funções apiGet(url), apiPost(url, body), apiPut(url, body), apiDelete(url) existem",
+        "[DONE] Cada função: try/catch, verifica response.ok, chama showToast em erro, retorna {ok, data, error}",
+        "[DONE] Flag de loading opcional para desabilitar botões durante request"
       ]
     },
     {
       "arquivo": "static/js/utils.js",
       "classe": null,
       "metodo": "showToast, hideToast, setLoading, validateRequired",
-      "motivo": "Adicionar sistema de feedback visual reutilizável",
+      "motivo": "JÁ IMPLEMENTADO — sistema de feedback visual reutilizável",
+      "status": "done",
       "mudancas": [
-        "Adicionar showToast(message, type='info', duration=4000) — cria elemento no toast-container",
-        "Adicionar setLoading(buttonEl, loading) — troca texto por spinner e desabilita",
-        "Adicionar validateRequired(fields) — retorna true/false e marca campos inválidos com borda vermelha"
+        "[DONE] showToast(message, type='info', duration=4000) — cria elemento no toast-container",
+        "[DONE] setLoading(buttonEl, loading) — troca texto por spinner e desabilita",
+        "[DONE] validateRequired(fields) — retorna true/false e marca campos inválidos com borda vermelha"
       ]
     },
     {
@@ -170,7 +172,7 @@
     "total": "13-18 horas"
   },
   "execution_order": [
-    {"step": 1, "ids": ["api.js", "utils.js-toasts", "app.css-toasts-loading", "index.html-foundation"], "agent": "analyst", "reason": "Fundação completa: fetch wrapper, toasts, CSS de toasts/loading/validação, toast container + script tag api.js no HTML — tudo que os steps seguintes precisam"},
+    {"step": 1, "ids": ["api.js", "utils.js-toasts", "app.css-toasts-loading", "index.html-foundation"], "agent": "analyst", "reason": "Fundação completa: fetch wrapper, toasts, CSS de toasts/loading/validação, toast container + script tag api.js no HTML — tudo que os steps seguintes precisam", "status": "done", "nota": "Validado em 2026-04-09: api.js (apiGet/apiPost/apiPut/apiDelete), utils.js (showToast/setLoading/validateRequired) já existem e funcionam. CSS e HTML foundation incluídos."},
     {"step": 2, "ids": ["agents.js", "headers.js", "flow.js", "projects.js", "run.js-fetch"], "agent": "analyst", "reason": "Migrar TODOS os módulos para usar api.js (incluindo fetch calls de run.js: openSession, closeSession, sendChat)"},
     {"step": 3, "ids": ["run.js-sse", "run.js-markdown", "index.html-cdns"], "agent": "analyst", "reason": "SSE reconnect + markdown rendering + CDN imports (marked, DOMPurify, highlight.js) no HTML — CDNs precisam existir antes do código que os usa"},
     {"step": 4, "ids": ["app.js-aria", "index.html-aria"], "agent": "analyst", "reason": "ARIA pode ser feito após a estrutura estar estável"},
@@ -178,6 +180,7 @@
     {"step": 6, "ids": ["app.css-responsive"], "agent": "analyst", "reason": "Apenas responsividade (@media queries) — CSS de toasts/loading já foi no step 1"}
   ],
   "riscos": [
+    {"risco": "CRÍTICO — Crash no page load: loadAgents(), loadHeaders(), loadFlows(), loadProjects(), loadSettings() chamam .json() direto no response sem verificar .ok. Se o backend estiver fora, a página crasha no load.", "mitigacao": "Step 2 resolve: migrar todos os módulos para api.js que já tem try/catch e verificação de response.ok. Prioridade máxima.", "severidade": "alta", "adicionado": "2026-04-09"},
     {"risco": "marked.js + DOMPurify CDN aumentam tempo de carregamento", "mitigacao": "Usar versões minificadas, carregar com defer/async"},
     {"risco": "Refactor de state.js pode quebrar todos os módulos", "mitigacao": "Fazer por último, manter backward compatibility com variáveis globais durante transição"},
     {"risco": "ARIA incorreto é pior que nenhum ARIA", "mitigacao": "Testar com screen reader (NVDA/VoiceOver) após implementar"},

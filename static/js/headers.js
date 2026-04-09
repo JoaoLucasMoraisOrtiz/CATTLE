@@ -1,14 +1,17 @@
 /* ReDo! — Headers CRUD */
 
+let _headerSearchTerm = '';
+let _headerTypeFilter = '';
+
 async function loadHeaders() {
-  headersList = await (await fetch(`${API}/headers`)).json();
-  renderHeaders();
-  loadPlaceholders();
+  const r = await apiGet(`${API}/headers`);
+  if (r.ok) { headersList = r.data; renderHeaders(); loadPlaceholders(); }
 }
 
 async function loadPlaceholders() {
-  const phs = await (await fetch(`${API}/headers/placeholders`)).json();
-  document.getElementById('placeholder-list').innerHTML = Object.entries(phs).map(([type, list]) =>
+  const r = await apiGet(`${API}/headers/placeholders`);
+  if (!r.ok) return;
+  document.getElementById('placeholder-list').innerHTML = Object.entries(r.data).map(([type, list]) =>
     `<div class="mb-2"><div class="text-muted text-[9px] uppercase mb-1">${escHtml(type)}</div>` +
     list.map(p => `<button onclick="insertPlaceholder('${escHtml(p)}')" class="block w-full text-left px-2 py-1.5 rounded bg-surface border border-border hover:border-accent/30 text-accent font-mono transition text-[10px] mb-1">${escHtml(p)}</button>`).join('') +
     `</div>`
@@ -25,10 +28,23 @@ function insertPlaceholder(ph) {
 
 function renderHeaders() {
   const el = document.getElementById('header-list');
-  if (!headersList.length) { el.innerHTML = '<p class="text-center text-muted text-xs py-8">Nenhum header</p>'; return; }
   const typeColors = {protocol:'#7c5cfc', wrapper:'#10b981', handoff:'#f59e0b'};
   const typeLabels = {protocol:'Protocol', wrapper:'Wrapper', handoff:'Handoff'};
-  el.innerHTML = headersList.map(h => {
+  let filtered = headersList;
+  if (_headerTypeFilter) filtered = filtered.filter(h => h.type === _headerTypeFilter);
+  if (_headerSearchTerm) filtered = filtered.filter(h => h.name.toLowerCase().includes(_headerSearchTerm) || h.id.toLowerCase().includes(_headerSearchTerm));
+
+  const filterHtml = `<div class="space-y-2 pb-2">
+    <input type="text" placeholder="Buscar header..." value="${escHtml(_headerSearchTerm)}"
+      oninput="_headerSearchTerm=this.value.toLowerCase();renderHeaders()"
+      class="w-full bg-surface border border-border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-accent/50 transition">
+    <div class="flex gap-1 flex-wrap">
+      <button onclick="_headerTypeFilter='';renderHeaders()" class="text-[10px] px-2 py-0.5 rounded ${!_headerTypeFilter?'bg-accent/20 text-accent':'bg-surface text-muted hover:text-white'} transition">Todos</button>
+      ${Object.entries(typeLabels).map(([k,v]) => `<button onclick="_headerTypeFilter='${k}';renderHeaders()" class="text-[10px] px-2 py-0.5 rounded ${_headerTypeFilter===k?'bg-accent/20 text-accent':'bg-surface text-muted hover:text-white'} transition">${v}</button>`).join('')}
+    </div></div>`;
+
+  if (!filtered.length) { el.innerHTML = filterHtml + '<p class="text-center text-muted text-xs py-8">Nenhum header</p>'; return; }
+  el.innerHTML = filterHtml + filtered.map(h => {
     const isSel = selectedHeaderId === h.id;
     const tc = typeColors[h.type] || '#888';
     return `<div class="group flex flex-col gap-1 px-3 py-2.5 rounded-xl cursor-pointer transition ${isSel ? 'bg-accent/10 border border-accent/30' : 'hover:bg-surface/60 border border-transparent'}" onclick="selectHeader('${escHtml(h.id)}')">
@@ -39,8 +55,8 @@ function renderHeaders() {
       </div>
       <div class="text-xs text-muted truncate">${escHtml(h.description || h.content.slice(0, 60))}</div>
       <div class="hidden group-hover:flex gap-1 mt-1">
-        <button onclick="event.stopPropagation();editHeader('${escHtml(h.id)}')" class="text-[10px] px-2 py-0.5 rounded bg-surface border border-border hover:border-accent/30 text-muted hover:text-white transition">✎ Editar</button>
-        <button onclick="event.stopPropagation();deleteHeader('${escHtml(h.id)}')" class="text-[10px] px-2 py-0.5 rounded bg-surface border border-border hover:border-red-500/30 text-muted hover:text-red-400 transition">✕ Remover</button>
+        <button onclick="event.stopPropagation();editHeader('${escHtml(h.id)}')" aria-label="Editar ${escHtml(h.name)}" class="text-[10px] px-2 py-0.5 rounded bg-surface border border-border hover:border-accent/30 text-muted hover:text-white transition">✎ Editar</button>
+        <button onclick="event.stopPropagation();deleteHeader('${escHtml(h.id)}')" aria-label="Remover ${escHtml(h.name)}" class="text-[10px] px-2 py-0.5 rounded bg-surface border border-border hover:border-red-500/30 text-muted hover:text-red-400 transition">✕ Remover</button>
       </div>
     </div>`;
   }).join('');
@@ -77,31 +93,33 @@ function closeHeaderModal() { document.getElementById('header-modal').classList.
 function editHeader(id) { const h = headersList.find(x => x.id === id); if (h) openHeaderModal(h); }
 
 async function saveHeader() {
+  const fields = [
+    { el: document.getElementById('h-id'), name: 'ID' },
+    { el: document.getElementById('h-name'), name: 'Nome' },
+  ];
+  if (!validateRequired(fields)) return;
+  const btn = document.querySelector('#header-modal .bg-accent');
+  setLoading(btn, true);
   const body = {
-    id: document.getElementById('h-id').value.trim(),
-    name: document.getElementById('h-name').value.trim(),
+    id: fields[0].el.value.trim(),
+    name: fields[1].el.value.trim(),
     description: document.getElementById('h-desc').value.trim(),
     content: document.getElementById('h-content').value,
     type: document.getElementById('h-type').value,
     is_default: document.getElementById('h-default').checked,
   };
-  if (!body.id || !body.name) return;
-  await fetch(editingHeaderId ? `${API}/headers/${editingHeaderId}` : `${API}/headers`, {
-    method: editingHeaderId ? 'PUT' : 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
-  });
-  if (body.is_default) {
-    await fetch(`${API}/headers/${body.id}/set-default`, { method: 'POST' });
-  }
-  closeHeaderModal();
-  await loadHeaders();
-  selectHeader(body.id);
+  const r = editingHeaderId
+    ? await apiPut(`${API}/headers/${editingHeaderId}`, body)
+    : await apiPost(`${API}/headers`, body);
+  if (r.ok && body.is_default) await apiPost(`${API}/headers/${body.id}/set-default`);
+  setLoading(btn, false);
+  if (r.ok) { showToast('Header salvo', 'success'); closeHeaderModal(); await loadHeaders(); selectHeader(body.id); }
 }
 
 async function deleteHeader(id) {
   if (!confirm(`Remover header "${id}"?`)) return;
-  await fetch(`${API}/headers/${id}`, { method: 'DELETE' });
-  if (selectedHeaderId === id) selectedHeaderId = null;
-  loadHeaders();
+  const r = await apiDelete(`${API}/headers/${id}`);
+  if (r.ok) { if (selectedHeaderId === id) selectedHeaderId = null; loadHeaders(); }
 }
 
 // ── Flow node header selection ───────────────────────────────────────────

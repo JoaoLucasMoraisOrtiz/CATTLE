@@ -399,6 +399,7 @@ class SwarmSession:
                 self.cb.on_agent(name, '⏳ streaming', '🗜 Compactando...\n')
                 agent._pty.write('/compact\r')
                 agent._read_until_prompt(timeout=60)
+                agent._persona_sent = False
                 self.cb.on_agent(name, 'ready', '')
             except Exception:
                 pass
@@ -418,6 +419,7 @@ class SwarmSession:
                         self.cb.on_orch(f'🗜 Auto-compact {self.agent_defs[agent_id].name} ({usage}%)')
                         agent._pty.write('/compact\r')
                         agent._read_until_prompt(timeout=30)
+                        agent._persona_sent = False
                     break
         except Exception: pass
 
