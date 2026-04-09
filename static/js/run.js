@@ -278,6 +278,30 @@ function updateAgentBox(name, status, text) {
 
 let _selectedAgent = null;
 
+function updateMentionHighlight() {
+  const text = document.getElementById('chat-input').value;
+  const m = text.match(/^@(\w+)/);
+  let name = null;
+  if (m) {
+    const id = m[1];
+    const a = agents.find(x => x.id === id || x.name === id);
+    name = a ? a.name : null;
+  }
+  if (name !== _selectedAgent) {
+    _selectedAgent = name;
+    renderAgentBoxes();
+    document.querySelectorAll('#agent-grid > div').forEach(d => { d.style.boxShadow = ''; d.style.borderColor = ''; });
+    if (name) {
+      const panel = document.getElementById('grid-' + name);
+      if (panel) {
+        const c = getColor(name);
+        panel.style.boxShadow = `0 0 12px ${c}44`;
+        panel.style.borderColor = c;
+      }
+    }
+  }
+}
+
 function insertAgentMention(name) {
   const input = document.getElementById('chat-input');
   const a = agents.find(x => x.name === name);
@@ -286,19 +310,7 @@ function insertAgentMention(name) {
   input.value = input.value.replace(/^@\w+\s*/, '');
   input.value = mention + input.value;
   input.focus();
-  _selectedAgent = name;
-  renderAgentBoxes();
-  // Highlight grid panel
-  document.querySelectorAll('#agent-grid > div').forEach(d => {
-    d.style.boxShadow = '';
-    d.style.borderColor = '';
-  });
-  const panel = document.getElementById('grid-' + name);
-  if (panel) {
-    const c = getColor(name);
-    panel.style.boxShadow = `0 0 12px ${c}44`;
-    panel.style.borderColor = c;
-  }
+  updateMentionHighlight();
 }
 
 function renderAgentBoxes() {
