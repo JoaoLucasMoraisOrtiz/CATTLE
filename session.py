@@ -177,7 +177,7 @@ class SwarmSession:
             except Exception as e:
                 self.cb.on_error(f'{defn.name}: {e}'); self.cb.on_done(); return
             signal = parse(response)
-            data_collector.collect(self.project_path, match, defn.name, message, signal.clean_response, signal.kind)
+            data_collector.collect(self.project_path, match, defn.name, message, signal.clean_response, signal.kind, flow_id=self.flow_id or '')
             self.cb.on_agent(defn.name, '→ response', signal.clean_response)
             self._chat('agent', signal.clean_response, defn.name)
             self._save_state()
@@ -221,7 +221,7 @@ class SwarmSession:
             except Exception as e: self.cb.on_error(f'{defn.name}: {e}'); break
             if self._abort.is_set(): self.cb.on_orch('⏹ Abortado'); break
             signal = parse(response)
-            data_collector.collect(self.project_path, current_id, defn.name, msg, signal.clean_response, signal.kind)
+            data_collector.collect(self.project_path, current_id, defn.name, msg, signal.clean_response, signal.kind, flow_id=self.flow_id or '', round_num=self.round_num)
             self.cb.on_agent(defn.name, '→ response', signal.clean_response)
             self._chat('agent', signal.clean_response, defn.name)
             h = self.git.commit(self.round_num, defn.name)
