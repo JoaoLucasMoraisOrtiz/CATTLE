@@ -50,14 +50,14 @@ class ProcessManager:
             pid = info["pid"]
             try:
                 os.kill(pid, 0)
-                # Process alive but we lost the Popen handle — mark as zombie
+                # Process alive but we lost the Popen handle — adopt it
                 with self._lock:
                     self._procs[name] = {
                         "proc": _ZombieProc(pid),
-                        "buffer": deque(["[reconnected — output unavailable]"], maxlen=BUFFER_LINES),
+                        "buffer": deque(["[adopted — output unavailable, started by another agent]"], maxlen=BUFFER_LINES),
                         "command": info["command"],
                         "start_time": info["start_time"],
-                        "zombie": True,
+                        "adopted": True,
                     }
             except OSError:
                 pass  # dead, skip
@@ -83,7 +83,7 @@ class ProcessManager:
         with self._lock:
             self._procs[name] = {
                 "proc": proc, "buffer": buf, "command": command,
-                "start_time": time.time(), "zombie": False,
+                "start_time": time.time(), "adopted": False,
             }
             self._save()
         return {"name": name, "pid": proc.pid, "status": "running"}
@@ -100,7 +100,7 @@ class ProcessManager:
             last = list(buf)[-5:] if buf else []
             out.append({
                 "name": n, "pid": info["proc"].pid,
-                "status": "exited" if rc is not None else ("zombie" if info.get("zombie") else "running"),
+                "status": "exited" if rc is not None else ("adopted" if info.get("adopted") else "running"),
                 "exit_code": rc, "uptime_seconds": round(time.time() - info["start_time"]),
                 "last_output_lines": last,
             })
@@ -128,6 +128,7 @@ class ProcessManager:
         except Exception:
             proc.kill()
         with self._lock:
+            del self._procs[name]
             self._save()
         return {"name": name, "status": "stopped", "exit_code": proc.returncode}
 
