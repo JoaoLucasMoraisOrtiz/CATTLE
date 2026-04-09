@@ -13,6 +13,7 @@ Sistema de orquestração multi-agente que coordena múltiplas instâncias do `k
 - Cada agente recebe um HOME temporário (`tempfile.mkdtemp`) com symlinks seletivos do HOME real
 - MCPs configurados por agente via `mcp.json` no HOME temporário
 - Allowlist de arquivos do HOME: `.config`, `.local`, `.bashrc`, `.profile`, `.zshrc`
+- `env_mcp_server.py` — MCP server standalone injetado automaticamente em todo agente, expõe ferramentas de gerenciamento de processos background (`env_run`, `env_status`, `env_logs`, `env_stop`, `env_input`). Resolve o problema de `execute_bash` bloqueante do kiro-cli para comandos long-running (servidores, builds, etc.)
 
 ### 2. Camada de Agente (Interface de Alto Nível)
 - `agent.py` — Compõe PTY + output parser em interface send/receive limpa
@@ -61,6 +62,7 @@ Sistema de orquestração multi-agente que coordena múltiplas instâncias do `k
 - `textual` — TUI framework
 - `pymysql` — MySQL connector (opcional, para data_collector)
 - `python-dotenv` — Carrega `.env` para configuração
+- `mcp` — SDK MCP do PyPI (≥1.0), usado pelo `env_mcp_server.py` para expor tools de gerenciamento de processos
 - `kiro-cli` — O LLM agent que cada processo executa
 
 ## Configuração

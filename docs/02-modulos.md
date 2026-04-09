@@ -5,12 +5,30 @@
 ### `pty_agent.py` — Gerenciamento de Processo PTY
 - **Função**: Spawn e lifecycle de processos `kiro-cli` em PTYs isolados
 - **Classe `PtyProcess`**: Encapsula `pexpect.spawn` com read/write raw
-- **Função `make_clean_env(mcps)`**: Cria HOME temporário com:
+- **Função `make_clean_env(mcps, workdir=None)`**: Cria HOME temporário com:
   - Symlinks seletivos do HOME real (allowlist em `config.py`)
   - Cópia do `.kiro/` com `mcp.json` customizado por agente
+  - Se `workdir` fornecido e `ENV_MCP_AUTO_INJECT=True`: injeta automaticamente o MCP `env-manager` no dict de MCPs antes de escrever `mcp.json`. O MCP aponta para `env_mcp_server.py` com `--state-dir /tmp/kiro-env-{hash}/` (hash = MD5 truncado do workdir)
   - Retorna `(env_dict, tmp_home_path)`
+- **Propagação de workdir**: `PtyProcess.spawn()` passa `self.workdir` para `make_clean_env()` (único caller direto)
 - **Isolamento**: Cada agente tem seu próprio filesystem, impedindo interferência entre MCPs
 - **Cleanup**: `kill()` envia `/quit`, termina processo, e remove `tmp_home` com `shutil.rmtree`
+
+### `env_mcp_server.py` — MCP Server de Gerenciamento de Processos Background
+- **Função**: MCP server standalone (stdio) que permite agentes executarem e monitorarem processos long-running sem bloquear
+- **SDK**: Usa pacote `mcp` do PyPI (FastMCP/Server class) com registro de tools via decorators
+- **Classe `ProcessManager`**: Dict de processos protegido por `threading.Lock` para thread safety
+  - Cada processo: `Popen`, `deque(maxlen=500)` para output, thread daemon de leitura, `start_time`
+  - Reader thread por processo: `readline()` em loop no stdout/stderr (merged via `Popen(stderr=STDOUT)`)
+- **5 Tools expostas**:
+  - `env_run(command, name, cwd?)` — Inicia processo em background, retorna imediatamente. Output capturado em ring buffer
+  - `env_status(name?)` — Status de processos (running/exited, exit_code, uptime, últimas 5 linhas de output)
+  - `env_logs(name, lines=50)` — Últimas N linhas de stdout+stderr combinados do ring buffer
+  - `env_stop(name, force=false)` — Para processo (SIGTERM default, SIGKILL se force)
+  - `env_input(name, text)` — Envia texto para stdin do processo (interatividade)
+- **PID Persistence**: `state_dir/processes.json` — mapa `{name: {pid, command, start_time}}`. No startup, reconcilia com PIDs vivos para detectar zombies
+- **Cleanup**: `atexit.register` + signal handler SIGTERM — mata todos os processos filhos e limpa `processes.json`
+- **Standalone**: `if __name__ == '__main__':` com `argparse` para `--state-dir`
 
 ### `agent.py` — Interface de Alto Nível do Agente
 - **Função**: Compõe `PtyProcess` + `output_parser` em API limpa `send(message) → response`
@@ -40,6 +58,7 @@
 ### `config.py` — Constantes e Configuração Central
 - **Timeouts**: `RESPONSE_TIMEOUT=300s`, `STARTUP_TIMEOUT=60s`, `PROCESSING_DETECT_TIMEOUT=30s`
 - **Limites**: `MAX_RETRIES=2`, `MAX_HANDOFF_ROUNDS=10`, `MIN_RESPONSE_LEN=50`, `MAX_SIGNAL_NUDGES=1`
+- **Environment Manager**: `ENV_MCP_BUFFER_LINES=500` (tamanho do ring buffer), `ENV_MCP_TIMEOUT=300` (timeout do MCP), `ENV_MCP_AUTO_INJECT=True` (flag para desabilitar injeção automática)
 - **`NUDGE_MESSAGE`**: Mensagem enviada quando agente não emite sinal `@handoff`/`@done`
 - **`PROTOCOL_INSTRUCTIONS`**: Template com placeholder `{agent_list}` — injetado na persona de cada agente
 - **`GOD_PERSONA`**: Instruções do watchdog (monitora saúde, não qualidade)
@@ -72,7 +91,7 @@
 - **Função**: Versão stateful do orchestrator para uso interativo
 - **Classe `SwarmSession(project_path, callback, flow_id)`**:
   - `open()` — Spawna todos os agentes do flow em paralelo (threads)
-  - `close()` — Compacta contexto, salva sessões e mata agentes
+  - `close()` — Compacta contexto, salva sessões, mata agentes e limpa `state_dir` do env-manager (`/tmp/kiro-env-{hash}/`) via `shutil.rmtree` como safety net
   - `abort()` — Interrompe operação em andamento via `threading.Event`
   - `interrupt_agent(agent_id)` — Interrompe agente específico
   - `restart_agent(agent_id)` — Re-spawna agente

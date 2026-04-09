@@ -49,6 +49,12 @@
 - Configurável via `.env` (MYSQL_HOST, MYSQL_DB, etc.)
 - Desativável via `settings_service` (`data_collection: false`)
 
+### 10. Estender o Environment Manager (env-manager)
+- `env_mcp_server.py` expõe 5 tools via MCP — novas tools podem ser adicionadas com decorators do SDK `mcp`
+- Ring buffer configurável via `ENV_MCP_BUFFER_LINES` em `config.py`
+- Injeção automática desativável via `ENV_MCP_AUTO_INJECT=False` em `config.py`
+- Extensões futuras planejadas: port forwarding awareness, health checks HTTP, monitoramento de CPU/memória, integração Docker
+
 ## Limitações Conhecidas
 
 ### 1. Sessão Única (Web)
@@ -116,3 +122,14 @@
 - `orchestrator.py` define `_init_agent` duas vezes — a segunda sobrescreve a primeira
 - A primeira usa `compose_persona()` de `agent_helpers`, a segunda reimplementa inline
 - Impacto: a versão com `agent_helpers` nunca é executada no modo batch
+
+## Limitações Resolvidas
+
+### ~~execute_bash Bloqueante~~ (resolvido pelo Environment Manager)
+- **Problema**: `execute_bash` do kiro-cli é síncrono — comandos long-running (servidores, builds) bloqueavam o agente indefinidamente. Impossível subir múltiplos serviços ou ver erros de runtime.
+- **Solução**: MCP `env-manager` injetado automaticamente em todo agente, expondo `env_run`/`env_status`/`env_logs`/`env_stop`/`env_input` para gerenciamento de processos background sem bloqueio.
+- **Limitações residuais do env-manager**:
+  - Ring buffer de 500 linhas — logs muito longos perdem linhas antigas
+  - Sem detecção automática de portas abertas pelos processos
+  - Sem health checks HTTP automáticos
+  - `state_dir` em `/tmp/` — perdido em reboot do sistema

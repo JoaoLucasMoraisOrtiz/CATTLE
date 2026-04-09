@@ -88,11 +88,11 @@ class ProcessManager:
             self._save()
         return {"name": name, "pid": proc.pid, "status": "running"}
 
-    def status(self, name: str | None = None) -> dict | list[dict]:
+    def status(self, name: str | None = None) -> dict:
         with self._lock:
+            if name and name not in self._procs:
+                return {"error": f"'{name}' not found"}
             targets = {name: self._procs[name]} if name else dict(self._procs)
-        if name and name not in targets:
-            return {"error": f"'{name}' not found"}
         out = []
         for n, info in targets.items():
             rc = info["proc"].poll()
@@ -104,7 +104,7 @@ class ProcessManager:
                 "exit_code": rc, "uptime_seconds": round(time.time() - info["start_time"]),
                 "last_output_lines": last,
             })
-        return out[0] if name else out
+        return out[0] if name else {"processes": out}
 
     def logs(self, name: str, lines: int = 50) -> dict:
         with self._lock:
@@ -201,8 +201,8 @@ def env_run(command: str, name: str, cwd: str | None = None) -> dict:
 
 
 @mcp.tool()
-def env_status(name: str | None = None) -> dict | list[dict]:
-    """Check process health. If name omitted, lists all."""
+def env_status(name: str | None = None) -> dict:
+    """Check process health. If name omitted, lists all. Returns {processes: [...]} for all, or single process dict."""
     return _get_mgr().status(name)
 
 
