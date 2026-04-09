@@ -8,6 +8,7 @@ from pathlib import Path
 
 from app.models.agent import AgentDef
 from app.models.flow import Flow
+from app.models.header import DEFAULT_PROTOCOL_ID
 from app.core.agent import Agent
 from app.core.protocol import parse
 from app.core.god import GodAgent, build_summary, GodCommand
@@ -26,22 +27,8 @@ from app.services.agent_helpers import resolve_header_ids, compose_persona, buil
 def _init_agent(defn: AgentDef, agent_list: str, workdir: str, log: Logger, header_ids: list[str] | None = None) -> Agent:
     agent = Agent(defn.name, workdir, defn.model)
     agent.start()
-    persona = compose_persona(defn, header_ids or resolve_header_ids(defn.id, Flow([], []), None), agent_list)
+    persona = compose_persona(defn, header_ids or [DEFAULT_PROTOCOL_ID], agent_list)
     persona += '\n\nResponda apenas: "Entendido." Nada mais.'
-    agent.send(persona)
-    log.agent(defn.name, 'ready', f'workdir: {workdir}')
-    return agent
-
-
-def _init_agent(defn: AgentDef, agent_list: str, workdir: str, log: Logger, header_ids: list[str] | None = None) -> Agent:
-    agent = Agent(defn.name, workdir, defn.model)
-    agent.start()
-    hids = header_ids or [DEFAULT_PROTOCOL_ID]
-    ctx = {'agent_name': defn.name, 'agent_persona': defn.persona, 'agent_list': agent_list}
-    composed = header_service.compose(hids, ctx)
-    if not composed.strip():
-        composed = defn.persona + '\n\n' + PROTOCOL_INSTRUCTIONS.format(agent_list=agent_list)
-    persona = composed + '\n\nResponda apenas: "Entendido." Nada mais.'
     agent.send(persona)
     log.agent(defn.name, 'ready', f'workdir: {workdir}')
     return agent

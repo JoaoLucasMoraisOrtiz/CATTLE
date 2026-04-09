@@ -70,21 +70,10 @@ def load_swarm_state(workdir: str) -> SwarmState | None:
 
 
 def resume_agent(agent_id: str, name: str, workdir: str, model: str | None = None):
-    from app.core.pty_agent import make_clean_env
     from app.core.agent import Agent
-    import pexpect
 
     agent = Agent(name, workdir, model)
-    env, tmp = make_clean_env()
-    cmd = 'kiro-cli chat --wrap never -a'
-    if model:
-        cmd += f' --model {model}'
-    agent._pty.proc = pexpect.spawn(
-        cmd, cwd=workdir, encoding='utf-8',
-        timeout=180, maxread=65536, env=env,
-    )
-    agent._pty._tmp_home = tmp
-    agent._read_until_prompt(timeout=60)
+    agent.start()
     path = _agent_save_path(workdir, agent_id)
     agent._pty.write(f'/chat load {path}\r')
     agent._read_until_prompt(timeout=30)

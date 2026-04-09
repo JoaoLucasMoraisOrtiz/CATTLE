@@ -201,6 +201,37 @@ class SwarmSession:
             self.cb.on_orch(f'📨 Processando mensagem da fila para {self.agent_defs.get(agent_id, agent_id).name}')
             self._do_send_to_agent(agent_id, msg)
 
+    def _handle_signal(self, signal, current_id, defn, return_stack):
+        """Returns (action, next_id, next_msg). action: 'continue' or 'break'."""
+        if signal.kind == 'handoff':
+            allowed = self.flow.targets_for(current_id)
+            if signal.target not in allowed:
+                self.cb.on_error(f'Handoff to {signal.target} blocked (no edge from {defn.name})')
+                return ('break', '', '')
+            if self.flow.edge_returns(current_id, signal.target):
+                return_stack.append(current_id)
+                self.cb.on_orch(f'↩ {signal.target} (retorno obrigatório para {defn.name})')
+            else:
+                self.cb.on_orch(f'→ {signal.target}: {signal.summary}')
+            return ('continue', signal.target, self._handoff_msg(defn.name, signal))
+        elif signal.kind == 'done':
+            if return_stack:
+                sender_id = return_stack.pop()
+                sender_name = self.agent_defs.get(sender_id, defn).name
+                self.cb.on_orch(f'↩ {defn.name} finalizou, retornando para {sender_name}')
+                return ('continue', sender_id, f"[Retorno de {defn.name}] {signal.summary}")
+            self.cb.on_summary(f'{defn.name}: {signal.summary}')
+            self._chat('summary', f'{defn.name}: {signal.summary}')
+            return ('break', '', '')
+        else:
+            if return_stack:
+                sender_id = return_stack.pop()
+                sender_name = self.agent_defs.get(sender_id, defn).name
+                self.cb.on_orch(f'↩ Retornando para {sender_name}')
+                return ('continue', sender_id, f"[Retorno de {defn.name}] {signal.clean_response[:500]}")
+            self.cb.on_summary(f'{defn.name} finalizou')
+            return ('break', '', '')
+
     def _run_handoff_chain(self, start_id, message):
         current_id, msg = start_id, message
         return_stack = []
@@ -239,76 +270,34 @@ class SwarmSession:
                 msg = f"[Retorno de {defn.name}] {signal.summary or signal.clean_response[:500]}"
                 current_id = sender_id
                 continue
-            if signal.kind == 'handoff':
-                allowed = self.flow.targets_for(current_id)
-                if signal.target not in allowed:
-                    self.cb.on_error(f'Handoff to {signal.target} blocked (no edge from {defn.name})')
+            if signal.kind != 'none':
+                action, next_id, next_msg = self._handle_signal(signal, current_id, defn, return_stack)
+                if action == 'break': break
+                current_id, msg = next_id, next_msg
+                continue
+            # No signal — nudge
+            nudged = False
+            for _nudge in range(MAX_SIGNAL_NUDGES):
+                self.cb.on_orch(f'⚠ No signal from {defn.name}, nudging...')
+                try:
+                    nudge_resp = self._send_with_retry(agent, NUDGE_MESSAGE)
+                    agent = self.agents.get(current_id, agent)
+                except Exception as e:
+                    self.cb.on_error(f'{defn.name} nudge failed: {e}'); break
+                signal = parse(nudge_resp)
+                self.cb.on_agent(defn.name, '→ nudge response', signal.clean_response)
+                self._chat('agent', signal.clean_response, defn.name)
+                if signal.kind != 'none':
+                    nudged = True
                     break
-                if self.flow.edge_returns(current_id, signal.target):
-                    return_stack.append(current_id)
-                    self.cb.on_orch(f'↩ {signal.target} (retorno obrigatório para {defn.name})')
-                else:
-                    self.cb.on_orch(f'→ {signal.target}: {signal.summary}')
-                msg = self._handoff_msg(defn.name, signal)
-                current_id = signal.target
-            elif signal.kind == 'done':
-                if return_stack:
-                    sender_id = return_stack.pop()
-                    sender_name = self.agent_defs.get(sender_id, defn).name
-                    self.cb.on_orch(f'↩ {defn.name} finalizou, retornando para {sender_name}')
-                    msg = f"[Retorno de {defn.name}] {signal.summary}"
-                    current_id = sender_id
-                else:
-                    self.cb.on_summary(f'{defn.name}: {signal.summary}')
-                    self._chat('summary', f'{defn.name}: {signal.summary}')
-                    break
+            if nudged:
+                action, next_id, next_msg = self._handle_signal(signal, current_id, defn, return_stack)
+                if action == 'break': break
+                current_id, msg = next_id, next_msg
             else:
-                nudged = False
-                for _nudge in range(MAX_SIGNAL_NUDGES):
-                    self.cb.on_orch(f'⚠ No signal from {defn.name}, nudging...')
-                    try:
-                        nudge_resp = self._send_with_retry(agent, NUDGE_MESSAGE)
-                        agent = self.agents.get(current_id, agent)
-                    except Exception as e:
-                        self.cb.on_error(f'{defn.name} nudge failed: {e}'); break
-                    signal = parse(nudge_resp)
-                    self.cb.on_agent(defn.name, '→ nudge response', signal.clean_response)
-                    self._chat('agent', signal.clean_response, defn.name)
-                    if signal.kind != 'none':
-                        nudged = True
-                        break
-                if not nudged:
-                    if return_stack:
-                        sender_id = return_stack.pop()
-                        sender_name = self.agent_defs.get(sender_id, defn).name
-                        self.cb.on_orch(f'↩ Retornando para {sender_name}')
-                        msg = f"[Retorno de {defn.name}] {signal.clean_response[:500]}"
-                        current_id = sender_id
-                    else:
-                        self.cb.on_summary(f'{defn.name} finalizou'); break
-                elif signal.kind == 'handoff':
-                    allowed = self.flow.targets_for(current_id)
-                    if signal.target not in allowed:
-                        self.cb.on_error(f'Handoff to {signal.target} blocked (no edge from {defn.name})')
-                        break
-                    if self.flow.edge_returns(current_id, signal.target):
-                        return_stack.append(current_id)
-                        self.cb.on_orch(f'↩ {signal.target} (retorno obrigatório para {defn.name})')
-                    else:
-                        self.cb.on_orch(f'→ {signal.target}: {signal.summary}')
-                    msg = self._handoff_msg(defn.name, signal)
-                    current_id = signal.target
-                elif signal.kind == 'done':
-                    if return_stack:
-                        sender_id = return_stack.pop()
-                        sender_name = self.agent_defs.get(sender_id, defn).name
-                        self.cb.on_orch(f'↩ {defn.name} finalizou, retornando para {sender_name}')
-                        msg = f"[Retorno de {defn.name}] {signal.summary}"
-                        current_id = sender_id
-                    else:
-                        self.cb.on_summary(f'{defn.name}: {signal.summary}')
-                        self._chat('summary', f'{defn.name}: {signal.summary}')
-                        break
+                action, next_id, next_msg = self._handle_signal(signal, current_id, defn, return_stack)
+                if action == 'break': break
+                current_id, msg = next_id, next_msg
         self._busy -= used_agents
 
     def _spawn_agent(self, nid, defn, all_defs):
@@ -347,19 +336,22 @@ class SwarmSession:
     def _chat(self, type, text, agent=''):
         append_chat_message(self.project_path, {'type': type, 'agent': agent, 'text': text, 'ts': time.time()})
 
+    def _wrap_first_message(self, agent, message):
+        if not (hasattr(agent, '_persona') and not agent._persona_sent):
+            return message
+        wrapper = header_service.get_default('wrapper')
+        if wrapper:
+            message = wrapper.content.format_map({
+                'agent_persona': agent._persona, 'task': message,
+                'agent_name': agent.name, 'agent_list': '',
+            })
+        else:
+            message = f"[SISTEMA — SUA IDENTIDADE E REGRAS]\n{agent._persona}\n\n[TAREFA]\n{message}"
+        agent._persona_sent = True
+        return message
+
     def _send_with_retry(self, agent, message):
-        if hasattr(agent, '_persona') and not agent._persona_sent:
-            wrapper = header_service.get_default('wrapper')
-            if wrapper:
-                message = wrapper.content.format_map({
-                    'agent_persona': agent._persona,
-                    'task': message,
-                    'agent_name': agent.name,
-                    'agent_list': '',
-                })
-            else:
-                message = f"[SISTEMA — SUA IDENTIDADE E REGRAS]\n{agent._persona}\n\n[TAREFA]\n{message}"
-            agent._persona_sent = True
+        message = self._wrap_first_message(agent, message)
         if not agent._pty.is_alive():
             agent_id = next((k for k, v in self.agents.items() if v is agent), None)
             if agent_id:
@@ -368,18 +360,7 @@ class SwarmSession:
                     self.cb.on_orch(f'🔄 {defn.name} was idle/dead — restarting...')
                     self._spawn_agent(agent_id, defn, list(self.agent_defs.values()))
                     agent = self.agents[agent_id]
-                    if hasattr(agent, '_persona'):
-                        wrapper = header_service.get_default('wrapper')
-                        if wrapper:
-                            message = wrapper.content.format_map({
-                                'agent_persona': agent._persona,
-                                'task': message,
-                                'agent_name': agent.name,
-                                'agent_list': '',
-                            })
-                        else:
-                            message = f"[SISTEMA — SUA IDENTIDADE E REGRAS]\n{agent._persona}\n\n[TAREFA]\n{message}"
-                        agent._persona_sent = True
+                    message = self._wrap_first_message(agent, message)
         for attempt in range(MAX_RETRIES + 1):
             if self._abort.is_set(): raise RuntimeError('Aborted')
             try:
