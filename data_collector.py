@@ -68,7 +68,10 @@ def _init_schema(conn):
 def collect(project_path: str, agent_id: str, agent_name: str,
             input_msg: str, output_msg: str, signal_kind: str = '',
             flow_id: str = '', round_num: int = 0):
-    """Insert one training sample into MySQL."""
+    """Insert one training sample into MySQL (if opt-in)."""
+    import settings
+    if not settings.get_all().get('data_collection', True):
+        return
     def _insert():
         try:
             conn = _get_db()

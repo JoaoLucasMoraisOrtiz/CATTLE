@@ -19,6 +19,7 @@ from projects import Project
 from session import SwarmSession, EventCallback
 import headers as hmod
 from headers import HeaderDef
+import settings
 
 app = FastAPI(title="ReDo!")
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -216,6 +217,20 @@ def set_default_header(header_id: str):
 @app.get("/api/headers/placeholders")
 def list_placeholders():
     return hmod.AVAILABLE_PLACEHOLDERS
+
+# ── Settings ──────────────────────────────────────────────────────────────
+
+class SettingIn(BaseModel):
+    key: str
+    value: bool | str | int | float
+
+@app.get("/api/settings")
+def get_settings():
+    return settings.get_all()
+
+@app.put("/api/settings")
+def update_setting(body: SettingIn):
+    return settings.set_key(body.key, body.value)
 
 # ── Session management ────────────────────────────────────────────────────
 
