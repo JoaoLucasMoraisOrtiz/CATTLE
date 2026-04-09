@@ -328,7 +328,7 @@ class SwarmSession:
             return node.header_ids
         if self._flow_def and self._flow_def.default_header_ids:
             return self._flow_def.default_header_ids
-        return [DEFAULT_PROTOCOL_HEADER_ID]
+        return [hmod.DEFAULT_PROTOCOL_ID]
 
     def _compose_persona(self, nid, defn, agent_list):
         """Compose persona using headers system with fallback."""
