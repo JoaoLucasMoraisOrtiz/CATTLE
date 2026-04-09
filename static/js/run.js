@@ -272,7 +272,8 @@ function appendBubble(type, text, label) {
 // ── Agent boxes ──────────────────────────────────────────────────────────
 
 function updateAgentBox(name, status, text) {
-  agentStatus[name] = { status, text: (text||'').slice(0,60) };
+  const prev = agentStatus[name];
+  agentStatus[name] = { status, text: (text||'').slice(0,60), msgCount: prev?.msgCount || 0 };
   renderAgentBoxes();
 }
 
@@ -319,11 +320,14 @@ function renderAgentBoxes() {
     const c = getColor(name);
     const isSel = _selectedAgent === name;
     const isActive = s.status === 'working';
+    const count = s.msgCount || 0;
+    const badge = count ? `<span class="ml-auto text-[10px] bg-accent/20 text-accent px-1.5 rounded-full">${count}</span>` : '';
     return `<div onclick="insertAgentMention('${escHtml(name)}')"
       class="agent-box flex flex-col gap-1 px-3 py-2.5 rounded-lg border cursor-pointer transition ${isSel ? 'border-accent/50 bg-accent/5 shadow-[0_0_8px_rgba(124,92,252,0.3)]' : 'border-border bg-surface hover:border-accent/20'}">
       <div class="flex items-center gap-2">
         <span class="w-2 h-2 rounded-full ${isActive?'running':''}" style="background:${c}"></span>
         <span class="text-xs font-medium text-white">${escHtml(name)}</span>
+        ${badge}
       </div>
       <div class="text-[10px] text-muted truncate">${escHtml(s.text||'Pronto')}</div>
     </div>`;
@@ -400,6 +404,7 @@ function handleSSE(type, data) {
         return;
       }
       if (data.event.includes('→ response')) {
+        if (agentStatus[data.name]) agentStatus[data.name].msgCount = (agentStatus[data.name].msgCount || 0) + 1;
         updateAgentBox(data.name, 'ready', (data.text||'').slice(0,60));
         updateGridPanel(data.name, 'Pronto');
         addChatBubble('agent', data.text||'', data.name);
