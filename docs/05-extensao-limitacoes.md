@@ -35,13 +35,24 @@
 - Pode-se adicionar novos comandos (requer mudança em `god.py:_CMD_RE` e no orchestrator)
 
 ### 7. Adicionar Novos Endpoints na API Web
-- `server.py` usa FastAPI — adicionar rotas é trivial
-- O `active_session` é global e acessível de qualquer endpoint
+- `main.py` usa FastAPI com controllers modulares — adicionar rotas é trivial
+- O estado da sessão é encapsulado em `SessionState` (classe com `__slots__` em `controllers/session.py`)
+
+### 8. Customizar Header Templates
+- Headers são gerenciados via `header_service.py` com CRUD completo
+- Três tipos: `protocol` (instruções de protocolo), `wrapper` (envolve 1ª mensagem), `handoff` (mensagem de handoff)
+- Placeholders disponíveis por tipo definidos em `app/models/header.py:AVAILABLE_PLACEHOLDERS`
+- Headers podem ser atribuídos por nó do flow ou como default do flow
+
+### 9. Coleta de Training Data
+- `data_collector.py` salva pares input/output em MySQL remoto
+- Configurável via `.env` (MYSQL_HOST, MYSQL_DB, etc.)
+- Desativável via `settings_service` (`data_collection: false`)
 
 ## Limitações Conhecidas
 
 ### 1. Sessão Única (Web)
-- Apenas uma `SwarmSession` ativa por vez (`active_session` global em `server.py`)
+- Apenas uma `SwarmSession` ativa por vez (encapsulada em `SessionState` em `controllers/session.py`)
 - Não suporta múltiplos usuários/projetos simultâneos
 - Abrir nova sessão fecha a anterior
 
@@ -97,6 +108,11 @@
 - Erros do GOD_AGENT são silenciados
 
 ### 12. Configuração Estática de Agentes
-- `agents.json` e `flow.json` são lidos no startup
+- `agents.json` e `flows.json` são lidos no startup
 - Mudanças durante execução não são refletidas (exceto via API web que recarrega)
 - Não há hot-reload de personas ou configurações
+
+### 13. Bug: `_init_agent` Duplicada no Orchestrator
+- `orchestrator.py` define `_init_agent` duas vezes — a segunda sobrescreve a primeira
+- A primeira usa `compose_persona()` de `agent_helpers`, a segunda reimplementa inline
+- Impacto: a versão com `agent_helpers` nunca é executada no modo batch

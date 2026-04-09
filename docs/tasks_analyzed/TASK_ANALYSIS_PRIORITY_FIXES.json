@@ -1,0 +1,107 @@
+{
+  "id": "priority-fixes-v2",
+  "title": "Correções prioritárias: _init_agent duplicada, handoff chain copy-paste, wrapper duplicado, resume_agent bypass",
+  "created": "2026-04-09T09:28:00-03:00",
+  "status": "planned",
+  "summary": "4 itens priorizados pelo validator: 1 regressão crítica, 2 refactors de copy-paste interno, 1 bypass de API.",
+
+  "tasks": [
+    {
+      "id": "F1",
+      "title": "Remover _init_agent duplicada no orchestrator.py",
+      "severity": "critical",
+      "file": "app/services/orchestrator.py",
+      "lines": "26-47",
+      "description": "Duas definições de _init_agent. A segunda (linhas 36-47, versão antiga sem helpers) faz shadow da primeira (linhas 26-33, versão nova com compose_persona). Python usa a última, então a versão com helpers é dead code.",
+      "current_code_summary": {
+        "first_def_lines": "26-33",
+        "first_def": "Usa compose_persona() do agent_helpers. Tem bug: fallback usa Flow([], []) como dummy → sempre retorna DEFAULT_PROTOCOL_ID.",
+        "second_def_lines": "36-47",
+        "second_def": "Versão antiga: chama header_service.compose() diretamente, duplicando lógica do agent_helpers."
+      },
+      "fix": {
+        "action": "Deletar a segunda definição (linhas 36-47 inteiras). Na primeira definição, corrigir o fallback: trocar `resolve_header_ids(defn.id, Flow([], []), None)` por `[DEFAULT_PROTOCOL_ID]` — os callers sempre passam header_ids explicitamente quando têm flow, então o fallback só precisa do default.",
+        "result_code": "def _init_agent(defn, agent_list, workdir, log, header_ids=None):\n    agent = Agent(defn.name, workdir, defn.model)\n    agent.start()\n    persona = compose_persona(defn, header_ids or [DEFAULT_PROTOCOL_ID], agent_list)\n    persona += '\\n\\nResponda apenas: \"Entendido.\" Nada mais.'\n    agent.send(persona)\n    log.agent(defn.name, 'ready', f'workdir: {workdir}')\n    return agent",
+        "imports_needed": "Adicionar `from app.models.header import DEFAULT_PROTOCOL_ID` (já existe no arquivo, verificar)."
+      },
+      "risk": "Baixo — os callers (linhas ~121 e ~139) sempre passam hids explicitamente. O fallback é safety net.",
+      "priority": 1
+    },
+    {
+      "id": "F2",
+      "title": "Eliminar copy-paste pós-nudge em _run_handoff_chain",
+      "severity": "high",
+      "file": "app/services/session_service.py",
+      "lines": "248-312",
+      "description": "Dentro de _run_handoff_chain, o bloco que trata signal.kind=='handoff' e signal.kind=='done' aparece 2x: uma vez no fluxo normal (linhas ~248-265) e outra idêntica após o nudge (linhas ~294-312). São ~18 linhas copy-paste.",
+      "current_structure": {
+        "normal_flow": "linhas 248-265: if handoff → check allowed, check returns, set msg/current_id. elif done → check return_stack, summary, break.",
+        "post_nudge": "linhas 294-312: elif handoff → MESMA lógica. elif done → MESMA lógica.",
+        "also_duplicated": "O bloco 'if not nudged' (linhas 285-293) repete a lógica de done com return_stack."
+      },
+      "fix": {
+        "action": "Extrair método _handle_signal(self, signal, current_id, defn, return_stack) que retorna tupla (action, next_id, next_msg). Actions: 'continue' (handoff ok), 'break' (done/blocked), 'return' (return_stack pop). O loop principal e o pós-nudge chamam o mesmo método.",
+        "method_signature": "def _handle_signal(self, signal, current_id, defn, return_stack) -> tuple[str, str, str]",
+        "return_values": {
+          "('continue', next_id, next_msg)": "Handoff aceito — continuar loop com novo agente",
+          "('break', '', '')": "Done sem return_stack, ou handoff bloqueado — sair do loop",
+          "('return', sender_id, return_msg)": "Done/handoff com return_stack — voltar ao sender"
+        },
+        "loop_usage": "action, next_id, next_msg = self._handle_signal(signal, current_id, defn, return_stack)\nif action == 'break': break\ncurrent_id, msg = next_id, next_msg"
+      },
+      "risk": "Médio — refactor de lógica central do loop. Testar com flows que têm return edges.",
+      "priority": 2
+    },
+    {
+      "id": "F3",
+      "title": "Eliminar duplicação de wrapper em _send_with_retry",
+      "severity": "high",
+      "file": "app/services/session_service.py",
+      "lines": "350-393",
+      "description": "O bloco que formata a mensagem com wrapper de persona (get_default('wrapper') → format_map) aparece 2x dentro de _send_with_retry: uma vez para o envio normal (linhas 351-362) e outra idêntica após restart do agente morto (linhas 374-385). São ~12 linhas copy-paste.",
+      "current_structure": {
+        "block_1": "linhas 351-362: if agent has _persona and not sent → wrap message",
+        "block_2": "linhas 374-385: after restart → if agent has _persona → wrap message (idêntico)"
+      },
+      "fix": {
+        "action": "Extrair método _wrap_first_message(self, agent, message) -> str que encapsula: check _persona/_persona_sent, get wrapper, format_map, set _persona_sent=True. Retorna message formatada ou original.",
+        "method_signature": "def _wrap_first_message(self, agent, message) -> str",
+        "usage": "Chamar no início de _send_with_retry e após o restart. O método é idempotente — se _persona_sent já é True, retorna message inalterada."
+      },
+      "risk": "Baixo — extração pura, sem mudança de comportamento.",
+      "priority": 3
+    },
+    {
+      "id": "F4",
+      "title": "resume_agent deve usar PtyProcess.spawn() em vez de atribuir proc diretamente",
+      "severity": "medium",
+      "file": "app/core/swarm_state.py",
+      "lines": "75-93",
+      "description": "resume_agent cria um Agent, depois bypassa PtyProcess.spawn() atribuindo diretamente a agent._pty.proc via pexpect.spawn(). Isso duplica a lógica de spawn (env setup, cmd building) e acopla ao internal de PtyProcess.",
+      "current_code": "agent._pty.proc = pexpect.spawn(cmd, ...)\nagent._pty._tmp_home = tmp",
+      "fix": {
+        "action": "Usar agent.start() (que chama PtyProcess.spawn() internamente) em vez de manipular _pty diretamente. Depois carregar a sessão salva com /chat load. O Agent.start() já faz: spawn + read_until_prompt.",
+        "result_flow": "agent = Agent(name, workdir, model)\nagent.start()  # spawn + wait for prompt\nagent._pty.write(f'/chat load {path}\\r')\nagent._read_until_prompt(timeout=30)\nreturn agent",
+        "cleanup": "Remover imports de pexpect e make_clean_env de dentro da função (ficam no PtyProcess)."
+      },
+      "risk": "Baixo — Agent.start() já é o caminho padrão. A única diferença é que o start() original faz on_chunk filtering durante startup, o que é inofensivo para resume.",
+      "priority": 4
+    }
+  ],
+
+  "execution_order": [
+    {"step": 1, "ids": ["F1"], "reason": "Regressão crítica — dead code + shadow. Fix cirúrgico de 1 arquivo."},
+    {"step": 2, "ids": ["F3"], "reason": "Mais simples dos dois refactors — extração pura sem mudança de fluxo."},
+    {"step": 3, "ids": ["F2"], "reason": "Refactor mais complexo — depende de entender o loop inteiro. Testar com return edges."},
+    {"step": 4, "ids": ["F4"], "reason": "Independente dos outros. Pode ser feito em paralelo com F2/F3 mas é menor prioridade."}
+  ],
+
+  "verification": {
+    "F1": "grep -c 'def _init_agent' orchestrator.py deve retornar 1 (não 2).",
+    "F2": "Contar ocorrências de 'self.flow.edge_returns' em _run_handoff_chain — deve ser 1 (não 2). Contar 'self.cb.on_summary' — deve ser 1 (não 3).",
+    "F3": "Contar ocorrências de 'get_default.*wrapper' em _send_with_retry — deve ser 1 (não 2).",
+    "F4": "grep 'pexpect' swarm_state.py deve retornar 0 matches."
+  },
+
+  "handoff_chain": "architect (TASK_ANALYSIS) → consultor (atualizar KB) → analyst (implementar F1-F4)"
+}
