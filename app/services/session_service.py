@@ -17,6 +17,7 @@ from app.core.swarm_state import save_swarm, SwarmState, save_agent_session, app
 from app.config import PROTOCOL_INSTRUCTIONS, MAX_HANDOFF_ROUNDS, MIN_RESPONSE_LEN, MAX_RETRIES, MAX_SIGNAL_NUDGES, NUDGE_MESSAGE
 from app.services import registry, flow_service, header_service, data_collector
 from app.services.agent_helpers import resolve_header_ids, compose_persona, build_agent_list_for
+from app.services.cost_service import CostTracker
 
 COMPACT_THRESHOLD = 70
 CONTEXT_RE = re.compile(r'(\d+)%.*?!>')
@@ -28,6 +29,7 @@ class EventCallback:
     def on_error(self, msg): pass
     def on_summary(self, text): pass
     def on_done(self): pass
+    def on_cost(self, data): pass
 
 
 class SwarmSession:
@@ -49,6 +51,7 @@ class SwarmSession:
         self._pending_messages = []
         self._opening = True
         self._compacting = False
+        self.cost_tracker = CostTracker()
 
     def open(self):
         fd = flow_service.get(self.flow_id) if self.flow_id else None
@@ -203,6 +206,7 @@ class SwarmSession:
             data_collector.collect(self.project_path, match, defn.name, message, signal.clean_response, signal.kind, flow_id=self.flow_id or '')
             self.cb.on_agent(defn.name, '→ response', signal.clean_response)
             self._chat('agent', signal.clean_response, defn.name)
+            self._record_cost(match, defn.name, message, signal.clean_response)
             self._save_state()
             self._auto_compact(match, agent)
             with self._lock:
@@ -282,6 +286,7 @@ class SwarmSession:
             data_collector.collect(self.project_path, current_id, defn.name, msg, signal.clean_response, signal.kind, flow_id=self.flow_id or '', round_num=self.round_num)
             self.cb.on_agent(defn.name, '→ response', signal.clean_response)
             self._chat('agent', signal.clean_response, defn.name)
+            self._record_cost(current_id, defn.name, msg, signal.clean_response)
             h = self.git.commit(self.round_num, defn.name)
             if h: self.cb.on_orch(f'📌 {h[:8]}')
             self._save_state()
@@ -356,6 +361,10 @@ class SwarmSession:
 
     def _chat(self, type, text, agent=''):
         append_chat_message(self.project_path, {'type': type, 'agent': agent, 'text': text, 'ts': time.time()})
+
+    def _record_cost(self, agent_id, agent_name, input_text, output_text):
+        self.cost_tracker.record(agent_id, agent_name, input_text, output_text, self.round_num)
+        self.cb.on_cost(self.cost_tracker.get_summary())
 
     def _wrap_first_message(self, agent, message):
         if not (hasattr(agent, '_persona') and not agent._persona_sent):

@@ -67,6 +67,7 @@ async def open_session(project_id: str, body: OpenSessionIn | None = None):
         def on_error(self, msg): self._push("error", {"msg": msg})
         def on_summary(self, text): self._push("summary", {"text": text})
         def on_done(self): self._push("done", {})
+        def on_cost(self, data): self._push("cost", data)
 
     state.session = SwarmSession(proj.path, SSECallback(), flow_id=body.flow_id if body else None)
     threading.Thread(target=state.session.open, daemon=True).start()
@@ -122,6 +123,14 @@ def session_status(project_id: str | None = None):
         "agents": list(state.session.agents.keys()),
         "round": state.session.round_num,
     }
+
+
+@router.get("/costs")
+def session_costs(project_id: str | None = None):
+    state = _find_active_state(project_id)
+    if not state or not state.session:
+        return {"agents": {}, "total_usd": 0}
+    return state.session.cost_tracker.get_summary()
 
 
 @router.post("/message")

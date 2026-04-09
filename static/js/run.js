@@ -2,6 +2,7 @@
 
 let _sseRetryDelay = 1000;
 const _SSE_MAX_DELAY = 30000;
+let _costData = { agents: {}, total_usd: 0 };
 
 function getColor(name) {
   const a = agents.find(x => x.name === name);
@@ -52,6 +53,7 @@ function connectSSE() {
   });
   eventSource.addEventListener('summary', e => handleSSE('summary', JSON.parse(e.data)));
   eventSource.addEventListener('done', e => handleSSE('done', {}));
+  eventSource.addEventListener('cost', e => handleSSE('cost', JSON.parse(e.data)));
 
   eventSource.onerror = () => {
     if (sessionOpen && eventSource.readyState === EventSource.CLOSED) _reconnectSSE();
@@ -79,6 +81,8 @@ async function openSession() {
   document.getElementById('raw-log').innerHTML = '';
   document.getElementById('run-agents').innerHTML = '';
   chatHistory = [];
+  _costData = { agents: {}, total_usd: 0 };
+  updateCostHeader();
 
   const flowId = document.getElementById('run-flow-select').value || null;
   const r = await apiPost(`${API}/session/open/${pid}`, {flow_id: flowId});
@@ -96,6 +100,8 @@ async function closeSession() {
   document.getElementById('run-agents').innerHTML = '';
   document.getElementById('agent-grid').innerHTML = '';
   Object.keys(agentStatus).forEach(k => delete agentStatus[k]);
+  _costData = { agents: {}, total_usd: 0 };
+  updateCostHeader();
 }
 
 function onProjectChange() {
@@ -322,6 +328,9 @@ function renderAgentBoxes() {
     const isActive = s.status === 'working';
     const count = s.msgCount || 0;
     const badge = count ? `<span class="ml-auto text-[10px] bg-accent/20 text-accent px-1.5 rounded-full">${count}</span>` : '';
+    // Find cost for this agent by name
+    const costEntry = Object.values(_costData.agents || {}).find(a => a.name === name);
+    const costHtml = costEntry ? `<div class="text-[10px] text-emerald-400/70">$${costEntry.cost_usd.toFixed(4)}</div>` : '';
     return `<div onclick="insertAgentMention('${escHtml(name)}')"
       class="agent-box flex flex-col gap-1 px-3 py-2.5 rounded-lg border cursor-pointer transition ${isSel ? 'border-accent/50 bg-accent/5 shadow-[0_0_8px_rgba(124,92,252,0.3)]' : 'border-border bg-surface hover:border-accent/20'}">
       <div class="flex items-center gap-2">
@@ -330,6 +339,7 @@ function renderAgentBoxes() {
         ${badge}
       </div>
       <div class="text-[10px] text-muted truncate">${escHtml(s.text||'Pronto')}</div>
+      ${costHtml}
     </div>`;
   }).join('');
 }
@@ -423,7 +433,27 @@ function handleSSE(type, data) {
     appendLog(`<span class="text-muted">${t}</span> <span class="text-red-400">[ERROR]</span> ${escHtml(data.msg)}`);
   } else if (type === 'done') {
     setStatus('Session open');
+  } else if (type === 'cost') {
+    _costData = data;
+    renderAgentBoxes();
+    updateCostHeader();
   }
+}
+
+// ── Cost header ──────────────────────────────────────────────────────────
+
+function updateCostHeader() {
+  let el = document.getElementById('cost-total');
+  if (!el) {
+    const container = document.querySelector('header .flex.items-center.gap-4');
+    if (!container) return;
+    el = document.createElement('div');
+    el.id = 'cost-total';
+    el.className = 'flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full';
+    container.insertBefore(el, container.querySelector('#sse-indicator'));
+  }
+  const total = _costData.total_usd || 0;
+  el.textContent = total > 0 ? `💰 $${total.toFixed(4)}` : '';
 }
 
 // ── Settings ─────────────────────────────────────────────────────────────
