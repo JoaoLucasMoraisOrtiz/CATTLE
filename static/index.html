@@ -163,7 +163,7 @@
     <button onclick="deleteProject()" aria-label="Remover projeto" class="px-2 py-1.5 text-muted hover:text-red-400 text-xs rounded-lg hover:bg-red-500/10 transition">✕</button>
     <div class="border-l border-border h-5 mx-1"></div>
     <label class="text-xs text-muted">🔀</label>
-    <select id="run-flow-select" aria-label="Selecionar flow para execução" class="bg-surface border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent/50 transition min-w-[140px]">
+    <select id="run-flow-select" onchange="onFlowChange()" aria-label="Selecionar flow para execução" class="bg-surface border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent/50 transition min-w-[140px]">
       <option value="">Nenhum flow</option>
     </select>
     <button id="btn-open" onclick="openSession()" class="px-3 py-1.5 bg-emerald-500/10 text-emerald-400 text-xs rounded-lg hover:bg-emerald-500/20 transition font-medium hidden">⚡ Abrir</button>

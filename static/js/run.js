@@ -94,12 +94,22 @@ async function closeSession() {
   await apiPost(`${API}/session/close`);
   setSessionUI(false);
   document.getElementById('run-agents').innerHTML = '';
+  document.getElementById('agent-grid').innerHTML = '';
 }
 
 function onProjectChange() {
   const pid = document.getElementById('project-select').value;
   document.getElementById('btn-open').classList.toggle('hidden', !pid);
   if (sessionOpen) closeSession();
+}
+
+async function onFlowChange() {
+  if (!sessionOpen) return;
+  const pid = document.getElementById('project-select').value;
+  if (!pid) return;
+  // Close current, reopen with new flow
+  await closeSession();
+  await openSession();
 }
 
 // ── Send message ─────────────────────────────────────────────────────────
