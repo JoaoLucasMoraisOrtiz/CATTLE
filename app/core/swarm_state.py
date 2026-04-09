@@ -3,11 +3,11 @@
 import hashlib
 import json
 import os
+import time
 from dataclasses import dataclass, asdict
 from pathlib import Path
 
-from agent import Agent
-from output_parser import strip_ansi, PROMPT_RE
+from app.core.output_parser import strip_ansi, PROMPT_RE
 
 SWARM_HOME = Path.home() / '.kiro-swarm'
 
@@ -23,7 +23,6 @@ class SwarmState:
 
 
 def _project_dir(workdir: str) -> Path:
-    """Unique session dir per project, stored in ~/.kiro-swarm/sessions/<hash>/"""
     h = hashlib.sha256(os.path.abspath(workdir).encode()).hexdigest()[:12]
     name = os.path.basename(os.path.abspath(workdir))
     d = SWARM_HOME / 'sessions' / f'{name}-{h}'
@@ -35,12 +34,10 @@ def _agent_save_path(workdir: str, agent_id: str) -> str:
     return str(_project_dir(workdir) / f'agent-{agent_id}')
 
 
-def save_agent_session(agent: Agent, agent_id: str, workdir: str) -> bool:
-    """Send /chat save to an agent. Saves to ~/.kiro-swarm/sessions/..."""
+def save_agent_session(agent, agent_id: str, workdir: str) -> bool:
     try:
         path = _agent_save_path(workdir, agent_id)
         agent._pty.write(f'/chat save {path} --force\r')
-        import time
         deadline = time.time() + 30
         while time.time() < deadline:
             chunk = agent._pty.read_chunk(timeout=3)
@@ -51,7 +48,7 @@ def save_agent_session(agent: Agent, agent_id: str, workdir: str) -> bool:
         return False
 
 
-def save_swarm(workdir: str, state: SwarmState, live_agents: dict[str, Agent]) -> str:
+def save_swarm(workdir: str, state: SwarmState, live_agents: dict) -> str:
     d = _project_dir(workdir)
     saved = []
     for aid, agent in live_agents.items():
@@ -72,9 +69,9 @@ def load_swarm_state(workdir: str) -> SwarmState | None:
     return SwarmState(**data)
 
 
-def resume_agent(agent_id: str, name: str, workdir: str, model: str | None = None) -> Agent:
-    """Spawn agent and load its saved session."""
-    from pty_agent import make_clean_env
+def resume_agent(agent_id: str, name: str, workdir: str, model: str | None = None):
+    from app.core.pty_agent import make_clean_env
+    from app.core.agent import Agent
     import pexpect
 
     agent = Agent(name, workdir, model)
@@ -87,9 +84,7 @@ def resume_agent(agent_id: str, name: str, workdir: str, model: str | None = Non
         timeout=180, maxread=65536, env=env,
     )
     agent._pty._tmp_home = tmp
-    # Wait for startup prompt
     agent._read_until_prompt(timeout=60)
-    # Load saved session
     path = _agent_save_path(workdir, agent_id)
     agent._pty.write(f'/chat load {path}\r')
     agent._read_until_prompt(timeout=30)

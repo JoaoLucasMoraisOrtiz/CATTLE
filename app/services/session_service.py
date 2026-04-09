@@ -1,17 +1,20 @@
 """SwarmSession — persistent agents, chat-style messaging, auto-save, auto-compact."""
 
-import os, re, time, threading, json
-import registry
-from registry import AgentDef
-from agent import Agent
-from protocol import parse
-from flow import Flow, Node, load as load_flow
-from checkpoint import GitCheckpoint
-from swarm_state import save_swarm, SwarmState, save_agent_session, append_chat_message, load_chat_history, _project_dir
-from config import PROTOCOL_INSTRUCTIONS, MAX_HANDOFF_ROUNDS, MIN_RESPONSE_LEN, MAX_RETRIES, MAX_SIGNAL_NUDGES, NUDGE_MESSAGE
-import flow as flowmod
-import headers as hmod
-import data_collector
+import os
+import re
+import time
+import threading
+import json
+
+from app.models.agent import AgentDef
+from app.models.flow import Flow, Node
+from app.models.header import DEFAULT_PROTOCOL_ID
+from app.core.agent import Agent
+from app.core.protocol import parse
+from app.core.checkpoint import GitCheckpoint
+from app.core.swarm_state import save_swarm, SwarmState, save_agent_session, append_chat_message, load_chat_history, _project_dir
+from app.config import PROTOCOL_INSTRUCTIONS, MAX_HANDOFF_ROUNDS, MIN_RESPONSE_LEN, MAX_RETRIES, MAX_SIGNAL_NUDGES, NUDGE_MESSAGE
+from app.services import registry, flow_service, header_service, data_collector
 
 COMPACT_THRESHOLD = 70
 CONTEXT_RE = re.compile(r'(\d+)%.*?!>')
@@ -34,26 +37,26 @@ class SwarmSession:
         self.agent_defs = {}
         self.git = GitCheckpoint(self.project_path)
         self.flow = Flow()
-        self._flow_def = None  # FlowDef for header resolution
+        self._flow_def = None
         self.round_num = 0
         self.alive = False
-        self._busy = set()  # agent IDs currently working
-        self._agent_queues = {}  # agent_id -> [(message, callback)]
+        self._busy = set()
+        self._agent_queues = {}
         self._abort = threading.Event()
         self._pending_messages = []
         self._opening = True
         self._compacting = False
 
     def open(self):
-        fd = flowmod.get(self.flow_id) if self.flow_id else None
+        fd = flow_service.get(self.flow_id) if self.flow_id else None
         self._flow_def = fd
-        self.flow = fd.flow if fd else load_flow()
+        self.flow = fd.flow if fd else flow_service.load()
         all_defs = registry.load()
         self.agent_defs = {a.id: a for a in all_defs}
         flow_ids = {n.agent_id for n in self.flow.nodes}
         self.git.init()
         self.cb.on_orch(f'Project: {self.project_path}')
-        hmod.ensure_defaults()
+        header_service.ensure_defaults()
 
         results = {}
         lock = threading.Lock()
@@ -228,7 +231,6 @@ class SwarmSession:
             if h: self.cb.on_orch(f'📌 {h[:8]}')
             self._save_state()
             self._auto_compact(current_id, agent)
-            # Check if we must return to sender
             if return_stack and return_stack[-1][0] != current_id:
                 sender_id = return_stack.pop()
                 sender_name = self.agent_defs.get(sender_id, defn).name
@@ -261,7 +263,6 @@ class SwarmSession:
                     self._chat('summary', f'{defn.name}: {signal.summary}')
                     break
             else:
-                # Nudge: ask agent to comply with protocol
                 nudged = False
                 for _nudge in range(MAX_SIGNAL_NUDGES):
                     self.cb.on_orch(f'⚠ No signal from {defn.name}, nudging...')
@@ -308,7 +309,6 @@ class SwarmSession:
                         self.cb.on_summary(f'{defn.name}: {signal.summary}')
                         self._chat('summary', f'{defn.name}: {signal.summary}')
                         break
-        # Release all agents used in this chain
         self._busy -= used_agents
 
     def _spawn_agent(self, nid, defn, all_defs):
@@ -325,30 +325,26 @@ class SwarmSession:
         self.cb.on_agent(defn.name, 'ready', '')
 
     def _resolve_header_ids(self, node_id: str) -> list[str]:
-        """Get header_ids for a node, falling back to flow defaults then system default."""
         node = next((n for n in self.flow.nodes if n.agent_id == node_id), None)
         if node and node.header_ids:
             return node.header_ids
         if self._flow_def and self._flow_def.default_header_ids:
             return self._flow_def.default_header_ids
-        return [hmod.DEFAULT_PROTOCOL_ID]
+        return [DEFAULT_PROTOCOL_ID]
 
     def _compose_persona(self, nid, defn, agent_list):
-        """Compose persona using headers system with fallback."""
         hids = self._resolve_header_ids(nid)
         ctx = {'agent_name': defn.name, 'agent_persona': defn.persona, 'agent_list': agent_list}
-        composed = hmod.compose(hids, ctx)
+        composed = header_service.compose(hids, ctx)
         if composed.strip():
             return composed
-        # Fallback to hardcoded if headers not found
         return defn.persona + '\n\n' + PROTOCOL_INSTRUCTIONS.format(agent_list=agent_list)
 
     def _handoff_msg(self, sender_name, signal):
-        import headers as hmod
         ctx = signal.clean_response
         if len(ctx) > 1500:
             ctx = '...\n' + ctx[-1500:]
-        h = hmod.get_default('handoff')
+        h = header_service.get_default('handoff')
         if h:
             return h.content.format_map({
                 'agent_name': sender_name,
@@ -362,7 +358,7 @@ class SwarmSession:
 
     def _send_with_retry(self, agent, message):
         if hasattr(agent, '_persona') and not agent._persona_sent:
-            wrapper = hmod.get_default('wrapper')
+            wrapper = header_service.get_default('wrapper')
             if wrapper:
                 message = wrapper.content.format_map({
                     'agent_persona': agent._persona,
@@ -382,7 +378,7 @@ class SwarmSession:
                     self._spawn_agent(agent_id, defn, list(self.agent_defs.values()))
                     agent = self.agents[agent_id]
                     if hasattr(agent, '_persona'):
-                        wrapper = hmod.get_default('wrapper')
+                        wrapper = header_service.get_default('wrapper')
                         if wrapper:
                             message = wrapper.content.format_map({
                                 'agent_persona': agent._persona,

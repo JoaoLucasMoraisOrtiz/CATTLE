@@ -1,74 +1,23 @@
-"""Flow graph — directed edges between agents + node positions.
-
-Supports multiple named flows (FlowDef) stored in flows.json,
-with automatic migration from the legacy single flow.json.
-"""
+"""Flow service — CRUD + persistence for multi-flow system."""
 
 import json
 import os
 import uuid
 import threading
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict
 from pathlib import Path
 
+from app.models.flow import Node, Edge, Flow, FlowDef
+
 _SWARM_DIR = Path.home() / '.kiro-swarm'
-FLOW_FILE = _SWARM_DIR / 'flow.json'       # legacy
-FLOWS_FILE = _SWARM_DIR / 'flows.json'     # multi-flow
+FLOW_FILE = _SWARM_DIR / 'flow.json'
+FLOWS_FILE = _SWARM_DIR / 'flows.json'
 _lock = threading.Lock()
 
 
-@dataclass
-class Node:
-    agent_id: str
-    x: float = 0
-    y: float = 0
-    header_ids: list[str] = field(default_factory=list)
-
-
-@dataclass
-class Edge:
-    src: str
-    dst: str
-    returns: bool = False  # if True, response must come back to src
-
-
-@dataclass
-class Flow:
-    nodes: list[Node] = field(default_factory=list)
-    edges: list[Edge] = field(default_factory=list)
-    start_node: str = ''
-
-    def targets_for(self, agent_id: str) -> list[str]:
-        return [e.dst for e in self.edges if e.src == agent_id]
-
-    def edge_returns(self, src: str, dst: str) -> bool:
-        return any(e.src == src and e.dst == dst and e.returns for e in self.edges)
-
-    def start_agent(self) -> str | None:
-        if self.start_node:
-            return self.start_node
-        incoming = {e.dst for e in self.edges}
-        for n in self.nodes:
-            if n.agent_id not in incoming:
-                return n.agent_id
-        return self.nodes[0].agent_id if self.nodes else None
-
-
-@dataclass
-class FlowDef:
-    """Named flow definition — uses composition (contains a Flow)."""
-    id: str
-    name: str
-    flow: Flow = field(default_factory=Flow)
-    default_header_ids: list[str] = field(default_factory=list)
-
-
-# --------------- serialization helpers ---------------
-
 def _flow_to_dict(fd: FlowDef) -> dict:
     return {
-        'id': fd.id,
-        'name': fd.name,
+        'id': fd.id, 'name': fd.name,
         'nodes': [asdict(n) for n in fd.flow.nodes],
         'edges': [asdict(e) for e in fd.flow.edges],
         'start_node': fd.flow.start_node,
@@ -89,16 +38,12 @@ def _dict_to_flowdef(d: dict) -> FlowDef:
     )
 
 
-# --------------- migration ---------------
-
 def migrate() -> list[FlowDef]:
-    """Convert legacy flow.json → flows.json. Returns migrated list."""
     if not FLOW_FILE.exists():
         return []
     data = json.loads(FLOW_FILE.read_text())
     fd = FlowDef(
-        id='default',
-        name='Default',
+        id='default', name='Default',
         flow=Flow(
             nodes=[Node(**n) for n in data.get('nodes', [])],
             edges=[Edge(**e) for e in data.get('edges', [])],
@@ -110,13 +55,10 @@ def migrate() -> list[FlowDef]:
     return flows
 
 
-# --------------- CRUD ---------------
-
 def load_all() -> list[FlowDef]:
     if not FLOWS_FILE.exists():
         return migrate()
-    data = json.loads(FLOWS_FILE.read_text())
-    return [_dict_to_flowdef(d) for d in data]
+    return [_dict_to_flowdef(d) for d in json.loads(FLOWS_FILE.read_text())]
 
 
 def save_all(flows: list[FlowDef]) -> None:
@@ -161,16 +103,12 @@ def remove(flow_id: str) -> None:
     save_all(filtered)
 
 
-# --------------- backward compat ---------------
-
 def load() -> Flow:
-    """Load first available flow (backward compatible)."""
     flows = load_all()
     return flows[0].flow if flows else Flow()
 
 
 def save(flow: Flow) -> None:
-    """Save to first FlowDef (backward compatible)."""
     flows = load_all()
     if flows:
         flows[0].flow = flow

@@ -10,22 +10,14 @@ from textual.widgets import (
 from textual.screen import ModalScreen
 from textual import on, work
 
-import registry
-from registry import AgentDef
-import flow as flowmod
+from app.models.agent import AgentDef
+from app.services import registry, flow_service
 
-
-# ── Agent Form Modal ──────────────────────────────────────────────────────
 
 class AgentFormScreen(ModalScreen[AgentDef | None]):
-    """Modal for creating/editing an agent."""
-
     CSS = """
     AgentFormScreen { align: center middle; }
-    #form-box {
-        width: 70; height: auto; max-height: 80%;
-        border: thick $accent; padding: 1 2; background: $surface;
-    }
+    #form-box { width: 70; height: auto; max-height: 80%; border: thick $accent; padding: 1 2; background: $surface; }
     #form-box Input, #form-box TextArea { margin-bottom: 1; }
     #form-buttons { height: 3; align: center middle; }
     """
@@ -69,8 +61,6 @@ class AgentFormScreen(ModalScreen[AgentDef | None]):
         self.dismiss(None)
 
 
-# ── Main App ──────────────────────────────────────────────────────────────
-
 class SwarmApp(App):
     CSS = """
     #main { height: 1fr; }
@@ -112,10 +102,7 @@ class SwarmApp(App):
                     yield Label("Flow:")
                     yield Select([], id="flow-select", prompt="Selecione um flow")
                     yield Label("Pergunta inicial:")
-                    yield Input(
-                        placeholder="Ex: Como podemos melhorar esse projeto?",
-                        id="run-input",
-                    )
+                    yield Input(placeholder="Ex: Como podemos melhorar esse projeto?", id="run-input")
                     yield Button("▶ Rodar Swarm", variant="primary", id="btn-run")
                     yield RichLog(id="run-log", wrap=True, markup=True)
         yield Footer()
@@ -129,10 +116,10 @@ class SwarmApp(App):
         lv.clear()
         for a in self.agents:
             lv.append(ListItem(Label(f"[{a.color}]● {a.name}[/] ({a.id})")))
-        # Populate flow select
-        flows = flowmod.load_all()
+        flows = flow_service.load_all()
         sel = self.query_one("#flow-select", Select)
         sel.set_options([(f.name, f.id) for f in flows])
+
     def _show_detail(self, agent: AgentDef) -> None:
         detail = self.query_one("#agent-detail", Static)
         detail.update(
@@ -148,8 +135,6 @@ class SwarmApp(App):
         if idx is not None and idx < len(self.agents):
             self.selected_id = self.agents[idx].id
             self._show_detail(self.agents[idx])
-
-    # ── CRUD ──────────────────────────────────────────────────────
 
     @on(Button.Pressed, "#btn-add")
     def action_add_agent(self) -> None:
@@ -188,8 +173,6 @@ class SwarmApp(App):
         self.query_one("#agent-detail", Static).update("Selecione um agente")
         self.notify("Agente removido")
 
-    # ── Run Swarm ─────────────────────────────────────────────────
-
     @on(Button.Pressed, "#btn-run")
     def action_run_swarm(self) -> None:
         question = self.query_one("#run-input", Input).value.strip()
@@ -205,13 +188,12 @@ class SwarmApp(App):
 
     @work(thread=True)
     def _run_swarm(self, question: str, flow_id: str | None = None) -> None:
-        """Run the swarm orchestrator in a background thread."""
         log = self.query_one("#run-log", RichLog)
         log.clear()
         log.write("[bold yellow]Starting swarm...[/]")
 
-        from orchestrator import run_swarm
-        from logger import Logger
+        from app.services.orchestrator import run_swarm
+        from app.utils.logger import Logger
 
         class TuiLogger(Logger):
             def __init__(self, rich_log: RichLog):

@@ -1,28 +1,19 @@
 """Agent registry — CRUD + JSON persistence."""
 
 import json
-from dataclasses import dataclass, field, asdict
+import os
+from dataclasses import asdict
 from pathlib import Path
 
+from app.models.agent import AgentDef
+
 REGISTRY_FILE = Path.home() / '.kiro-swarm' / 'agents.json'
-
-
-@dataclass
-class AgentDef:
-    id: str
-    name: str
-    persona: str
-    color: str = 'white'
-    model: str | None = None
-    workdir: str = '.'
-    mcps: dict = field(default_factory=dict)  # {"server-name": {"command":...,"args":...}}
 
 
 def load() -> list[AgentDef]:
     if not REGISTRY_FILE.exists():
         return []
-    data = json.loads(REGISTRY_FILE.read_text())
-    return [AgentDef(**a) for a in data]
+    return [AgentDef(**a) for a in json.loads(REGISTRY_FILE.read_text())]
 
 
 def save(agents: list[AgentDef]) -> None:
@@ -32,7 +23,7 @@ def save(agents: list[AgentDef]) -> None:
     with open(tmp, 'w', encoding='utf-8') as f:
         f.write(data)
         f.flush()
-        import os; os.fsync(f.fileno())
+        os.fsync(f.fileno())
     tmp.replace(REGISTRY_FILE)
 
 

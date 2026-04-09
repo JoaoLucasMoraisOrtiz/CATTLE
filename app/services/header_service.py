@@ -1,32 +1,13 @@
-"""Header templates — CRUD + JSON persistence + composition."""
+"""Header templates — CRUD + composition + persistence."""
 
-import json, os
-from dataclasses import dataclass, asdict
+import json
+import os
+from dataclasses import asdict
 from pathlib import Path
 
+from app.models.header import HeaderDef, DEFAULT_PROTOCOL_ID, DEFAULT_WRAPPER_ID, DEFAULT_HANDOFF_ID
+
 HEADERS_FILE = Path.home() / '.kiro-swarm' / 'headers.json'
-
-DEFAULT_PROTOCOL_ID = 'default-protocol'
-DEFAULT_WRAPPER_ID = 'default-wrapper'
-DEFAULT_HANDOFF_ID = 'default-handoff'
-
-HEADER_TYPES = ('protocol', 'wrapper', 'handoff')
-
-AVAILABLE_PLACEHOLDERS = {
-    'protocol': ['{agent_name}', '{agent_persona}', '{agent_list}'],
-    'wrapper': ['{agent_persona}', '{task}', '{agent_name}', '{agent_list}'],
-    'handoff': ['{agent_name}', '{task}', '{handoff_context}'],
-}
-
-
-@dataclass
-class HeaderDef:
-    id: str
-    name: str
-    content: str
-    type: str = 'protocol'  # 'protocol' | 'wrapper' | 'handoff'
-    is_default: bool = False
-    description: str = ''
 
 
 # ── Persistence ───────────────────────────────────────────────────────────
@@ -96,7 +77,6 @@ def set_default(header_id: str) -> list[HeaderDef]:
 # ── Composition ───────────────────────────────────────────────────────────
 
 def compose(header_ids: list[str], context_vars: dict[str, str] | None = None) -> str:
-    """Concatenate headers by id, resolving {placeholders} with context_vars."""
     headers = {h.id: h for h in load_all()}
     parts = []
     for hid in header_ids:
@@ -142,7 +122,6 @@ Contexto do trabalho anterior:
 
 
 def ensure_defaults() -> None:
-    """Create default headers if they don't exist."""
     headers = load_all()
     ids = {h.id for h in headers}
     changed = False

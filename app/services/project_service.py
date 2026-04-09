@@ -1,17 +1,12 @@
-"""Project registry — named projects with paths, stored in ~/.kiro-swarm/."""
+"""Project registry — CRUD + persistence."""
 
 import json
-from dataclasses import dataclass, asdict
+from dataclasses import asdict
 from pathlib import Path
 
+from app.models.project import Project
+
 PROJECTS_FILE = Path.home() / '.kiro-swarm' / 'projects.json'
-
-
-@dataclass
-class Project:
-    id: str
-    name: str
-    path: str
 
 
 def load() -> list[Project]:

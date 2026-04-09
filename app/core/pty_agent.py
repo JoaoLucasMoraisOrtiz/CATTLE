@@ -1,4 +1,4 @@
-"""PTY lifecycle — spawn kiro-cli, raw read/write, quit. Nothing else."""
+"""PTY lifecycle — spawn kiro-cli, raw read/write, quit."""
 
 import json
 import os
@@ -7,11 +7,10 @@ import tempfile
 import time
 import pexpect
 
-from config import HOME_ALLOWLIST
+from app.config import HOME_ALLOWLIST
 
 
 def make_clean_env(mcps: dict | None = None) -> tuple[dict, str]:
-    """Create temp HOME with allowlisted symlinks + agent-specific MCP config."""
     real_home = os.path.expanduser('~')
     tmp = tempfile.mkdtemp(prefix='kiro_agent_')
     for item in os.listdir(real_home):
@@ -19,7 +18,6 @@ def make_clean_env(mcps: dict | None = None) -> tuple[dict, str]:
             src = os.path.join(real_home, item)
             if os.path.exists(src):
                 os.symlink(src, os.path.join(tmp, item))
-    # Copy .kiro with agent-specific MCPs
     real_kiro = os.path.join(real_home, '.kiro')
     if os.path.exists(real_kiro):
         shutil.copytree(real_kiro, os.path.join(tmp, '.kiro'))
@@ -33,8 +31,6 @@ def make_clean_env(mcps: dict | None = None) -> tuple[dict, str]:
 
 
 class PtyProcess:
-    """Manages a single kiro-cli PTY process."""
-
     def __init__(self, workdir: str, model: str | None = None, mcps: dict | None = None):
         self.workdir = workdir
         self.model = model
@@ -66,7 +62,6 @@ class PtyProcess:
         return self.proc is not None and self.proc.isalive()
 
     def interrupt(self) -> None:
-        """Send Ctrl+C (SIGINT) to interrupt current generation."""
         if self.proc and self.proc.isalive():
             self.proc.sendintr()
 

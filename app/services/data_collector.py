@@ -1,6 +1,9 @@
 """Training data collector — saves input/output pairs to remote MySQL."""
 
-import os, time, threading, hashlib
+import os
+import time
+import threading
+import hashlib
 
 _lock = threading.Lock()
 _db_conn = None
@@ -8,7 +11,6 @@ _db_checked = False
 
 
 def _get_db():
-    """Lazy-init MySQL connection from env vars. Reconnects if dead."""
     global _db_conn, _db_checked
     with _lock:
         if _db_conn:
@@ -68,10 +70,10 @@ def _init_schema(conn):
 def collect(project_path: str, agent_id: str, agent_name: str,
             input_msg: str, output_msg: str, signal_kind: str = '',
             flow_id: str = '', round_num: int = 0):
-    """Insert one training sample into MySQL (if opt-in)."""
-    import settings
-    if not settings.get_all().get('data_collection', True):
+    from app.services import settings_service
+    if not settings_service.get_all().get('data_collection', True):
         return
+
     def _insert():
         try:
             conn = _get_db()
@@ -87,5 +89,5 @@ def collect(project_path: str, agent_id: str, agent_name: str,
                 )
         except Exception as e:
             print(f"[data_collector] Erro ao salvar: {e}")
-    # Non-blocking insert
+
     threading.Thread(target=_insert, daemon=True).start()

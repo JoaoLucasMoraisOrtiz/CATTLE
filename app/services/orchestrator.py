@@ -6,23 +6,21 @@ import sys
 import time
 from pathlib import Path
 
-import registry
-from registry import AgentDef
-from agent import Agent
-from logger import Logger
-from protocol import parse
-from flow import Flow, load as load_flow
-from god import GodAgent, build_summary, GodCommand
-from checkpoint import GitCheckpoint
-from config import (
+from app.models.agent import AgentDef
+from app.models.flow import Flow
+from app.models.header import DEFAULT_PROTOCOL_ID
+from app.core.agent import Agent
+from app.core.protocol import parse
+from app.core.god import GodAgent, build_summary, GodCommand
+from app.core.checkpoint import GitCheckpoint
+from app.core.swarm_state import SwarmState, save_swarm, load_swarm_state, resume_agent
+from app.config import (
     PROTOCOL_INSTRUCTIONS, GOD_PERSONA,
     MAX_HANDOFF_ROUNDS, MIN_RESPONSE_LEN, MAX_RETRIES,
     DEFAULT_PROTOCOL_HEADER_ID, MAX_SIGNAL_NUDGES, NUDGE_MESSAGE,
 )
-from swarm_state import SwarmState, save_swarm, load_swarm_state, resume_agent
-import flow as flowmod
-import headers as hmod
-import data_collector
+from app.utils.logger import Logger
+from app.services import registry, flow_service, header_service, data_collector
 
 
 def _build_agent_list_for(agent_id: str, agents: list[AgentDef], flow: Flow) -> str:
@@ -38,7 +36,7 @@ def _init_agent(defn: AgentDef, agent_list: str, workdir: str, log: Logger, head
     agent.start()
     hids = header_ids or [DEFAULT_PROTOCOL_HEADER_ID]
     ctx = {'agent_name': defn.name, 'agent_persona': defn.persona, 'agent_list': agent_list}
-    composed = hmod.compose(hids, ctx)
+    composed = header_service.compose(hids, ctx)
     if not composed.strip():
         composed = defn.persona + '\n\n' + PROTOCOL_INSTRUCTIONS.format(agent_list=agent_list)
     persona = composed + '\n\nResponda apenas: "Entendido." Nada mais.'
@@ -63,7 +61,6 @@ def _send_with_retry(agent: Agent, message: str, log: Logger) -> str:
 
 
 def _resolve_header_ids(nid: str, flow, flow_def) -> list[str]:
-    """Get header_ids for a node, falling back to flow defaults then system default."""
     node = next((n for n in flow.nodes if n.agent_id == nid), None)
     if node and node.header_ids:
         return node.header_ids
@@ -77,16 +74,15 @@ def run_swarm(question: str, workdir: str = '.', flow: Flow | None = None, log: 
         log = Logger()
     flow_def = None
     if flow is None:
-        fd = flowmod.get(flow_id) if flow_id else None
+        fd = flow_service.get(flow_id) if flow_id else None
         flow_def = fd
-        flow = fd.flow if fd else load_flow()
+        flow = fd.flow if fd else flow_service.load()
 
     workdir = os.path.abspath(workdir)
     agent_defs = registry.load()
     agent_map = {a.id: a for a in agent_defs}
-    hmod.ensure_defaults()
+    header_service.ensure_defaults()
 
-    # ── Resume from saved state? ──────────────────────────────
     saved = load_swarm_state(workdir) if resume else None
     if saved:
         log.orch(f'Resuming from round {saved.round_num}, agent: {saved.current_agent_id}')
@@ -99,7 +95,6 @@ def run_swarm(question: str, workdir: str = '.', flow: Flow | None = None, log: 
     log.orch(f'Workdir: {workdir}')
     log.orch(f'Flow: {len(flow.nodes)} nodes, {len(flow.edges)} edges, start: {start_id}')
 
-    # Git checkpoint
     git = GitCheckpoint(workdir)
     git_enabled = git.init()
     if git_enabled:
@@ -111,16 +106,14 @@ def run_swarm(question: str, workdir: str = '.', flow: Flow | None = None, log: 
     god: GodAgent | None = None
     errors: list[str] = []
     agent_call_history: list[str] = []
-    commit_hashes: dict[int, str] = {}  # round → commit hash
+    commit_hashes: dict[int, str] = {}
 
     try:
-        # GOD (async watchdog)
         log.orch('Spawning GOD_AGENT...')
         god = GodAgent(workdir)
         god.start(GOD_PERSONA)
         log.agent('GOD', 'ready', 'Watchdog async')
 
-        # Spawn flow agents
         for nid in flow_ids:
             defn = agent_map.get(nid)
             if not defn:
@@ -143,11 +136,9 @@ def run_swarm(question: str, workdir: str = '.', flow: Flow | None = None, log: 
         while round_num < MAX_HANDOFF_ROUNDS:
             round_num += 1
 
-            # ── GOD commands (non-blocking) ───────────────────────
             cmd = god.poll_command() if god else None
             while cmd:
                 log.agent('GOD', '→ action', f'@{cmd.action}({cmd.target}): {cmd.payload[:60]}' if cmd.payload else f'@{cmd.action}({cmd.target})')
-
                 if cmd.action == 'restart' and cmd.target in live_agents:
                     log.orch(f'👁 GOD: restarting {cmd.target}')
                     live_agents[cmd.target].quit()
@@ -155,26 +146,21 @@ def run_swarm(question: str, workdir: str = '.', flow: Flow | None = None, log: 
                     agent_list = _build_agent_list_for(cmd.target, agent_defs, flow)
                     hids = _resolve_header_ids(cmd.target, flow, flow_def)
                     live_agents[cmd.target] = _init_agent(defn, agent_list, workdir, log, hids)
-
                 elif cmd.action == 'compact' and cmd.target in live_agents:
                     log.orch(f'👁 GOD: compacting {cmd.target}')
                     compact_msg = f'/compact {cmd.payload}' if cmd.payload else '/compact'
                     live_agents[cmd.target]._pty.write(compact_msg + '\r')
                     live_agents[cmd.target]._read_until_prompt(timeout=60)
-
                 elif cmd.action == 'stop' and cmd.target in live_agents:
                     log.orch(f'👁 GOD: stopping {cmd.target}')
                     live_agents[cmd.target].quit()
                     del live_agents[cmd.target]
-
                 cmd = god.poll_command()
 
-            # ── Run the round ─────────────────────────────────────
             current = live_agents.get(current_id)
             defn = agent_map.get(current_id)
             if not current or not defn:
                 log.error(f'Agent "{current_id}" not available')
-                # Rollback last commit if agent was killed
                 if git_enabled and commit_hashes:
                     last = max(commit_hashes.keys())
                     log.orch(f'Rolling back to round {last}')
@@ -192,14 +178,12 @@ def run_swarm(question: str, workdir: str = '.', flow: Flow | None = None, log: 
             data_collector.collect(workdir, current_id, defn.name, message, signal.clean_response, signal.kind)
             log.record(round_num, defn.name, signal.clean_response)
 
-            # ── Git checkpoint ────────────────────────────────────
             if git_enabled:
                 h = git.commit(round_num, defn.name)
                 if h:
                     commit_hashes[round_num] = h
                     log.orch(f'📌 Checkpoint: {h[:8]}')
 
-            # ── Save swarm state ──────────────────────────────────
             try:
                 next_id = signal.target if signal.kind == 'handoff' else current_id
                 next_msg = ''
@@ -210,21 +194,16 @@ def run_swarm(question: str, workdir: str = '.', flow: Flow | None = None, log: 
                         f"Contexto do handoff: {signal.summary}"
                     )
                 state = SwarmState(
-                    round_num=round_num,
-                    current_agent_id=next_id,
-                    pending_message=next_msg,
-                    agent_ids=list(live_agents.keys()),
-                    commit_hashes=commit_hashes,
-                    project_dir=workdir,
+                    round_num=round_num, current_agent_id=next_id,
+                    pending_message=next_msg, agent_ids=list(live_agents.keys()),
+                    commit_hashes=commit_hashes, project_dir=workdir,
                 )
                 save_swarm(workdir, state, live_agents)
                 log.orch(f'💾 State saved (round {round_num})')
             except Exception as e:
                 log.error(f'Save failed: {e}')
 
-            # ── Submit to GOD (non-blocking) ──────────────────────
             if god:
-                # Count consecutive calls to detect loops
                 recent = agent_call_history[-5:]
                 loop_count = sum(1 for x in recent if x == current_id)
                 summary = build_summary(
@@ -233,7 +212,6 @@ def run_swarm(question: str, workdir: str = '.', flow: Flow | None = None, log: 
                 )
                 god.submit_review(round_num, summary)
 
-            # ── Route ─────────────────────────────────────────────
             if signal.kind == 'handoff':
                 allowed = flow.targets_for(current_id)
                 if signal.target not in allowed:
@@ -246,12 +224,10 @@ def run_swarm(question: str, workdir: str = '.', flow: Flow | None = None, log: 
                     f"Contexto do handoff: {signal.summary}"
                 )
                 current_id = signal.target
-
             elif signal.kind == 'done':
                 log.orch(f'Done! {defn.name}: {signal.summary}')
                 break
             else:
-                # Nudge: ask agent to comply with protocol
                 nudged = False
                 for _nudge in range(MAX_SIGNAL_NUDGES):
                     log.orch(f'⚠ No signal from {defn.name}, nudging...')
@@ -265,7 +241,6 @@ def run_swarm(question: str, workdir: str = '.', flow: Flow | None = None, log: 
                 if not nudged:
                     log.orch(f'No signal from {defn.name} after nudge, treating as done')
                     break
-                # Re-enter routing with the new signal
                 if signal.kind == 'handoff':
                     allowed = flow.targets_for(current_id)
                     if signal.target not in allowed:

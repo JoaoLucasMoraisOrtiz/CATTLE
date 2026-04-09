@@ -1,0 +1,50 @@
+/* ReDo! — Main Stylesheet */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+body { font-family: 'Inter', sans-serif; }
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #0f0f13; }
+::-webkit-scrollbar-thumb { background: #2a2a35; border-radius: 3px; }
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(124,92,252,.4); }
+  50% { box-shadow: 0 0 12px 4px rgba(124,92,252,.15); }
+}
+.running { animation: pulse-glow 2s infinite; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.log-line { animation: fadeIn .15s ease; }
+
+.modal-bg { background: rgba(0,0,0,.6); backdrop-filter: blur(4px); }
+
+/* Drawflow overrides for dark theme */
+#drawflow { background: #0a0a0f; background-image: radial-gradient(#1a1a25 1px, transparent 1px); background-size: 20px 20px; }
+.drawflow .drawflow-node { background: #16161d !important; border: 1px solid #2a2a35; border-radius: 12px; color: #e5e5e5; min-width: 160px; padding: 0; box-shadow: 0 4px 12px rgba(0,0,0,.3); }
+.drawflow .drawflow-node.selected { border-color: #7c5cfc !important; background: #1c1c28 !important; box-shadow: 0 0 0 2px rgba(124,92,252,.3); }
+.drawflow .drawflow-node .input, .drawflow .drawflow-node .output { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #2a2a35; background: #0f0f13; }
+.drawflow .drawflow-node .output { background: #7c5cfc; border-color: #7c5cfc; }
+.drawflow .connection .main-path { stroke: #7c5cfc; stroke-width: 2; fill: none; marker-end: url(#arrowhead); cursor: pointer; }
+.drawflow .connection:hover .main-path { stroke-width: 5; }
+.drawflow .connection.return-edge .main-path { stroke: #f59e0b !important; stroke-dasharray: 8 4 !important; }
+.drawflow .drawflow-delete { background: #ef4444; border: none; color: white; border-radius: 50%; }
+.drawflow .point { width: 10px; height: 10px; background: #7c5cfc; border: 2px solid #9b7fff; border-radius: 50%; cursor: move; }
+
+.node-inner { padding: 12px 16px; }
+.node-inner .node-title { font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 6px; }
+.node-inner .node-sub { font-size: 10px; color: #6b6b80; margin-top: 4px; }
+
+#scroll-to-bottom {
+  position: absolute; bottom: 16px; right: 20px; z-index: 10;
+  width: 36px; height: 36px; border-radius: 9999px; border: none;
+  background: #7c5cfc; color: #fff; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 12px rgba(0,0,0,.4);
+  opacity: 0; pointer-events: none;
+  transition: opacity .2s, transform .2s; transform: translateY(8px);
+}
+#scroll-to-bottom.visible { opacity: 1; pointer-events: auto; transform: translateY(0); }
+#scroll-to-bottom:hover { background: #9b7fff; }

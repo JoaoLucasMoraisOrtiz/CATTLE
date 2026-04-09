@@ -2,14 +2,14 @@
 
 import re
 import time
-from pty_agent import PtyProcess
-from output_parser import strip_ansi, is_processing, is_prompt, clean_response, PROMPT_RE
-from config import RESPONSE_TIMEOUT, STARTUP_TIMEOUT, PROCESSING_DETECT_TIMEOUT, PROMPT_TAIL_CHARS
+from app.core.pty_agent import PtyProcess
+from app.core.output_parser import strip_ansi, is_processing, clean_response, PROMPT_RE
+from app.config import RESPONSE_TIMEOUT, STARTUP_TIMEOUT, PROCESSING_DETECT_TIMEOUT, PROMPT_TAIL_CHARS
 
 SPINNER_RE = re.compile(r'^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]')
 CHUNK_THROTTLE = 0.5
 MAX_LOG = 10
-MAX_SILENCE = 3  # 3 x 5s = 15s
+MAX_SILENCE = 3
 
 
 class Agent:
@@ -43,11 +43,10 @@ class Agent:
         self._log_entry('send', message)
         self._chunk_buf = ''
         self._pty.write(message)
-        # Single read loop: skip echo, detect processing, read until prompt
         buf = []
         tail_carry = ''
         silence = 0
-        streaming = False  # start emitting after we see processing keywords
+        streaming = False
         echo_deadline = time.time() + PROCESSING_DETECT_TIMEOUT
         deadline = time.time() + RESPONSE_TIMEOUT
         while time.time() < deadline:
@@ -65,17 +64,14 @@ class Agent:
                 continue
             silence = 0
             clean = strip_ansi(chunk)
-            # Detect processing start
             if not streaming and is_processing(clean):
                 streaming = True
                 buf.clear()
                 tail_carry = ''
             if not streaming:
-                # Still in echo phase — check for echo prompt and skip it
                 if PROMPT_RE.search(clean[-PROMPT_TAIL_CHARS:]):
                     tail_carry = ''
                 continue
-            # Streaming phase — accumulate and check for final prompt
             buf.append(chunk)
             self._emit_chunk(clean)
             combined = tail_carry + clean

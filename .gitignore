@@ -1,5 +1,4 @@
 __pycache__/
 *.pyc
-.kiro-swarm/
-.kiro/
 .env
+.kiro-swarm/

@@ -4,16 +4,15 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-# ANSI colors
 _R = '\033[0m'
 _B = '\033[1m'
 _DIM = '\033[2m'
 COLORS = {
-    'orch':      '\033[93m',  # yellow
-    'analyst':   '\033[94m',  # blue
-    'architect': '\033[92m',  # green
-    'error':     '\033[91m',  # red
-    'ts':        '\033[96m',  # cyan
+    'orch':      '\033[93m',
+    'analyst':   '\033[94m',
+    'architect': '\033[92m',
+    'error':     '\033[91m',
+    'ts':        '\033[96m',
 }
 
 
@@ -26,9 +25,7 @@ class Logger:
         self.transcript: list[dict] = []
 
     def orch(self, msg: str) -> None:
-        c = COLORS['ts']
-        o = COLORS['orch']
-        print(f'{c}[{_ts()}]{_R} {o}[ORCH]{_R} {msg}')
+        print(f'{COLORS["ts"]}[{_ts()}]{_R} {COLORS["orch"]}[ORCH]{_R} {msg}')
 
     def agent(self, name: str, event: str, text: str) -> None:
         color = COLORS.get(name.lower(), COLORS['orch'])

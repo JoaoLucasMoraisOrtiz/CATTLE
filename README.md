@@ -1,52 +1,59 @@
 # ReDo! MVP
 
-Duas instâncias do `kiro-cli` conversando entre si sobre melhorias de um projeto.
+Sistema de orquestração multi-agente que coordena múltiplas instâncias do `kiro-cli` via PTYs isolados.
 
 ## Requisitos
 
 - `kiro-cli` instalado e autenticado
 - Python 3.10+
-- `pexpect` (`pip install pexpect`)
+- `pip install -r requirements.txt`
 
 ## Uso
 
 ```bash
 cd kiro-swarm
 chmod +x run.sh
-./run.sh /caminho/do/projeto
+
+# Web UI (porta 8420)
+./run.sh web
+
+# TUI (Textual)
+./run.sh tui
+
+# CLI batch
+./run.sh run /caminho/do/projeto "pergunta"
 ```
 
-Ou diretamente:
+## Arquitetura
 
-```bash
-python3 orchestrator.py /caminho/do/projeto
+```
+app/
+├── main.py              # FastAPI entry point
+├── config.py            # Constantes e configuração
+├── models/              # Dataclasses e schemas Pydantic
+├── controllers/         # Rotas HTTP (thin layer)
+├── services/            # Lógica de negócio
+├── core/                # Engine (PTY, agentes, protocolo)
+├── tui/                 # Interface Textual
+└── utils/               # Logger e utilitários
+
+static/
+├── index.html           # HTML shell
+├── css/app.css          # Estilos
+└── js/                  # Módulos JS (agents, flow, headers, run, etc.)
 ```
 
 ## O que acontece
 
-1. Dois agentes kiro-cli são iniciados em PTYs separados (sem MCPs, startup rápido)
-2. **Analyst** examina o projeto e lista problemas/oportunidades
-3. **Architect** recebe a análise e propõe soluções priorizadas
-4. **Analyst** revisa as propostas e produz um plano final
-5. Transcript salvo em `<projeto>/.kiro-swarm/transcript_*.json`
+1. Agentes kiro-cli são iniciados em PTYs isolados (sem MCPs, startup rápido)
+2. Comunicação via protocolo `@handoff(agent_id)` / `@done`
+3. Grafo de fluxo dirigido define quais agentes podem se comunicar
+4. GOD_AGENT monitora saúde técnica do swarm
+5. Git checkpoints a cada round, rollback em caso de erro
+6. Transcript salvo em `<projeto>/.kiro-swarm/`
 
 ## Observabilidade
 
-- Output colorido: azul = Analyst, verde = Architect, amarelo = Orchestrator
-- Timestamps em cada evento
-- Cada prompt enviado e resposta recebida é exibido no terminal
-- Transcript completo salvo em JSON
-
-## Detalhes técnicos
-
-- Cada agente roda num PTY com HOME isolado (symlinks do HOME real, mas sem MCPs)
-- Submit via `\r` (a TUI do kiro espera carriage return, não newline)
-- Detecção de resposta: espera "Thinking..." iniciar, depois idle timeout de 5s
-- Respostas limpas: remove spinners, ANSI codes, timing info, prompts
-
-## Tuning
-
-No `pty_agent.py`:
-- `idle_timeout` em `_read_thinking_then_idle`: segundos de silêncio = resposta completa (default: 5s)
-- `RESPONSE_TIMEOUT`: timeout máximo para uma resposta (default: 180s)
-- Aumente o idle_timeout se respostas estiverem sendo cortadas
+- Web: SSE streaming em tempo real, grid de agentes, chat por agente
+- TUI: Output colorido com CRUD de agentes
+- CLI: Logs coloridos no terminal + transcript JSON

@@ -1,17 +1,19 @@
-"""GOD_AGENT — async technical watchdog (not quality judge)."""
+"""GOD_AGENT — async technical watchdog."""
 
 import re
 import queue
 import threading
 from dataclasses import dataclass
-from agent import Agent
+from app.core.agent import Agent
+
 
 @dataclass
 class GodCommand:
-    action: str      # continue, restart, compact, stop
+    action: str
     target: str
     payload: str
     round_num: int = 0
+
 
 _CMD_RE = re.compile(
     r'@(continue|restart|compact|stop)'
@@ -19,6 +21,7 @@ _CMD_RE = re.compile(
     r'(?:\s*:\s*(.+))?',
     re.DOTALL
 )
+
 
 def parse_command(text: str) -> GodCommand:
     tail = '\n'.join(text.strip().split('\n')[-10:])
@@ -42,8 +45,6 @@ def build_summary(round_num, agent_name, signal_kind, signal_target, active_agen
 
 
 class GodAgent:
-    """Async technical watchdog. Reviews in background, commands via queue."""
-
     def __init__(self, workdir: str, model: str | None = None):
         self._agent: Agent | None = None
         self._workdir = workdir
