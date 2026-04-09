@@ -54,8 +54,9 @@
     "architecture": {
       "state_dir": "/tmp/kiro-env-{hash(project_path)}/",
       "ring_buffer": "500 linhas por processo, stdout+stderr intercalados com prefixo [OUT]/[ERR]",
-      "process_tracking": "Dict em memória {name → {proc: Popen, buffer: deque, start_time}}",
-      "cleanup": "Ao receber shutdown (stdin EOF), mata todos os processos gerenciados"
+      "process_tracking": "Dict em memória protegido por threading.Lock {name → {proc: Popen, buffer: deque, start_time}}",
+      "pid_persistence": "state_dir/processes.json — mapa {name: {pid, command, start_time}}. Atualizado a cada env_run/env_stop. No startup, reconcilia com PIDs vivos para detectar zombies.",
+      "cleanup": "Ao receber shutdown (stdin EOF), mata todos os processos gerenciados e limpa processes.json"
     }
   },
 
@@ -65,13 +66,15 @@
       "title": "Criar app/core/env_mcp_server.py — MCP server standalone",
       "severity": "critical",
       "file": "app/core/env_mcp_server.py",
-      "description": "Script Python standalone que implementa MCP protocol (JSON-RPC over stdio). Expõe 5 tools: env_run, env_status, env_logs, env_stop, env_input. Gerencia processos via subprocess.Popen com threads de leitura para capturar output em ring buffers.",
+      "description": "Script Python standalone usando SDK 'mcp' do PyPI (não implementar JSON-RPC from scratch). Expõe 5 tools: env_run, env_status, env_logs, env_stop, env_input. Gerencia processos via subprocess.Popen com threads de leitura para capturar output em ring buffers.",
       "implementation": {
-        "protocol": "MCP stdio — lê JSON-RPC de stdin, escreve respostas em stdout. Mensagens: initialize, tools/list, tools/call.",
-        "process_manager": "Classe ProcessManager com dict de processos. Cada processo tem: Popen, deque(maxlen=500) para output, thread daemon de leitura, start_time.",
+        "sdk": "Usar pacote 'mcp' do PyPI (pip install mcp). Usar FastMCP ou Server class do SDK para registrar tools via decorators. Adicionar 'mcp>=1.0' ao requirements.txt.",
+        "process_manager": "Classe ProcessManager com dict de processos protegido por threading.Lock para thread safety (múltiplas tools podem ser chamadas concorrentemente pelo kiro-cli). Cada processo tem: Popen, deque(maxlen=500) para output, thread daemon de leitura, start_time.",
+        "thread_safety": "threading.Lock em todas as operações de leitura/escrita do dict de processos. Lock granular: adquirir ao modificar/ler o dict, liberar antes de operações bloqueantes (Popen, kill).",
         "reader_thread": "Thread daemon por processo que faz readline() em loop no stdout/stderr (merged via Popen(stderr=STDOUT)) e appenda no deque.",
-        "cleanup": "atexit.register + signal handler para SIGTERM — mata todos os processos filhos.",
-        "standalone": "if __name__ == '__main__': com argparse para --state-dir (usado para lock file, evitar múltiplas instâncias por projeto)."
+        "pid_persistence": "Ao iniciar processo, salvar {name: pid, command, start_time} em state_dir/processes.json. Ao parar, remover. No startup do MCP server, ler processes.json e verificar quais PIDs ainda existem (os.kill(pid, 0)) — processos órfãos são registrados como 'zombie' no status e podem ser parados via env_stop.",
+        "cleanup": "atexit.register + signal handler para SIGTERM — mata todos os processos filhos e limpa processes.json.",
+        "standalone": "if __name__ == '__main__': com argparse para --state-dir (usado para lock file e processes.json)."
       },
       "risk": "Baixo — módulo isolado, sem dependências do swarm. Testável independentemente.",
       "priority": 1
@@ -102,19 +105,16 @@
     },
     {
       "id": "E3",
-      "title": "Propagar workdir para make_clean_env nos callers",
+      "title": "Propagar workdir para make_clean_env no único caller direto",
       "severity": "high",
       "file": "app/core/pty_agent.py",
-      "description": "PtyProcess.spawn() chama make_clean_env(self.mcps). Precisa passar self.workdir também. Ajustar a assinatura e os callers.",
-      "callers": [
-        "app/core/pty_agent.py:PtyProcess.spawn() — já tem self.workdir",
-        "app/core/swarm_state.py:resume_agent() — já tem workdir"
-      ],
+      "lines": "42",
+      "description": "PtyProcess.spawn() (linha 42) é o ÚNICO caller direto de make_clean_env. Ajustar a chamada para passar self.workdir. Callers indiretos (Agent.start(), resume_agent) já possuem workdir e o propagam via PtyProcess — nenhuma mudança necessária neles.",
       "fix": {
-        "action": "Mudar make_clean_env(mcps) para make_clean_env(mcps, workdir). Em PtyProcess.spawn(), passar self.workdir. Em swarm_state.resume_agent(), passar workdir.",
+        "action": "Mudar make_clean_env(mcps) para make_clean_env(mcps, workdir=None). Na linha 42 de PtyProcess.spawn(), passar self.workdir. Nenhum outro arquivo precisa ser alterado.",
         "backward_compat": "workdir tem default None. Se None, não injeta env-manager (fallback seguro)."
       },
-      "risk": "Baixo — mudança de assinatura com default, callers existentes continuam funcionando.",
+      "risk": "Baixo — mudança de assinatura com default, caller único.",
       "priority": 3
     },
     {
@@ -149,9 +149,9 @@
   ],
 
   "verification": {
-    "E1": "python3 app/core/env_mcp_server.py --state-dir /tmp/test-env < test_mcp_input.json deve responder com tools/list contendo 5 tools.",
+    "E1": "python3 app/core/env_mcp_server.py --state-dir /tmp/test-env < test_mcp_input.json deve responder com tools/list contendo 5 tools. Verificar que 'import mcp' funciona (SDK instalado). Verificar processes.json criado no state_dir após env_run.",
     "E2": "Após spawn de agente, cat do mcp.json no tmp_home deve conter 'env-manager' com path correto.",
-    "E3": "grep 'make_clean_env' em pty_agent.py e swarm_state.py — todos passam workdir.",
+    "E3": "grep 'make_clean_env' em pty_agent.py — deve ter exatamente 2 ocorrências: definição e chamada em spawn() com workdir. Nenhuma ocorrência em swarm_state.py.",
     "E4": "grep 'ENV_MCP' config.py deve retornar 3 constantes.",
     "E5": "Após session.close(), ls /tmp/kiro-env-* não deve retornar nada."
   },
