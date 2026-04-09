@@ -170,11 +170,11 @@ async def session_event_stream_legacy():
 
 
 def _find_active_state(project_id: str | None) -> SessionState | None:
-    """Find session by project_id, or return first active session for backward compat."""
+    """Find session by project_id, or return first session with events queue."""
     if project_id:
         return _get_state(project_id)
     with _sessions_lock:
         for s in _sessions.values():
-            if s.session and s.session.alive:
+            if s.events:
                 return s
     return None
