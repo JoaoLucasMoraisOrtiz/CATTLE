@@ -407,6 +407,12 @@ function handleSSE(type, data) {
     }
   } else if (type === 'summary') {
     addChatBubble('summary', data.text);
+    // Show done floating card
+    const parts = (data.text || '').match(/^(.+?):\s*(.*)/s);
+    const card = document.getElementById('done-card');
+    document.getElementById('done-card-agent').textContent = parts ? parts[1] : 'Agente';
+    document.getElementById('done-card-msg').textContent = parts ? parts[2] : data.text;
+    card.classList.remove('hidden');
     setStatus('Session open');
   } else if (type === 'error') {
     appendLog(`<span class="text-muted">${t}</span> <span class="text-red-400">[ERROR]</span> ${escHtml(data.msg)}`);

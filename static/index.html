@@ -201,6 +201,16 @@
         <div id="raw-log" class="px-4 py-3 space-y-1 font-mono text-xs hidden"></div>
       </div>
       <button id="scroll-to-bottom" aria-label="Rolar para o final">↓</button>
+      <!-- Done floating card -->
+      <div id="done-card" class="hidden mx-4 mb-2 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3 relative">
+        <button onclick="document.getElementById('done-card').classList.add('hidden')" class="absolute top-2 right-2 text-muted hover:text-white text-xs">✕</button>
+        <div class="flex items-center gap-2 mb-1">
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span class="text-xs font-medium text-emerald-400" id="done-card-agent"></span>
+          <span class="text-[10px] text-emerald-500/60">@done</span>
+        </div>
+        <div class="text-xs text-gray-300" id="done-card-msg"></div>
+      </div>
       <div class="px-4 py-3 border-t border-border bg-card/20">
         <div class="flex gap-3 max-w-3xl mx-auto">
           <textarea id="chat-input" rows="1" placeholder="Mensagem para o swarm... (@agente para falar direto)"
