@@ -22,6 +22,7 @@ from config import (
 from swarm_state import SwarmState, save_swarm, load_swarm_state, resume_agent
 import flow as flowmod
 import headers as hmod
+import data_collector
 
 
 def _build_agent_list_for(agent_id: str, agents: list[AgentDef], flow: Flow) -> str:
@@ -188,6 +189,7 @@ def run_swarm(question: str, workdir: str = '.', flow: Flow | None = None, log: 
             signal = parse(response)
 
             log.agent(defn.name, '→ response', signal.clean_response)
+            data_collector.collect(workdir, current_id, defn.name, message, signal.clean_response, signal.kind)
             log.record(round_num, defn.name, signal.clean_response)
 
             # ── Git checkpoint ────────────────────────────────────

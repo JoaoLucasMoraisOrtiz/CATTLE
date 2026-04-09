@@ -11,6 +11,7 @@ from swarm_state import save_swarm, SwarmState, save_agent_session, append_chat_
 from config import PROTOCOL_INSTRUCTIONS, MAX_HANDOFF_ROUNDS, MIN_RESPONSE_LEN, MAX_RETRIES
 import flow as flowmod
 import headers as hmod
+import data_collector
 
 COMPACT_THRESHOLD = 70
 CONTEXT_RE = re.compile(r'(\d+)%.*?!>')
@@ -176,6 +177,7 @@ class SwarmSession:
             except Exception as e:
                 self.cb.on_error(f'{defn.name}: {e}'); self.cb.on_done(); return
             signal = parse(response)
+            data_collector.collect(self.project_path, match, defn.name, message, signal.clean_response, signal.kind)
             self.cb.on_agent(defn.name, '→ response', signal.clean_response)
             self._chat('agent', signal.clean_response, defn.name)
             self._save_state()
@@ -219,6 +221,7 @@ class SwarmSession:
             except Exception as e: self.cb.on_error(f'{defn.name}: {e}'); break
             if self._abort.is_set(): self.cb.on_orch('⏹ Abortado'); break
             signal = parse(response)
+            data_collector.collect(self.project_path, current_id, defn.name, msg, signal.clean_response, signal.kind)
             self.cb.on_agent(defn.name, '→ response', signal.clean_response)
             self._chat('agent', signal.clean_response, defn.name)
             h = self.git.commit(self.round_num, defn.name)
