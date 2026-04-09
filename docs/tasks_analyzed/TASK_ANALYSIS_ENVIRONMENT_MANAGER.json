@@ -1,0 +1,181 @@
+{
+  "id": "environment-manager-v1",
+  "title": "Environment Manager — MCP server para gerenciamento de processos background pelos agentes",
+  "created": "2026-04-09T15:06:00-03:00",
+  "status": "planned",
+  "summary": "Agentes kiro-cli usam execute_bash que é bloqueante. Ao rodar servidores (Spring Boot, Node, etc), o comando trava e o agente não vê erros de runtime nem consegue subir múltiplos serviços. Solução: MCP server injetado automaticamente que expõe ferramentas de gerenciamento de processos background.",
+
+  "problem_analysis": {
+    "root_cause": "execute_bash do kiro-cli é síncrono — espera o comando terminar. Servidores (mvn spring-boot:run, npm start, etc) nunca terminam, bloqueando o agente.",
+    "symptoms": [
+      "Agente trava ao subir servidor — não consegue executar mais nada",
+      "Erros de runtime (porta em uso, bean não encontrado, etc) ficam invisíveis porque o agente não lê o output do processo bloqueado",
+      "Impossível subir múltiplos serviços (backend + frontend + DB) simultaneamente",
+      "Compilação passa mas startup falha — agente não distingue os dois estágios"
+    ],
+    "current_workaround": "Nenhum. O agente fica preso ou usa & para background, mas perde acesso ao output."
+  },
+
+  "solution": {
+    "approach": "MCP server stdio-based que gerencia processos background via subprocess.Popen. O swarm injeta este MCP automaticamente em todo agente, dando-lhes ferramentas para iniciar, monitorar e parar processos sem bloquear.",
+    "why_mcp": [
+      "Infraestrutura de MCPs já existe no swarm (make_clean_env escreve mcp.json por agente)",
+      "MCPs aparecem como tools nativos no kiro-cli — zero friction para o agente",
+      "MCP server roda como processo separado — não interfere no PTY do agente",
+      "Compartilhável: múltiplos agentes podem ver os mesmos processos do projeto"
+    ],
+    "tools_exposed": {
+      "env_run": {
+        "params": {"command": "string (comando shell)", "name": "string (identificador único)", "cwd": "string? (diretório, default=workdir do projeto)"},
+        "returns": "{ name, pid, status: 'running' }",
+        "description": "Inicia processo em background. Retorna imediatamente. stdout+stderr capturados em ring buffer."
+      },
+      "env_status": {
+        "params": {"name": "string? (se omitido, lista todos)"},
+        "returns": "{ name, pid, status: running|exited, exit_code?, uptime_seconds, last_output_lines: 5 }",
+        "description": "Verifica saúde de processos. Inclui últimas linhas de output para diagnóstico rápido."
+      },
+      "env_logs": {
+        "params": {"name": "string", "lines": "int? (default=50)"},
+        "returns": "{ name, lines: string[] }",
+        "description": "Lê últimas N linhas de stdout+stderr combinados. Ring buffer de 500 linhas."
+      },
+      "env_stop": {
+        "params": {"name": "string", "force": "bool? (default=false, SIGTERM; true=SIGKILL)"},
+        "returns": "{ name, status: 'stopped', exit_code }",
+        "description": "Para um processo. SIGTERM por default, SIGKILL se force=true."
+      },
+      "env_input": {
+        "params": {"name": "string", "text": "string"},
+        "returns": "{ ok: true }",
+        "description": "Envia texto para stdin do processo (para processos interativos)."
+      }
+    },
+    "architecture": {
+      "state_dir": "/tmp/kiro-env-{hash(project_path)}/",
+      "ring_buffer": "500 linhas por processo, stdout+stderr intercalados com prefixo [OUT]/[ERR]",
+      "process_tracking": "Dict em memória {name → {proc: Popen, buffer: deque, start_time}}",
+      "cleanup": "Ao receber shutdown (stdin EOF), mata todos os processos gerenciados"
+    }
+  },
+
+  "tasks": [
+    {
+      "id": "E1",
+      "title": "Criar app/core/env_mcp_server.py — MCP server standalone",
+      "severity": "critical",
+      "file": "app/core/env_mcp_server.py",
+      "description": "Script Python standalone que implementa MCP protocol (JSON-RPC over stdio). Expõe 5 tools: env_run, env_status, env_logs, env_stop, env_input. Gerencia processos via subprocess.Popen com threads de leitura para capturar output em ring buffers.",
+      "implementation": {
+        "protocol": "MCP stdio — lê JSON-RPC de stdin, escreve respostas em stdout. Mensagens: initialize, tools/list, tools/call.",
+        "process_manager": "Classe ProcessManager com dict de processos. Cada processo tem: Popen, deque(maxlen=500) para output, thread daemon de leitura, start_time.",
+        "reader_thread": "Thread daemon por processo que faz readline() em loop no stdout/stderr (merged via Popen(stderr=STDOUT)) e appenda no deque.",
+        "cleanup": "atexit.register + signal handler para SIGTERM — mata todos os processos filhos.",
+        "standalone": "if __name__ == '__main__': com argparse para --state-dir (usado para lock file, evitar múltiplas instâncias por projeto)."
+      },
+      "risk": "Baixo — módulo isolado, sem dependências do swarm. Testável independentemente.",
+      "priority": 1
+    },
+    {
+      "id": "E2",
+      "title": "Injetar env-manager MCP automaticamente em make_clean_env",
+      "severity": "critical",
+      "file": "app/core/pty_agent.py",
+      "lines": "14-28",
+      "description": "Modificar make_clean_env() para adicionar o MCP env-manager ao mcp.json de todo agente. O MCP aponta para o script env_mcp_server.py com --state-dir baseado no hash do workdir.",
+      "current_code_summary": "make_clean_env(mcps) recebe dict de MCPs do agente e escreve em mcp.json. Não injeta nada automaticamente.",
+      "fix": {
+        "action": "Adicionar parâmetro workdir a make_clean_env. Calcular state_dir = /tmp/kiro-env-{hash}/. Merge env-manager MCP no dict antes de escrever mcp.json.",
+        "injection": {
+          "key": "env-manager",
+          "value": {
+            "command": "python3",
+            "args": ["<path_to_env_mcp_server.py>", "--state-dir", "<state_dir>"],
+            "timeout": 300
+          }
+        },
+        "path_resolution": "Usar os.path.abspath(os.path.join(os.path.dirname(__file__), 'env_mcp_server.py')) para path absoluto do script.",
+        "hash": "hashlib.md5(workdir.encode()).hexdigest()[:12] — suficiente para evitar colisão, curto para path."
+      },
+      "risk": "Baixo — adição aditiva ao dict de MCPs. Não quebra MCPs existentes do agente.",
+      "priority": 2
+    },
+    {
+      "id": "E3",
+      "title": "Propagar workdir para make_clean_env nos callers",
+      "severity": "high",
+      "file": "app/core/pty_agent.py",
+      "description": "PtyProcess.spawn() chama make_clean_env(self.mcps). Precisa passar self.workdir também. Ajustar a assinatura e os callers.",
+      "callers": [
+        "app/core/pty_agent.py:PtyProcess.spawn() — já tem self.workdir",
+        "app/core/swarm_state.py:resume_agent() — já tem workdir"
+      ],
+      "fix": {
+        "action": "Mudar make_clean_env(mcps) para make_clean_env(mcps, workdir). Em PtyProcess.spawn(), passar self.workdir. Em swarm_state.resume_agent(), passar workdir.",
+        "backward_compat": "workdir tem default None. Se None, não injeta env-manager (fallback seguro)."
+      },
+      "risk": "Baixo — mudança de assinatura com default, callers existentes continuam funcionando.",
+      "priority": 3
+    },
+    {
+      "id": "E4",
+      "title": "Adicionar constantes de configuração do env-manager",
+      "severity": "low",
+      "file": "app/config.py",
+      "description": "Adicionar constantes: ENV_MCP_BUFFER_LINES=500, ENV_MCP_TIMEOUT=300, ENV_MCP_AUTO_INJECT=True (flag para desabilitar se necessário).",
+      "risk": "Nenhum — apenas constantes novas.",
+      "priority": 4
+    },
+    {
+      "id": "E5",
+      "title": "Cleanup de processos no session close/abort",
+      "severity": "medium",
+      "file": "app/services/session_service.py",
+      "description": "Quando a sessão fecha (close/abort), os processos gerenciados pelo env-manager MCP morrem automaticamente (o kiro-cli mata o MCP server ao sair, que por sua vez mata seus filhos via atexit). Mas como safety net, adicionar cleanup explícito do state_dir em SwarmSession.close().",
+      "fix": {
+        "action": "Em close(), após matar agentes, fazer shutil.rmtree do /tmp/kiro-env-{hash}/ se existir. Isso limpa lock files e qualquer estado residual.",
+        "note": "Os processos em si já morrem via cascata: session.close() → agent.quit() → kiro-cli exit → MCP server stdin EOF → atexit kills children."
+      },
+      "risk": "Baixo — cleanup adicional, não muda fluxo principal.",
+      "priority": 5
+    }
+  ],
+
+  "execution_order": [
+    {"step": 1, "ids": ["E1"], "reason": "Core do feature — MCP server standalone. Pode ser testado isoladamente com qualquer kiro-cli."},
+    {"step": 2, "ids": ["E4"], "reason": "Constantes usadas por E2/E3. Trivial."},
+    {"step": 3, "ids": ["E2", "E3"], "reason": "Injeção automática. E2 e E3 são interdependentes (assinatura + caller)."},
+    {"step": 4, "ids": ["E5"], "reason": "Safety net. Pode ser feito por último."}
+  ],
+
+  "verification": {
+    "E1": "python3 app/core/env_mcp_server.py --state-dir /tmp/test-env < test_mcp_input.json deve responder com tools/list contendo 5 tools.",
+    "E2": "Após spawn de agente, cat do mcp.json no tmp_home deve conter 'env-manager' com path correto.",
+    "E3": "grep 'make_clean_env' em pty_agent.py e swarm_state.py — todos passam workdir.",
+    "E4": "grep 'ENV_MCP' config.py deve retornar 3 constantes.",
+    "E5": "Após session.close(), ls /tmp/kiro-env-* não deve retornar nada."
+  },
+
+  "design_decisions": {
+    "why_not_wrapper_scripts": "Scripts bash (nohup, screen, tmux) são frágeis, não dão feedback estruturado, e o agente teria que parsear output de texto livre. MCP dá ferramentas tipadas com JSON.",
+    "why_shared_state_dir": "Múltiplos agentes no mesmo projeto precisam ver os mesmos processos. Se o agente A sobe o backend, o agente B precisa ver que já está rodando. O state_dir baseado no hash do workdir garante isso.",
+    "why_ring_buffer_not_file": "Arquivo de log cresce indefinidamente. Ring buffer (deque) é O(1) em memória e auto-limita. 500 linhas é suficiente para ver erros de startup.",
+    "why_stderr_merged": "Popen(stderr=STDOUT) simplifica a leitura (1 thread, 1 buffer). A maioria dos erros de servidor vai para stderr mas o contexto está em stdout. Merge dá visão completa.",
+    "env_input_rationale": "Alguns processos pedem confirmação interativa (ex: 'Port 8080 in use, use 8081? [y/n]'). Sem env_input, o agente não tem como responder."
+  },
+
+  "impact_on_agents": {
+    "before": "Agente roda 'mvn spring-boot:run' → execute_bash bloqueia → agente trava → não vê erro de startup → não consegue subir frontend",
+    "after": "Agente roda env_run('mvn spring-boot:run', 'backend') → retorna imediato → env_status('backend') mostra running → env_logs('backend') mostra 'Started Application in 3.2s' → env_run('npm start', 'frontend') → ambos rodando → env_status() mostra 2 processos healthy",
+    "failure_scenario": "env_run('mvn spring-boot:run', 'backend') → env_status('backend') mostra exited, exit_code=1 → env_logs('backend') mostra 'Port 8080 already in use' → agente diagnostica e corrige"
+  },
+
+  "future_extensions": [
+    "Port forwarding awareness — detectar portas abertas pelos processos",
+    "Health checks — HTTP ping periódico em endpoints configurados",
+    "Resource monitoring — CPU/memory dos processos gerenciados",
+    "Docker integration — env_docker_run para containers"
+  ],
+
+  "handoff_chain": "architect (TASK_ANALYSIS) → validator (validar análise)"
+}
