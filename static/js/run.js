@@ -128,6 +128,7 @@ async function sendChat() {
   input.value = '';
   _selectedAgent = null;
   renderAgentBoxes();
+  document.querySelectorAll('#agent-grid > div').forEach(d => { d.style.boxShadow = ''; d.style.borderColor = ''; });
 
   const m = text.match(/^@(\w+)\s+(.*)/s);
   const agent_id = m ? m[1] : (chatTarget && chatTarget !== '__log__' ? chatTarget : null);
@@ -287,6 +288,17 @@ function insertAgentMention(name) {
   input.focus();
   _selectedAgent = name;
   renderAgentBoxes();
+  // Highlight grid panel
+  document.querySelectorAll('#agent-grid > div').forEach(d => {
+    d.style.boxShadow = '';
+    d.style.borderColor = '';
+  });
+  const panel = document.getElementById('grid-' + name);
+  if (panel) {
+    const c = getColor(name);
+    panel.style.boxShadow = `0 0 12px ${c}44`;
+    panel.style.borderColor = c;
+  }
 }
 
 function renderAgentBoxes() {
