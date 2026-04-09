@@ -95,6 +95,7 @@ async function closeSession() {
   setSessionUI(false);
   document.getElementById('run-agents').innerHTML = '';
   document.getElementById('agent-grid').innerHTML = '';
+  Object.keys(agentStatus).forEach(k => delete agentStatus[k]);
 }
 
 function onProjectChange() {
@@ -125,6 +126,8 @@ async function sendChat() {
   const text = input.value.trim();
   if (!text || !sessionOpen) return;
   input.value = '';
+  _selectedAgent = null;
+  renderAgentBoxes();
 
   const m = text.match(/^@(\w+)\s+(.*)/s);
   const agent_id = m ? m[1] : (chatTarget && chatTarget !== '__log__' ? chatTarget : null);
@@ -272,25 +275,28 @@ function updateAgentBox(name, status, text) {
   renderAgentBoxes();
 }
 
+let _selectedAgent = null;
+
 function insertAgentMention(name) {
   const input = document.getElementById('chat-input');
   const a = agents.find(x => x.name === name);
   const id = a ? a.id : name;
   const mention = `@${id} `;
-  // Replace existing @mention or prepend
-  input.value = input.value.replace(/^@\w+\s*/, '') ;
+  input.value = input.value.replace(/^@\w+\s*/, '');
   input.value = mention + input.value;
   input.focus();
+  _selectedAgent = name;
+  renderAgentBoxes();
 }
 
 function renderAgentBoxes() {
   const el = document.getElementById('run-agents');
   el.innerHTML = Object.entries(agentStatus).filter(([n]) => n !== 'GOD').map(([name, s]) => {
     const c = getColor(name);
-    const isSel = chatTarget === name;
+    const isSel = _selectedAgent === name;
     const isActive = s.status === 'working';
     return `<div onclick="insertAgentMention('${escHtml(name)}')"
-      class="agent-box flex flex-col gap-1 px-3 py-2.5 rounded-lg border cursor-pointer transition ${isSel ? 'border-accent/50 bg-accent/5' : 'border-border bg-surface hover:border-accent/20'}">
+      class="agent-box flex flex-col gap-1 px-3 py-2.5 rounded-lg border cursor-pointer transition ${isSel ? 'border-accent/50 bg-accent/5 shadow-[0_0_8px_rgba(124,92,252,0.3)]' : 'border-border bg-surface hover:border-accent/20'}">
       <div class="flex items-center gap-2">
         <span class="w-2 h-2 rounded-full ${isActive?'running':''}" style="background:${c}"></span>
         <span class="text-xs font-medium text-white">${escHtml(name)}</span>
