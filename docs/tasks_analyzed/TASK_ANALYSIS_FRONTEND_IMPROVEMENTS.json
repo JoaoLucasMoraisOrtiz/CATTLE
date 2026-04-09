@@ -106,7 +106,7 @@
       "motivo": "SSE resiliente, markdown no chat, copy-to-clipboard",
       "mudancas": [
         "Criar connectSSE() com reconnect exponencial e indicador visual de conexão",
-        "Em appendBubble(): renderizar text via marked.parse() + DOMPurify.sanitize() para type=agent",
+        "Em appendBubble(): renderizar text via marked.parse() + DOMPurify.sanitize() para type=agent (configurar marked com highlight.js para syntax highlighting em code blocks)",
         "Adicionar botão copy-to-clipboard em cada bubble de agente",
         "Usar api.js para openSession, closeSession, sendChat"
       ]
@@ -170,12 +170,12 @@
     "total": "13-18 horas"
   },
   "execution_order": [
-    {"step": 1, "ids": ["api.js", "utils.js-toasts"], "agent": "analyst", "reason": "Fundação: fetch wrapper e toasts são pré-requisito para todas as outras fases"},
-    {"step": 2, "ids": ["agents.js", "headers.js", "flow.js", "projects.js"], "agent": "analyst", "reason": "Migrar todos os módulos para usar api.js — podem ser paralelos"},
-    {"step": 3, "ids": ["run.js-sse", "run.js-markdown"], "agent": "analyst", "reason": "SSE reconnect e markdown dependem do api.js estar pronto"},
+    {"step": 1, "ids": ["api.js", "utils.js-toasts", "app.css-toasts-loading", "index.html-foundation"], "agent": "analyst", "reason": "Fundação completa: fetch wrapper, toasts, CSS de toasts/loading/validação, toast container + script tag api.js no HTML — tudo que os steps seguintes precisam"},
+    {"step": 2, "ids": ["agents.js", "headers.js", "flow.js", "projects.js", "run.js-fetch"], "agent": "analyst", "reason": "Migrar TODOS os módulos para usar api.js (incluindo fetch calls de run.js: openSession, closeSession, sendChat)"},
+    {"step": 3, "ids": ["run.js-sse", "run.js-markdown", "index.html-cdns"], "agent": "analyst", "reason": "SSE reconnect + markdown rendering + CDN imports (marked, DOMPurify, highlight.js) no HTML — CDNs precisam existir antes do código que os usa"},
     {"step": 4, "ids": ["app.js-aria", "index.html-aria"], "agent": "analyst", "reason": "ARIA pode ser feito após a estrutura estar estável"},
     {"step": 5, "ids": ["state.js-refactor"], "agent": "analyst", "reason": "Refactor de estado é o mais invasivo — fazer por último"},
-    {"step": 6, "ids": ["app.css-responsive"], "agent": "analyst", "reason": "Responsividade é a última camada, não bloqueia funcionalidade"}
+    {"step": 6, "ids": ["app.css-responsive"], "agent": "analyst", "reason": "Apenas responsividade (@media queries) — CSS de toasts/loading já foi no step 1"}
   ],
   "riscos": [
     {"risco": "marked.js + DOMPurify CDN aumentam tempo de carregamento", "mitigacao": "Usar versões minificadas, carregar com defer/async"},
