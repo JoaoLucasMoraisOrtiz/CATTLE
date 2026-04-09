@@ -21,8 +21,8 @@
 - Cada agente pode ter um conjunto completamente diferente de ferramentas
 
 ### 4. Implementar Novos EventCallbacks
-- `session.py:EventCallback` é uma interface com métodos: `on_orch`, `on_agent`, `on_error`, `on_summary`, `on_done`
-- Implementações existentes: `SSECallback` (web), `TuiLogger` (TUI)
+- `session_service.py:EventCallback` é uma interface com métodos: `on_orch`, `on_agent`, `on_error`, `on_summary`, `on_done`
+- Implementações existentes: `SSECallback` (em `controllers/session.py`), `TuiLogger` (TUI)
 - Pode-se criar callbacks para: Slack, Discord, arquivo de log, métricas, etc.
 
 ### 5. Substituir o Logger

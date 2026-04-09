@@ -8,13 +8,13 @@ import json
 
 from app.models.agent import AgentDef
 from app.models.flow import Flow, Node
-from app.models.header import DEFAULT_PROTOCOL_ID
 from app.core.agent import Agent
 from app.core.protocol import parse
 from app.core.checkpoint import GitCheckpoint
 from app.core.swarm_state import save_swarm, SwarmState, save_agent_session, append_chat_message, load_chat_history, project_dir
 from app.config import PROTOCOL_INSTRUCTIONS, MAX_HANDOFF_ROUNDS, MIN_RESPONSE_LEN, MAX_RETRIES, MAX_SIGNAL_NUDGES, NUDGE_MESSAGE
 from app.services import registry, flow_service, header_service, data_collector
+from app.services.agent_helpers import resolve_header_ids, compose_persona, build_agent_list_for
 
 COMPACT_THRESHOLD = 70
 CONTEXT_RE = re.compile(r'(\d+)%.*?!>')
@@ -325,20 +325,11 @@ class SwarmSession:
         self.cb.on_agent(defn.name, 'ready', '')
 
     def _resolve_header_ids(self, node_id: str) -> list[str]:
-        node = next((n for n in self.flow.nodes if n.agent_id == node_id), None)
-        if node and node.header_ids:
-            return node.header_ids
-        if self._flow_def and self._flow_def.default_header_ids:
-            return self._flow_def.default_header_ids
-        return [DEFAULT_PROTOCOL_ID]
+        return resolve_header_ids(node_id, self.flow, self._flow_def)
 
     def _compose_persona(self, nid, defn, agent_list):
         hids = self._resolve_header_ids(nid)
-        ctx = {'agent_name': defn.name, 'agent_persona': defn.persona, 'agent_list': agent_list}
-        composed = header_service.compose(hids, ctx)
-        if composed.strip():
-            return composed
-        return defn.persona + '\n\n' + PROTOCOL_INSTRUCTIONS.format(agent_list=agent_list)
+        return compose_persona(defn, hids, agent_list)
 
     def _handoff_msg(self, sender_name, signal):
         ctx = signal.clean_response

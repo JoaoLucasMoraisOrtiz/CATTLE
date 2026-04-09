@@ -8,7 +8,6 @@ from pathlib import Path
 
 from app.models.agent import AgentDef
 from app.models.flow import Flow
-from app.models.header import DEFAULT_PROTOCOL_ID
 from app.core.agent import Agent
 from app.core.protocol import parse
 from app.core.god import GodAgent, build_summary, GodCommand
@@ -21,36 +20,17 @@ from app.config import (
 )
 from app.utils.logger import Logger
 from app.services import registry, flow_service, header_service, data_collector
-
-
-def _build_agent_list_for(agent_id: str, agents: list[AgentDef], flow: Flow) -> str:
-    targets = flow.targets_for(agent_id)
-    visible = [a for a in agents if a.id in targets]
-    if not visible:
-        return "(nenhum — você é o agente final, use @done)"
-    return '\n'.join(f'- {a.id}: {a.name} — {a.persona[:80]}...' for a in visible)
+from app.services.agent_helpers import resolve_header_ids, compose_persona, build_agent_list_for
 
 
 def _init_agent(defn: AgentDef, agent_list: str, workdir: str, log: Logger, header_ids: list[str] | None = None) -> Agent:
     agent = Agent(defn.name, workdir, defn.model)
     agent.start()
-    hids = header_ids or [DEFAULT_PROTOCOL_ID]
-    ctx = {'agent_name': defn.name, 'agent_persona': defn.persona, 'agent_list': agent_list}
-    composed = header_service.compose(hids, ctx)
-    if not composed.strip():
-        composed = defn.persona + '\n\n' + PROTOCOL_INSTRUCTIONS.format(agent_list=agent_list)
-    persona = composed + '\n\nResponda apenas: "Entendido." Nada mais.'
+    persona = compose_persona(defn, header_ids or resolve_header_ids(defn.id, Flow([], []), None), agent_list)
+    persona += '\n\nResponda apenas: "Entendido." Nada mais.'
     agent.send(persona)
     log.agent(defn.name, 'ready', f'workdir: {workdir}')
     return agent
-
-
-def _build_agent_list_for(agent_id: str, agents: list[AgentDef], flow: Flow) -> str:
-    targets = flow.targets_for(agent_id)
-    visible = [a for a in agents if a.id in targets]
-    if not visible:
-        return "(nenhum — você é o agente final, use @done)"
-    return '\n'.join(f'- {a.id}: {a.name} — {a.persona[:80]}...' for a in visible)
 
 
 def _init_agent(defn: AgentDef, agent_list: str, workdir: str, log: Logger, header_ids: list[str] | None = None) -> Agent:
@@ -80,15 +60,6 @@ def _send_with_retry(agent: Agent, message: str, log: Logger) -> str:
                 raise
         time.sleep(2 ** attempt)
     raise RuntimeError(f'{agent.name}: failed after {MAX_RETRIES+1} attempts')
-
-
-def _resolve_header_ids(nid: str, flow, flow_def) -> list[str]:
-    node = next((n for n in flow.nodes if n.agent_id == nid), None)
-    if node and node.header_ids:
-        return node.header_ids
-    if flow_def and flow_def.default_header_ids:
-        return flow_def.default_header_ids
-    return [DEFAULT_PROTOCOL_ID]
 
 
 def run_swarm(question: str, workdir: str = '.', flow: Flow | None = None, log: Logger | None = None, resume: bool = False, flow_id: str | None = None) -> list[dict]:
@@ -145,9 +116,9 @@ def run_swarm(question: str, workdir: str = '.', flow: Flow | None = None, log: 
                 live_agents[nid] = resume_agent(nid, defn.name, workdir, defn.model)
                 log.agent(defn.name, 'resumed', '')
             else:
-                agent_list = _build_agent_list_for(nid, agent_defs, flow)
+                agent_list = build_agent_list_for(nid, agent_defs, flow)
                 log.orch(f'Spawning {defn.name}...')
-                hids = _resolve_header_ids(nid, flow, flow_def)
+                hids = resolve_header_ids(nid, flow, flow_def)
                 live_agents[nid] = _init_agent(defn, agent_list, workdir, log, hids)
 
         current_id = start_id
@@ -165,8 +136,8 @@ def run_swarm(question: str, workdir: str = '.', flow: Flow | None = None, log: 
                     log.orch(f'👁 GOD: restarting {cmd.target}')
                     live_agents[cmd.target].quit()
                     defn = agent_map[cmd.target]
-                    agent_list = _build_agent_list_for(cmd.target, agent_defs, flow)
-                    hids = _resolve_header_ids(cmd.target, flow, flow_def)
+                    agent_list = build_agent_list_for(cmd.target, agent_defs, flow)
+                    hids = resolve_header_ids(cmd.target, flow, flow_def)
                     live_agents[cmd.target] = _init_agent(defn, agent_list, workdir, log, hids)
                 elif cmd.action == 'compact' and cmd.target in live_agents:
                     log.orch(f'👁 GOD: compacting {cmd.target}')

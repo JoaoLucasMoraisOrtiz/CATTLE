@@ -1,0 +1,89 @@
+{
+  "id": "post-validator-sweep",
+  "title": "Correções pós-validator: campo workdir, duplicações residuais, regressão M8",
+  "created": "2026-04-09T09:21:00-03:00",
+  "status": "planned",
+  "summary": "Varredura completa revelou 7 itens: 1 regressão crítica do refactor M8, 2 itens reportados pelo validator, 4 novos encontrados na varredura.",
+
+  "tasks": [
+    {
+      "id": "P1",
+      "title": "_init_agent duplicada no orchestrator.py — regressão do refactor M8",
+      "severity": "critical",
+      "files": ["app/services/orchestrator.py"],
+      "description": "O refactor M8 adicionou uma nova versão de _init_agent usando compose_persona(), mas NÃO removeu a versão antiga. Resultado: duas definições da mesma função (linhas ~26 e ~35). Python usa a última definição, então a versão antiga (sem helpers) é a que roda. A versão nova (com helpers) é dead code. Além disso, a versão nova tem um bug: usa Flow([], []) como dummy, o que sempre retorna DEFAULT_PROTOCOL_ID ignorando header_ids do nó.",
+      "fix": "Remover a segunda definição (antiga, linhas ~35-45). Corrigir a primeira: quando header_ids é passado, usar direto; quando não, usar resolve_header_ids com o flow real (passado como parâmetro). Assinatura: _init_agent(defn, agent_list, workdir, log, header_ids=None, flow=None, flow_def=None).",
+      "risk": "Médio — se não corrigido, headers por nó no flow não funcionam no modo CLI (orchestrator). O modo web (session_service) não é afetado.",
+      "priority": 1
+    },
+    {
+      "id": "P2",
+      "title": "AgentIn em schemas.py falta campo workdir",
+      "severity": "minor",
+      "files": ["app/models/schemas.py"],
+      "description": "AgentDef tem workdir: str = '.' mas AgentIn não. A API aceita o campo no JSON mas descarta silenciosamente. Agentes criados pela web sempre ficam com workdir='.'.",
+      "fix": "Adicionar workdir: str = '.' ao AgentIn.",
+      "risk": "Nenhum — campo opcional com default.",
+      "priority": 2
+    },
+    {
+      "id": "P3",
+      "title": "_spawn_agent e safe_spawn não usam build_agent_list_for",
+      "severity": "minor",
+      "files": ["app/services/session_service.py"],
+      "description": "Duas funções em session_service (safe_spawn ~linhas 72-74 e _spawn_agent ~linhas 315-317) constroem a agent_list manualmente em vez de usar build_agent_list_for do agent_helpers. Mesma lógica duplicada 3x (helpers + 2 locais).",
+      "fix": "Substituir as 3 linhas manuais por chamada a build_agent_list_for(nid, all_defs, self.flow) em ambos os locais.",
+      "risk": "Nenhum — mesma lógica, apenas DRY.",
+      "priority": 3
+    },
+    {
+      "id": "P4",
+      "title": "_send_with_retry tem wrapper logic duplicada internamente",
+      "severity": "minor",
+      "files": ["app/services/session_service.py"],
+      "description": "Dentro de _send_with_retry, o bloco que formata a mensagem com wrapper (linhas ~355-365) é copy-paste do bloco de restart (linhas ~375-385). Se o formato do wrapper mudar, precisa atualizar em 2 lugares dentro da mesma função.",
+      "fix": "Extrair helper local _wrap_first_message(agent, message) que encapsula a lógica de wrapper/persona. Chamar nos dois pontos.",
+      "risk": "Baixo — refactor interno de uma função.",
+      "priority": 4
+    },
+    {
+      "id": "P5",
+      "title": "project_service.save não usa escrita atômica",
+      "severity": "minor",
+      "files": ["app/services/project_service.py"],
+      "description": "registry.py, flow_service.py e header_service.py usam padrão tmp+fsync+replace para escrita atômica. project_service.py usa write_text() direto. Risco de corrupção se o processo morrer durante a escrita.",
+      "fix": "Aplicar o mesmo padrão: tmp = path.with_suffix('.tmp'); write; fsync; tmp.replace(path).",
+      "risk": "Nenhum — padrão já usado nos outros services.",
+      "priority": 5
+    },
+    {
+      "id": "P6",
+      "title": "checkpoint.py: diff --cached --quiet é dead code",
+      "severity": "cosmetic",
+      "files": ["app/core/checkpoint.py"],
+      "description": "Em commit(), a linha self._run('diff', '--cached', '--quiet') não faz nada útil: _run não verifica returncode, e o commit seguinte usa --allow-empty. A linha pode ser removida sem efeito.",
+      "fix": "Remover a linha. Opcionalmente, remover --allow-empty e usar o diff para decidir se commita.",
+      "risk": "Nenhum.",
+      "priority": 6
+    },
+    {
+      "id": "P7",
+      "title": "Avaliação: handoff chain loop duplicado session_service ↔ orchestrator",
+      "severity": "tech_debt",
+      "files": ["app/services/session_service.py", "app/services/orchestrator.py"],
+      "description": "O loop principal (_run_handoff_chain ~100 linhas no session_service, while loop ~130 linhas no orchestrator) compartilha a mesma estrutura: round loop → parse signal → handoff/done/none branching → return stack → nudge. Porém divergem significativamente: session_service tem _busy set, _abort event, SSE callbacks, auto-compact, deferred persona send, agent restart on death, chat history. orchestrator tem GOD_AGENT polling, SwarmState persistence, resume support, Logger output.",
+      "assessment": "NÃO RECOMENDO unificar agora. Razões: (1) As divergências são tantas que a abstração comum seria um strategy pattern com ~10 hooks — mais complexo que o copy-paste atual. (2) Os dois módulos servem contextos diferentes (web interativo vs CLI batch) com requisitos de lifecycle distintos. (3) O risco de regressão é alto para benefício marginal. (4) Os 3 helpers já extraídos (resolve_header_ids, compose_persona, build_agent_list_for) cobrem as partes que realmente eram idênticas.",
+      "fix": "Manter como está. Documentar a decisão. Se no futuro o loop divergir mais, considerar separar o orchestrator em 'batch runner' que usa session_service internamente.",
+      "risk": "N/A — decisão de não-ação.",
+      "priority": null
+    }
+  ],
+
+  "execution_order": [
+    {"step": 1, "ids": ["P1"], "reason": "Regressão crítica — _init_agent duplicada precisa ser corrigida antes de qualquer outra coisa"},
+    {"step": 2, "ids": ["P2", "P3", "P4", "P5", "P6"], "reason": "Fixes independentes, podem ser paralelos"},
+    {"step": 3, "ids": ["P7"], "reason": "Apenas documentar decisão — sem implementação"}
+  ],
+
+  "handoff_chain": "architect (TASK_ANALYSIS) → consultor (atualizar KB) → analyst (implementar P1-P6)"
+}
