@@ -339,7 +339,7 @@ function renderAgentBoxes() {
     const badge = count ? `<span class="ml-auto text-[10px] bg-accent/20 text-accent px-1.5 rounded-full">${count}</span>` : '';
     const costEntry = Object.values(_costData.agents || {}).find(a => a.name === name);
     const costHtml = costEntry ? `<div class="text-[10px] text-emerald-400/70">$${costEntry.cost_usd.toFixed(4)}</div>` : '';
-    return `<div onclick="insertAgentMention('${escHtml(name)}')"
+    return `<div onclick="insertAgentMention('${escHtml(name)}')" oncontextmenu="event.preventDefault();showCliMenu(event,'${escHtml(name)}')"
       draggable="true" data-run-agent="${escHtml(name)}"
       ondragstart="_dragRunAgent=this.dataset.runAgent;this.classList.add('dragging');event.dataTransfer.setData('text/plain','')"
       ondragend="_dragRunAgent=null;this.classList.remove('dragging')"
@@ -357,6 +357,38 @@ function renderAgentBoxes() {
       ${costHtml}
     </div>`;
   }).join('');
+}
+
+// ── CLI context menu ──────────────────────────────────────────────────────
+
+function showCliMenu(ev, name) {
+  let menu = document.getElementById('cli-context-menu');
+  if (!menu) {
+    menu = document.createElement('div');
+    menu.id = 'cli-context-menu';
+    menu.className = 'fixed z-50 bg-card border border-border rounded-xl shadow-lg py-1 text-xs min-w-[140px]';
+    document.body.appendChild(menu);
+    document.addEventListener('click', () => menu.classList.add('hidden'));
+  }
+  const a = agents.find(x => x.name === name);
+  const currentCli = a?.cli_type || 'kiro';
+  const options = [{id:'kiro', label:'Kiro CLI'}, {id:'gemini', label:'Gemini CLI'}];
+  menu.innerHTML = `<div class="px-3 py-1.5 text-muted text-[10px] uppercase">CLI para ${escHtml(name)}</div>` +
+    options.map(o => `<div onclick="event.stopPropagation();setAgentCli('${a?.id||name}','${o.id}')" class="px-3 py-1.5 cursor-pointer hover:bg-accent/10 transition flex items-center gap-2 ${currentCli===o.id?'text-accent':'text-gray-400'}">
+      ${currentCli===o.id?'●':'○'} ${o.label}
+    </div>`).join('');
+  menu.style.left = ev.clientX + 'px';
+  menu.style.top = ev.clientY + 'px';
+  menu.classList.remove('hidden');
+}
+
+async function setAgentCli(agentId, cliType) {
+  document.getElementById('cli-context-menu')?.classList.add('hidden');
+  const a = agents.find(x => x.id === agentId);
+  if (!a) return;
+  a.cli_type = cliType;
+  await apiPut(`${API}/agents/${agentId}`, {...a});
+  await loadAgents();
 }
 
 function _dropRunAgent(targetName) {
