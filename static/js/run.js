@@ -387,9 +387,9 @@ async function setAgentCli(agentId, cliType) {
   const a = agents.find(x => x.id === agentId);
   if (!a) return;
   a.cli_type = cliType;
-  await apiPut(`${API}/agents/${agentId}`, {...a});
+  const r = await apiPut(`${API}/agents/${agentId}`, {id: a.id, name: a.name, persona: a.persona, color: a.color, model: a.model, mcps: a.mcps || {}, cli_type: cliType});
+  if (!r.ok) return;
   await loadAgents();
-  // Restart agent if session is open
   if (sessionOpen) {
     await apiPost(`${API}/session/restart/${agentId}`);
   }
