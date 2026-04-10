@@ -113,6 +113,15 @@ def interrupt_agent(agent_id: str, project_id: str | None = None):
     return {"ok": True}
 
 
+@router.post("/restart/{agent_id}")
+def restart_agent(agent_id: str, project_id: str | None = None):
+    state = _find_active_state(project_id)
+    if not state or not state.session or not state.session.alive:
+        raise HTTPException(400, 'No active session')
+    state.session.restart_agent(agent_id)
+    return {"ok": True}
+
+
 @router.get("/status")
 def session_status(project_id: str | None = None):
     state = _find_active_state(project_id)

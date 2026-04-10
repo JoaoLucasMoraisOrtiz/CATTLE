@@ -389,6 +389,10 @@ async function setAgentCli(agentId, cliType) {
   a.cli_type = cliType;
   await apiPut(`${API}/agents/${agentId}`, {...a});
   await loadAgents();
+  // Restart agent if session is open
+  if (sessionOpen) {
+    await apiPost(`${API}/session/restart/${agentId}`);
+  }
 }
 
 function _dropRunAgent(targetName) {

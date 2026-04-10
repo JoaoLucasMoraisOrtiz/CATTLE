@@ -144,12 +144,16 @@ class SwarmSession:
             self.cb.on_orch(f'⏹ {name} interrompido')
 
     def restart_agent(self, agent_id):
+        # Reload from registry to pick up cli_type changes
+        fresh = registry.get(agent_id)
+        if fresh:
+            self.agent_defs[agent_id] = fresh
         defn = self.agent_defs.get(agent_id)
         if not defn: self.cb.on_error(f'Agent {agent_id} not found'); return
         with self._lock:
             old = self.agents.get(agent_id)
         if old: old.quit()
-        self.cb.on_orch(f'🔄 Restarting {defn.name}...')
+        self.cb.on_orch(f'🔄 Restarting {defn.name} ({defn.cli_type})...')
         self._spawn_agent(agent_id, defn, list(self.agent_defs.values()))
 
     def send_to_swarm(self, message):
