@@ -77,7 +77,9 @@ class PtyProcess:
 
     def write(self, text: str) -> None:
         assert self.proc and self.proc.isalive()
-        self.proc.send(text + self.driver.submit_suffix)
+        self.proc.send(text)
+        import time; time.sleep(0.3)
+        self.proc.send(self.driver.submit_suffix)
 
     def read_chunk(self, timeout: float = 5) -> str | None:
         try:

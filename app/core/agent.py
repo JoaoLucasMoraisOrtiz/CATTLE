@@ -64,9 +64,6 @@ class Agent:
             self._pty.proc.send('1')
             time.sleep(2)
             raw += self._read_until_prompt(STARTUP_TIMEOUT)
-        # Handle gemini restart after trust
-        if self._pty._screen and not self._pty.screen_contains(self._driver.idle_pattern):
-            raw += self._read_until_prompt(STARTUP_TIMEOUT)
         self.on_chunk = real_cb
         if not self._pty.is_alive():
             raise RuntimeError(f'Agent {self.name} died during startup: {raw[-500:]}')
@@ -202,7 +199,11 @@ class Agent:
             if chunk is None:
                 silence += 1
                 if silence >= MAX_SILENCE:
-                    break
+                    # For TUI CLIs, check screen on silence
+                    if self._pty._screen and self._is_prompt(''):
+                        break
+                    if silence >= MAX_SILENCE * 2:
+                        break
                 continue
             silence = 0
             buf.append(chunk)
