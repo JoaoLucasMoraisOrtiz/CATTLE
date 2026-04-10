@@ -1,6 +1,6 @@
 /* ReDo! — App initialization, tabs, keyboard shortcuts */
 
-const TAB_ORDER = ['agents', 'flow', 'headers', 'run'];
+const TAB_ORDER = ['agents', 'flow', 'headers', 'settings', 'run'];
 
 function switchTab(tab) {
   document.querySelectorAll('[id^="view-"]').forEach(v => { v.classList.add('hidden'); v.style.display = ''; });
@@ -19,6 +19,7 @@ function switchTab(tab) {
   btn.setAttribute('aria-selected', 'true');
   btn.setAttribute('tabindex', '0');
   if (tab === 'flow') initDrawflow();
+  if (tab === 'settings') loadProviders();
 }
 
 // ── ARIA keyboard navigation for tabs ────────────────────────────────────

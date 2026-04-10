@@ -485,9 +485,17 @@ function updateCostHeader() {
 
 async function loadSettings() {
   const r = await apiGet(`${API}/settings`);
-  if (r.ok) document.getElementById('toggle-data-collection').checked = r.data.data_collection !== false;
+  if (r.ok) {
+    const val = r.data.data_collection !== false;
+    document.getElementById('toggle-data-collection').checked = val;
+    const s = document.getElementById('settings-data-collection');
+    if (s) s.checked = val;
+  }
 }
 
 async function toggleDataCollection(val) {
   await apiPut(`${API}/settings`, {key:'data_collection', value:val});
+  document.getElementById('toggle-data-collection').checked = val;
+  const s = document.getElementById('settings-data-collection');
+  if (s) s.checked = val;
 }

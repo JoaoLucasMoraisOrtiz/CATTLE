@@ -29,6 +29,7 @@
       <button onclick="switchTab('agents')" id="tab-agents" role="tab" aria-selected="false" aria-controls="view-agents" class="tab-btn px-3 py-1.5 rounded-md transition font-medium text-muted hover:text-white">Agentes</button>
       <button onclick="switchTab('flow')" id="tab-flow" role="tab" aria-selected="false" aria-controls="view-flow" class="tab-btn px-3 py-1.5 rounded-md transition font-medium text-muted hover:text-white">Flow</button>
       <button onclick="switchTab('headers')" id="tab-headers" role="tab" aria-selected="false" aria-controls="view-headers" class="tab-btn px-3 py-1.5 rounded-md transition font-medium text-muted hover:text-white">Headers</button>
+      <button onclick="switchTab('settings')" id="tab-settings" role="tab" aria-selected="false" aria-controls="view-settings" class="tab-btn px-3 py-1.5 rounded-md transition font-medium text-muted hover:text-white">⚙ Config</button>
       <button onclick="switchTab('run')" id="tab-run" role="tab" aria-selected="true" aria-controls="view-run" class="tab-btn px-3 py-1.5 rounded-md transition font-medium bg-accent/10 text-accent">Executar</button>
     </nav>
     <div class="flex items-center gap-2 text-xs text-muted">
@@ -113,6 +114,20 @@
   </div>
 </div>
 
+<!-- ═══ Auth Modal ═══ -->
+<div id="auth-modal" class="fixed inset-0 modal-bg z-50 hidden flex items-center justify-center">
+  <div class="bg-card border border-border rounded-2xl w-[450px] shadow-2xl">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-border">
+      <h2 id="auth-modal-title" class="text-base font-semibold text-white">Login</h2>
+      <button onclick="closeAuthModal()" class="text-muted hover:text-white transition">✕</button>
+    </div>
+    <div class="p-6" id="auth-modal-body"></div>
+    <div class="flex justify-end px-6 py-4 border-t border-border">
+      <button onclick="closeAuthModal()" class="px-5 py-2 bg-accent hover:bg-accentHover text-white text-sm font-medium rounded-lg transition">Pronto</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══ Header Modal ═══ -->
 <div id="header-modal" role="dialog" aria-modal="true" aria-labelledby="header-modal-title" class="fixed inset-0 modal-bg z-50 hidden flex items-center justify-center">
   <div class="bg-card border border-border rounded-2xl w-[600px] max-h-[90vh] overflow-y-auto shadow-2xl">
@@ -148,6 +163,29 @@
     <div class="flex justify-end gap-3 px-6 py-4 border-t border-border">
       <button onclick="closeHeaderModal()" class="px-4 py-2 text-sm text-muted hover:text-white transition rounded-lg">Cancelar</button>
       <button onclick="saveHeader()" class="px-5 py-2 bg-accent hover:bg-accentHover text-white text-sm font-medium rounded-lg transition">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ TAB: Settings ═══ -->
+<div id="view-settings" role="tabpanel" aria-labelledby="tab-settings" class="flex-1 flex-col overflow-hidden hidden">
+  <div class="p-6 max-w-2xl mx-auto w-full space-y-6">
+    <div>
+      <h2 class="text-lg font-semibold text-white mb-1">⚙ Configurações</h2>
+      <p class="text-xs text-muted">Gerencie os provedores de CLI e autenticação</p>
+    </div>
+    <div>
+      <h3 class="text-sm font-medium text-white mb-3">Provedores de CLI</h3>
+      <div id="providers-list" class="space-y-3">
+        <p class="text-xs text-muted">Carregando...</p>
+      </div>
+    </div>
+    <div>
+      <h3 class="text-sm font-medium text-white mb-3">Coleta de dados</h3>
+      <label class="flex items-center gap-3 cursor-pointer">
+        <input type="checkbox" id="settings-data-collection" onchange="toggleDataCollection(this.checked)" class="w-4 h-4 rounded border-border bg-surface accent-emerald-500">
+        <span class="text-sm text-gray-400">Enviar dados de treinamento (anônimos) para o banco de dados</span>
+      </label>
     </div>
   </div>
 </div>
@@ -303,6 +341,7 @@
 <script src="/static/js/agents.js"></script>
 <script src="/static/js/flow.js"></script>
 <script src="/static/js/headers.js"></script>
+<script src="/static/js/settings.js"></script>
 <script src="/static/js/run.js"></script>
 <script src="/static/js/app.js"></script>
 </body>
