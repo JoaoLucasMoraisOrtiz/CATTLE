@@ -3,7 +3,7 @@
 import re
 import time
 from app.core.pty_agent import PtyProcess
-from app.core.output_parser import strip_ansi, is_processing, clean_response, PROMPT_RE
+from app.core.output_parser import strip_ansi, clean_response
 from app.config import RESPONSE_TIMEOUT, STARTUP_TIMEOUT, PROCESSING_DETECT_TIMEOUT, PROMPT_TAIL_CHARS
 
 SPINNER_RE = re.compile(r'^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]')
@@ -13,13 +13,26 @@ MAX_SILENCE = 3
 
 
 class Agent:
-    def __init__(self, name, workdir, model=None, mcps=None):
+    def __init__(self, name, workdir, model=None, mcps=None, cli_type='kiro'):
         self.name = name
-        self._pty = PtyProcess(workdir, model, mcps)
+        self.cli_type = cli_type
+        self._pty = PtyProcess(workdir, model, mcps, cli_type)
+        self._driver = self._pty.driver
         self.log = []
         self.on_chunk = None
         self._last_chunk_ts = 0
         self._chunk_buf = ''
+
+    def _is_processing(self, text):
+        return any(kw in text for kw in self._driver.processing_keywords)
+
+    def _is_prompt(self, text):
+        return bool(self._driver.prompt_re.search(text[-PROMPT_TAIL_CHARS:]))
+
+    def _is_tui_chrome(self, line):
+        if not self._driver.tui_chrome_re:
+            return False
+        return bool(self._driver.tui_chrome_re.match(line.strip()))
 
     def start(self):
         self._pty.spawn()
@@ -64,23 +77,34 @@ class Agent:
                 continue
             silence = 0
             clean = strip_ansi(chunk)
-            if not streaming and is_processing(clean):
+            if not streaming and self._is_processing(clean):
                 streaming = True
                 buf.clear()
                 tail_carry = ''
             if not streaming:
-                if PROMPT_RE.search(clean[-PROMPT_TAIL_CHARS:]):
+                if self._is_prompt(clean):
                     tail_carry = ''
                 continue
-            buf.append(chunk)
+            # For gemini: extract response lines (prefixed with ✦)
+            if self._driver.response_prefix:
+                lines = clean.split('\n')
+                filtered = []
+                for l in lines:
+                    s = l.strip()
+                    if s.startswith(self._driver.response_prefix):
+                        filtered.append(s[len(self._driver.response_prefix):].strip())
+                    elif not self._is_tui_chrome(l) and s and not SPINNER_RE.match(s):
+                        filtered.append(l)
+                clean = '\n'.join(filtered)
+            buf.append(clean if self._driver.response_prefix else chunk)
             self._emit_chunk(clean)
             combined = tail_carry + clean
-            if PROMPT_RE.search(combined[-PROMPT_TAIL_CHARS:]):
+            if self._is_prompt(combined):
                 break
             tail_carry = clean[-PROMPT_TAIL_CHARS:]
         self._flush_chunk()
-        raw = strip_ansi(''.join(buf))
-        result = clean_response(raw, skip_text=message.strip())
+        raw = strip_ansi(''.join(buf)) if not self._driver.response_prefix else '\n'.join(buf)
+        result = clean_response(raw, skip_text=message.strip(), driver=self._driver)
         self._log_entry('recv', result)
         return result
 
@@ -121,7 +145,7 @@ class Agent:
             clean = strip_ansi(chunk)
             self._emit_chunk(clean)
             combined = tail_carry + clean
-            if PROMPT_RE.search(combined[-PROMPT_TAIL_CHARS:]):
+            if self._is_prompt(combined):
                 break
             tail_carry = clean[-PROMPT_TAIL_CHARS:]
         return strip_ansi(''.join(buf))

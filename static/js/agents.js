@@ -58,6 +58,7 @@ function openModal(agent = null) {
   document.getElementById('m-name').value = agent?.name || '';
   document.getElementById('m-color').value = agent?.color || '#60a5fa';
   document.getElementById('m-model').value = agent?.model || '';
+  document.getElementById('m-cli-type').value = agent?.cli_type || 'kiro';
   document.getElementById('m-persona').value = agent?.persona || '';
   populateMcpRows(agent?.mcps);
   document.getElementById('modal').classList.remove('hidden');
@@ -83,6 +84,7 @@ async function saveAgent() {
     model: document.getElementById('m-model').value.trim() || null,
     persona: fields[2].el.value.trim(),
     mcps,
+    cli_type: document.getElementById('m-cli-type').value,
   };
   const r = editingId
     ? await apiPut(`${API}/agents/${editingId}`, body)

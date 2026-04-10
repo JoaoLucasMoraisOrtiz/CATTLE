@@ -12,3 +12,4 @@ class AgentDef:
     model: str | None = None
     workdir: str = '.'
     mcps: dict = field(default_factory=dict)
+    cli_type: str = 'kiro'  # 'kiro' or 'gemini'

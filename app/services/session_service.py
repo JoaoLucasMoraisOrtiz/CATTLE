@@ -73,7 +73,7 @@ class SwarmSession:
                 visible = [a for a in all_defs if a.id in targets]
                 agent_list = '\n'.join(f'- {a.id}: {a.name} — {a.persona[:80]}...' for a in visible) if visible else '(nenhum — use @done)'
                 persona = self._compose_persona(nid, defn, agent_list)
-                agent = Agent(defn.name, self.project_path, defn.model, defn.mcps or None)
+                agent = Agent(defn.name, self.project_path, defn.model, defn.mcps or None, defn.cli_type)
                 agent.on_chunk = lambda text, n=defn.name: self.cb.on_agent(n, '⏳ streaming', text)
                 agent.start()
                 agent._persona = persona
@@ -111,7 +111,7 @@ class SwarmSession:
             agents_copy = list(self.agents.items())
         for aid, agent in agents_copy:
             try:
-                agent._pty.write('/compact\r')
+                (agent._pty.write(agent._driver.compact_cmd + '\r') if agent._driver.compact_cmd else None)
                 agent._read_until_prompt(timeout=30)
                 save_agent_session(agent, aid, self.project_path)
             except Exception: pass
@@ -330,7 +330,7 @@ class SwarmSession:
         visible = [a for a in all_defs if a.id in targets]
         agent_list = '\n'.join(f'- {a.id}: {a.name} — {a.persona[:80]}...' for a in visible) if visible else '(nenhum — use @done)'
         persona = self._compose_persona(nid, defn, agent_list)
-        agent = Agent(defn.name, self.project_path, defn.model, defn.mcps or None)
+        agent = Agent(defn.name, self.project_path, defn.model, defn.mcps or None, defn.cli_type)
         agent.on_chunk = lambda text, n=defn.name: self.cb.on_agent(n, '⏳ streaming', text)
         agent.start()
         agent._persona = persona
@@ -411,7 +411,7 @@ class SwarmSession:
             try:
                 name = self.agent_defs.get(aid, agent).name
                 self.cb.on_agent(name, '⏳ streaming', '🗜 Compactando...\n')
-                agent._pty.write('/compact\r')
+                (agent._pty.write(agent._driver.compact_cmd + '\r') if agent._driver.compact_cmd else None)
                 agent._read_until_prompt(timeout=60)
                 agent._persona_sent = False
                 self.cb.on_agent(name, 'ready', '')
@@ -431,7 +431,7 @@ class SwarmSession:
                     usage = int(m.group(1))
                     if usage >= COMPACT_THRESHOLD:
                         self.cb.on_orch(f'🗜 Auto-compact {self.agent_defs[agent_id].name} ({usage}%)')
-                        agent._pty.write('/compact\r')
+                        (agent._pty.write(agent._driver.compact_cmd + '\r') if agent._driver.compact_cmd else None)
                         agent._read_until_prompt(timeout=30)
                         agent._persona_sent = False
                     break

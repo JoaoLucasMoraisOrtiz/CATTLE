@@ -1,0 +1,53 @@
+"""CLI driver abstraction — defines how to interact with different CLI tools."""
+
+import re
+from dataclasses import dataclass, field
+
+
+@dataclass
+class CliDriver:
+    """Base configuration for a CLI tool."""
+    name: str
+    spawn_cmd: str
+    prompt_re: re.Pattern
+    processing_keywords: tuple[str, ...]
+    idle_pattern: str  # text that appears when CLI is ready for input
+    submit_suffix: str = '\r'
+    quit_cmd: str = ''
+    compact_cmd: str = ''
+    model_flag: str = ''
+    yolo_flag: str = ''
+    response_prefix: str = ''  # prefix on response lines (e.g. '✦' for gemini)
+    tui_chrome_re: re.Pattern | None = None  # regex to strip TUI decorations
+
+
+KIRO_DRIVER = CliDriver(
+    name='kiro',
+    spawn_cmd='kiro-cli chat --wrap never -a',
+    prompt_re=re.compile(r'\d+%.*?!>'),
+    processing_keywords=('Thinking', 'Using tool:'),
+    idle_pattern='!>',
+    quit_cmd='/quit',
+    compact_cmd='/compact',
+    model_flag='--model',
+)
+
+GEMINI_DRIVER = CliDriver(
+    name='gemini',
+    spawn_cmd='gemini --yolo',
+    prompt_re=re.compile(r'Type your message|for shortcuts'),
+    processing_keywords=('Thinking', 'Responding'),
+    idle_pattern='Type your message',
+    quit_cmd='/quit',
+    compact_cmd='',  # gemini has no compact
+    model_flag='--model',
+    yolo_flag='--yolo',
+    response_prefix='✦',
+    tui_chrome_re=re.compile(r'^[─▀▄│╭╮╰╯▐▌░▒▓█\s]+$|^\s*YOLO\b|^\s*workspace\b|^\s*/mnt/|^\s*sandbox\b|^\s*\? for shortcuts'),
+)
+
+DRIVERS = {'kiro': KIRO_DRIVER, 'gemini': GEMINI_DRIVER}
+
+
+def get_driver(cli_type: str) -> CliDriver:
+    return DRIVERS.get(cli_type, KIRO_DRIVER)

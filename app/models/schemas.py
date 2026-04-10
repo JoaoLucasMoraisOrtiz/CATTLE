@@ -10,6 +10,7 @@ class AgentIn(BaseModel):
     color: str = "white"
     model: str | None = None
     mcps: dict = {}
+    cli_type: str = 'kiro'
 
 
 class FlowIn(BaseModel):

@@ -1,4 +1,4 @@
-"""PTY lifecycle — spawn kiro-cli, raw read/write, quit."""
+"""PTY lifecycle — spawn CLI agent (kiro/gemini), raw read/write, quit."""
 
 import hashlib
 import json
@@ -9,9 +9,10 @@ import time
 import pexpect
 
 from app.config import HOME_ALLOWLIST, ENV_MCP_AUTO_INJECT, ENV_MCP_TIMEOUT
+from app.core.cli_driver import CliDriver, get_driver, KIRO_DRIVER
 
 
-def make_clean_env(mcps: dict | None = None, workdir: str | None = None) -> tuple[dict, str]:
+def make_clean_env(mcps: dict | None = None, workdir: str | None = None, driver: CliDriver | None = None) -> tuple[dict, str]:
     real_home = os.path.expanduser('~')
     tmp = tempfile.mkdtemp(prefix='kiro_agent_')
     for item in os.listdir(real_home):
@@ -28,31 +29,35 @@ def make_clean_env(mcps: dict | None = None, workdir: str | None = None) -> tupl
             "args": [script, "--state-dir", state_dir],
             "timeout": ENV_MCP_TIMEOUT,
         }
-    real_kiro = os.path.join(real_home, '.kiro')
-    if os.path.exists(real_kiro):
-        shutil.copytree(real_kiro, os.path.join(tmp, '.kiro'))
-        mcp_path = os.path.join(tmp, '.kiro', 'settings', 'mcp.json')
-        os.makedirs(os.path.dirname(mcp_path), exist_ok=True)
-        with open(mcp_path, 'w') as f:
-            f.write(json.dumps({"mcpServers": merged}))
+    # Kiro-specific: write MCP config
+    d = driver or KIRO_DRIVER
+    if d.name == 'kiro':
+        real_kiro = os.path.join(real_home, '.kiro')
+        if os.path.exists(real_kiro):
+            shutil.copytree(real_kiro, os.path.join(tmp, '.kiro'))
+            mcp_path = os.path.join(tmp, '.kiro', 'settings', 'mcp.json')
+            os.makedirs(os.path.dirname(mcp_path), exist_ok=True)
+            with open(mcp_path, 'w') as f:
+                f.write(json.dumps({"mcpServers": merged}))
     env = os.environ.copy()
     env['HOME'] = tmp
     return env, tmp
 
 
 class PtyProcess:
-    def __init__(self, workdir: str, model: str | None = None, mcps: dict | None = None):
+    def __init__(self, workdir: str, model: str | None = None, mcps: dict | None = None, cli_type: str = 'kiro'):
         self.workdir = workdir
         self.model = model
         self.mcps = mcps
+        self.driver = get_driver(cli_type)
         self.proc: pexpect.spawn | None = None
         self._tmp_home: str | None = None
 
     def spawn(self) -> None:
-        env, self._tmp_home = make_clean_env(self.mcps, self.workdir)
-        cmd = 'kiro-cli chat --wrap never -a'
-        if self.model:
-            cmd += f' --model {self.model}'
+        env, self._tmp_home = make_clean_env(self.mcps, self.workdir, self.driver)
+        cmd = self.driver.spawn_cmd
+        if self.model and self.driver.model_flag:
+            cmd += f' {self.driver.model_flag} {self.model}'
         self.proc = pexpect.spawn(
             cmd, cwd=self.workdir, encoding='utf-8',
             timeout=180, maxread=65536, env=env,
@@ -60,13 +65,15 @@ class PtyProcess:
 
     def write(self, text: str) -> None:
         assert self.proc and self.proc.isalive()
-        self.proc.send(text + '\r')
+        self.proc.send(text + self.driver.submit_suffix)
 
     def read_chunk(self, timeout: float = 5) -> str | None:
         try:
             return self.proc.read_nonblocking(size=4096, timeout=timeout)
-        except (pexpect.TIMEOUT, pexpect.EOF):
+        except pexpect.TIMEOUT:
             return None
+        except pexpect.EOF:
+            raise RuntimeError('Process died')
 
     def is_alive(self) -> bool:
         return self.proc is not None and self.proc.isalive()
@@ -77,11 +84,12 @@ class PtyProcess:
 
     def kill(self) -> None:
         if self.proc and self.proc.isalive():
-            try:
-                self.proc.send('/quit\r')
-                time.sleep(0.5)
-            except Exception:
-                pass
+            if self.driver.quit_cmd:
+                try:
+                    self.proc.send(self.driver.quit_cmd + '\r')
+                    time.sleep(0.5)
+                except Exception:
+                    pass
             try:
                 self.proc.terminate(force=True)
             except Exception:

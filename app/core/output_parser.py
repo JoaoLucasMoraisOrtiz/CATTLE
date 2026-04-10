@@ -28,8 +28,10 @@ def is_prompt(chunk_clean: str) -> bool:
     return bool(PROMPT_RE.search(tail))
 
 
-def clean_response(text: str, skip_text: str = '') -> str:
+def clean_response(text: str, skip_text: str = '', driver=None) -> str:
     text = SPINNER_THINKING_RE.sub('', text)
+    prompt_re = driver.prompt_re if driver else PROMPT_RE
+    chrome_re = driver.tui_chrome_re if driver else None
     lines = text.split('\n')
     filtered = []
     for line in lines:
@@ -38,7 +40,9 @@ def clean_response(text: str, skip_text: str = '') -> str:
             continue
         if skip_text and s == skip_text:
             continue
-        m = PROMPT_RE.search(s)
+        if chrome_re and chrome_re.match(s):
+            continue
+        m = prompt_re.search(s)
         if m:
             before = s[:m.start()].rstrip()
             if before:
