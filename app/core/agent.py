@@ -24,9 +24,24 @@ class Agent:
         self._chunk_buf = ''
 
     def _is_processing(self, text):
-        return any(kw in text for kw in self._driver.processing_keywords)
+        if any(kw in text for kw in self._driver.processing_keywords):
+            return True
+        # For TUI CLIs, also check screen
+        if self._pty._screen:
+            return any(
+                kw in line for line in self._pty._screen.display for kw in self._driver.processing_keywords
+            )
+        return False
 
     def _is_prompt(self, text):
+        # For TUI CLIs, check the virtual screen
+        if self._pty._screen:
+            screen_has_idle = self._pty.screen_contains(self._driver.idle_pattern)
+            screen_has_processing = any(
+                kw in line for line in self._pty._screen.display for kw in self._driver.processing_keywords
+            )
+            # Only consider it "prompt" if idle is showing AND not processing
+            return screen_has_idle and not screen_has_processing
         return bool(self._driver.prompt_re.search(text[-PROMPT_TAIL_CHARS:]))
 
     def _is_tui_chrome(self, line):
@@ -44,6 +59,14 @@ class Agent:
             real_cb(text)
         self.on_chunk = filt
         raw = self._read_until_prompt(STARTUP_TIMEOUT)
+        # Handle gemini trust dialog
+        if self._pty._screen and self._pty.screen_contains('Trust folder'):
+            self._pty.proc.send('1')
+            time.sleep(2)
+            raw += self._read_until_prompt(STARTUP_TIMEOUT)
+        # Handle gemini restart after trust
+        if self._pty._screen and not self._pty.screen_contains(self._driver.idle_pattern):
+            raw += self._read_until_prompt(STARTUP_TIMEOUT)
         self.on_chunk = real_cb
         if not self._pty.is_alive():
             raise RuntimeError(f'Agent {self.name} died during startup: {raw[-500:]}')
@@ -56,6 +79,61 @@ class Agent:
         self._log_entry('send', message)
         self._chunk_buf = ''
         self._pty.write(message)
+
+        if self._pty._screen:
+            result = self._send_tui(message)
+        else:
+            result = self._send_line(message)
+
+        self._flush_chunk()
+        result = clean_response(result, skip_text=message.strip(), driver=self._driver)
+        self._log_entry('recv', result)
+        return result
+
+    def _send_tui(self, message):
+        """Read loop for TUI-based CLIs (gemini). Uses pyte screen for state detection."""
+        buf = []
+        saw_processing = False
+        deadline = time.time() + RESPONSE_TIMEOUT
+        silence = 0
+        while time.time() < deadline:
+            try:
+                chunk = self._pty.read_chunk(timeout=3)
+            except RuntimeError:
+                break
+            if chunk is None:
+                if saw_processing:
+                    # Check if back to idle (processing done)
+                    if self._pty.screen_contains(self._driver.idle_pattern):
+                        screen_processing = any(
+                            kw in line for line in self._pty._screen.display for kw in self._driver.processing_keywords
+                        )
+                        if not screen_processing:
+                            break
+                    silence += 1
+                    if silence >= MAX_SILENCE * 2:
+                        break
+                continue
+            silence = 0
+            clean = strip_ansi(chunk)
+            # Detect processing start
+            if not saw_processing and self._is_processing(clean):
+                saw_processing = True
+            if saw_processing:
+                # Extract response content (lines with ✦ prefix)
+                if self._driver.response_prefix:
+                    for line in clean.split('\n'):
+                        s = line.strip()
+                        if s.startswith(self._driver.response_prefix):
+                            content = s[len(self._driver.response_prefix):].strip()
+                            buf.append(content)
+                            self._emit_chunk(content + '\n')
+                else:
+                    buf.append(clean)
+                    self._emit_chunk(clean)
+        return '\n'.join(buf)
+
+    def _send_line(self, message):
         buf = []
         tail_carry = ''
         silence = 0
@@ -85,28 +163,14 @@ class Agent:
                 if self._is_prompt(clean):
                     tail_carry = ''
                 continue
-            # For gemini: extract response lines (prefixed with ✦)
-            if self._driver.response_prefix:
-                lines = clean.split('\n')
-                filtered = []
-                for l in lines:
-                    s = l.strip()
-                    if s.startswith(self._driver.response_prefix):
-                        filtered.append(s[len(self._driver.response_prefix):].strip())
-                    elif not self._is_tui_chrome(l) and s and not SPINNER_RE.match(s):
-                        filtered.append(l)
-                clean = '\n'.join(filtered)
-            buf.append(clean if self._driver.response_prefix else chunk)
+            buf.append(chunk)
             self._emit_chunk(clean)
             combined = tail_carry + clean
             if self._is_prompt(combined):
                 break
             tail_carry = clean[-PROMPT_TAIL_CHARS:]
-        self._flush_chunk()
-        raw = strip_ansi(''.join(buf)) if not self._driver.response_prefix else '\n'.join(buf)
-        result = clean_response(raw, skip_text=message.strip(), driver=self._driver)
-        self._log_entry('recv', result)
-        return result
+        raw = strip_ansi(''.join(buf))
+        return raw
 
     def quit(self):
         self._pty.kill()

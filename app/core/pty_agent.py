@@ -11,6 +11,11 @@ import pexpect
 from app.config import HOME_ALLOWLIST, ENV_MCP_AUTO_INJECT, ENV_MCP_TIMEOUT
 from app.core.cli_driver import CliDriver, get_driver, KIRO_DRIVER
 
+try:
+    import pyte
+except ImportError:
+    pyte = None
+
 
 def make_clean_env(mcps: dict | None = None, workdir: str | None = None, driver: CliDriver | None = None) -> tuple[dict, str]:
     real_home = os.path.expanduser('~')
@@ -62,6 +67,13 @@ class PtyProcess:
             cmd, cwd=self.workdir, encoding='utf-8',
             timeout=180, maxread=65536, env=env,
         )
+        # For TUI-based CLIs, use pyte virtual terminal
+        if self.driver.tui_chrome_re and pyte:
+            self._screen = pyte.Screen(200, 60)
+            self._stream = pyte.Stream(self._screen)
+        else:
+            self._screen = None
+            self._stream = None
 
     def write(self, text: str) -> None:
         assert self.proc and self.proc.isalive()
@@ -69,11 +81,23 @@ class PtyProcess:
 
     def read_chunk(self, timeout: float = 5) -> str | None:
         try:
-            return self.proc.read_nonblocking(size=4096, timeout=timeout)
+            data = self.proc.read_nonblocking(size=4096, timeout=timeout)
+            if self._stream and data:
+                try:
+                    self._stream.feed(data)
+                except Exception:
+                    pass
+            return data
         except pexpect.TIMEOUT:
             return None
         except pexpect.EOF:
             raise RuntimeError('Process died')
+
+    def screen_contains(self, text: str) -> bool:
+        """Check if the virtual terminal screen contains text (for TUI CLIs)."""
+        if not self._screen:
+            return False
+        return any(text in line for line in self._screen.display)
 
     def is_alive(self) -> bool:
         return self.proc is not None and self.proc.isalive()
