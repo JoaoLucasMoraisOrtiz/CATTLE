@@ -29,8 +29,8 @@
       <button onclick="switchTab('agents')" id="tab-agents" role="tab" aria-selected="false" aria-controls="view-agents" class="tab-btn px-3 py-1.5 rounded-md transition font-medium text-muted hover:text-white">Agentes</button>
       <button onclick="switchTab('flow')" id="tab-flow" role="tab" aria-selected="false" aria-controls="view-flow" class="tab-btn px-3 py-1.5 rounded-md transition font-medium text-muted hover:text-white">Flow</button>
       <button onclick="switchTab('headers')" id="tab-headers" role="tab" aria-selected="false" aria-controls="view-headers" class="tab-btn px-3 py-1.5 rounded-md transition font-medium text-muted hover:text-white">Headers</button>
-      <button onclick="switchTab('settings')" id="tab-settings" role="tab" aria-selected="false" aria-controls="view-settings" class="tab-btn px-3 py-1.5 rounded-md transition font-medium text-muted hover:text-white">⚙ Config</button>
       <button onclick="switchTab('run')" id="tab-run" role="tab" aria-selected="true" aria-controls="view-run" class="tab-btn px-3 py-1.5 rounded-md transition font-medium bg-accent/10 text-accent">Executar</button>
+      <button id="tab-settings" class="tab-btn hidden"></button>
     </nav>
     <div class="flex items-center gap-2 text-xs text-muted">
       <span id="status-dot" class="w-2 h-2 rounded-full bg-emerald-500"></span>
@@ -223,10 +223,10 @@
         </div>
       </div>
       <div class="border-t border-border px-3 py-2">
-        <label class="flex items-center gap-2 cursor-pointer">
-          <input type="checkbox" id="toggle-data-collection" checked onchange="toggleDataCollection(this.checked)" class="w-3.5 h-3.5 rounded border-border bg-surface accent-emerald-500">
-          <span class="text-[10px] text-muted">Coleta de dados</span>
-        </label>
+        <div onclick="switchTab('settings')" class="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-surface/60 transition">
+          <span class="text-xs text-muted">⚙</span>
+          <span class="text-[10px] text-muted">Configurações</span>
+        </div>
       </div>
     </div>
     <div class="flex-1 flex flex-col overflow-hidden relative">

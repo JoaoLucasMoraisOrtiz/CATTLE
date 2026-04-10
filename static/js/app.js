@@ -1,6 +1,6 @@
 /* ReDo! — App initialization, tabs, keyboard shortcuts */
 
-const TAB_ORDER = ['agents', 'flow', 'headers', 'settings', 'run'];
+const TAB_ORDER = ['agents', 'flow', 'headers', 'run'];
 
 function switchTab(tab) {
   document.querySelectorAll('[id^="view-"]').forEach(v => { v.classList.add('hidden'); v.style.display = ''; });
