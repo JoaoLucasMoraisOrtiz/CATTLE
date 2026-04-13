@@ -63,7 +63,7 @@ async def open_session(project_id: str, body: OpenSessionIn | None = None):
             state.loop.call_soon_threadsafe(state.events.put_nowait,
                 {"event": event, "data": json.dumps(data, ensure_ascii=False)})
         def on_orch(self, msg): self._push("orch", {"msg": msg})
-        def on_agent(self, name, event, text): self._push("agent", {"name": name, "event": event, "text": text})
+        def on_agent(self, name, event, text): self._push("agent", {"name": name, "event": event, "text": text[:4000] if text else ""})
         def on_error(self, msg): self._push("error", {"msg": msg})
         def on_summary(self, text): self._push("summary", {"text": text})
         def on_done(self): self._push("done", {})

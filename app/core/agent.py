@@ -180,6 +180,9 @@ class Agent:
                 if s:
                     lines.append(s)
             screen_text = '\n'.join(lines)
+            # Cap size to avoid SSE chunked encoding issues
+            if len(screen_text) > 4000:
+                screen_text = screen_text[-4000:]
             if screen_text != self._last_screen:
                 self._last_screen = screen_text
                 self.on_chunk(screen_text, True)
