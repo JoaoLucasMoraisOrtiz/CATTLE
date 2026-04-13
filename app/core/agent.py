@@ -116,17 +116,16 @@ class Agent:
             if not saw_processing and self._is_processing(clean):
                 saw_processing = True
             if saw_processing:
-                # Extract response content (lines with ✦ prefix)
+                # Emit screen snapshot
+                self._emit_chunk(clean)
+                # Also extract response text for the return value
                 if self._driver.response_prefix:
                     for line in clean.split('\n'):
                         s = line.strip()
                         if s.startswith(self._driver.response_prefix):
-                            content = s[len(self._driver.response_prefix):].strip()
-                            buf.append(content)
-                            self._emit_chunk(content + '\n')
+                            buf.append(s[len(self._driver.response_prefix):].strip())
                 else:
                     buf.append(clean)
-                    self._emit_chunk(clean)
         return '\n'.join(buf)
 
     def _send_line(self, message):
