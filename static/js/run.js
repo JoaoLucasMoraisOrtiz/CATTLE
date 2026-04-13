@@ -271,6 +271,16 @@ function appendGridPanel(projectId, name, text) {
   }
 }
 
+function replaceGridPanel(projectId, name, text) {
+  const s = sessions[projectId];
+  if (!s) return;
+  if (projectId === activeProjectId) {
+    ensureGridPanel(projectId, name);
+    const c = document.getElementById('grid-content-' + name);
+    if (c) { c.textContent = text; c.scrollTop = c.scrollHeight; }
+  }
+}
+
 function showView(view) {
   document.getElementById('agent-grid').classList.toggle('hidden', view !== 'grid');
   document.getElementById('chat-messages').classList.toggle('hidden', view !== 'chat');
@@ -576,9 +586,13 @@ function handleSSE(projectId, type, data) {
         updateAgentBox(projectId, data.name, 'working', 'Processando...');
         updateGridPanel(projectId, data.name, 'Processando...', '');
       }
-      if (data.event === '⏳ streaming') {
+      if (data.event === '⏳ streaming' || data.event === '⏳ streaming-replace') {
         updateAgentBox(projectId, data.name, 'working', (data.text || '').slice(0, 60));
-        appendGridPanel(projectId, data.name, data.text || '');
+        if (data.event === '⏳ streaming-replace') {
+          replaceGridPanel(projectId, data.name, data.text || '');
+        } else {
+          appendGridPanel(projectId, data.name, data.text || '');
+        }
         return;
       }
       if (data.event.includes('→ response')) {

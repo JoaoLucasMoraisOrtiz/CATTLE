@@ -22,6 +22,7 @@ class Agent:
         self.on_chunk = None
         self._last_chunk_ts = 0
         self._chunk_buf = ''
+        self._last_screen = ''
 
     def _is_processing(self, text):
         if any(kw in text for kw in self._driver.processing_keywords):
@@ -174,11 +175,19 @@ class Agent:
         if not self.on_chunk: return
         s = clean.strip()
         if not s or SPINNER_RE.match(s): return
-        # Filter TUI chrome for gemini
-        if self._driver.tui_chrome_re:
-            lines = [l for l in clean.split('\n') if l.strip() and not self._driver.tui_chrome_re.match(l.strip())]
-            clean = '\n'.join(lines)
-            if not clean.strip(): return
+        # For TUI CLIs: send screen snapshot (replace mode)
+        if self._pty._screen:
+            lines = []
+            for line in self._pty._screen.display:
+                s = line.rstrip()
+                if s:
+                    lines.append(s)
+            screen_text = '\n'.join(lines)
+            if screen_text != self._last_screen:
+                self._last_screen = screen_text
+                if self.on_chunk:
+                    self.on_chunk(screen_text, True)  # True = replace
+            return
         self._chunk_buf += clean
         if time.time() - self._last_chunk_ts >= CHUNK_THROTTLE:
             self._flush_chunk()
