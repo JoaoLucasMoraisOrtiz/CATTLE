@@ -62,7 +62,13 @@ async def open_session(project_id: str, body: OpenSessionIn | None = None):
     class SSECallback(EventCallback):
         def _push(self, event, data):
             msg = {"event": event, "data": json.dumps(data, ensure_ascii=False)}
-            for q in state._subscribers:
+            # Always put in main queue (for legacy endpoint)
+            try:
+                state.loop.call_soon_threadsafe(state.events.put_nowait, msg)
+            except Exception:
+                pass
+            # Also broadcast to per-connection subscribers
+            for q in list(state._subscribers):
                 try:
                     state.loop.call_soon_threadsafe(q.put_nowait, msg)
                 except Exception:
@@ -171,6 +177,7 @@ async def session_event_stream(project_id: str):
 
     q = asyncio.Queue()
     state._subscribers.append(q)
+    print(f"[SSE] Client connected for project {project_id}, subscribers: {len(state._subscribers)}")
 
     async def stream():
         try:
