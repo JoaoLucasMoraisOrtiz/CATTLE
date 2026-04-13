@@ -8,12 +8,33 @@
 <script>tailwind.config={darkMode:'class',theme:{extend:{colors:{surface:'#0f0f13',card:'#16161d',border:'#2a2a35',accent:'#7c5cfc',accentHover:'#9b7fff',muted:'#6b6b80'}}}}</script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jerosoler/Drawflow@0.0.59/dist/drawflow.min.css">
 <script src="https://cdn.jsdelivr.net/gh/jerosoler/Drawflow@0.0.59/dist/drawflow.min.js"></script>
-<!-- Markdown + syntax highlighting + sanitizer -->
-<script defer src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/styles/github-dark-dimmed.min.css">
-<script defer src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/highlight.min.js"></script>
-<link rel="stylesheet" href="/static/css/app.css">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  body{font-family:'Inter',sans-serif}
+  ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:#0f0f13}::-webkit-scrollbar-thumb{background:#2a2a35;border-radius:3px}
+  @keyframes pulse-glow{0%,100%{box-shadow:0 0 0 0 rgba(124,92,252,.4)}50%{box-shadow:0 0 12px 4px rgba(124,92,252,.15)}}
+  .running{animation:pulse-glow 2s infinite}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+  .log-line{animation:fadeIn .15s ease}
+  .modal-bg{background:rgba(0,0,0,.6);backdrop-filter:blur(4px)}
+
+  /* Drawflow overrides for dark theme */
+  #drawflow{background:#0a0a0f;background-image:radial-gradient(#1a1a25 1px,transparent 1px);background-size:20px 20px}
+  .drawflow .drawflow-node{background:#16161d !important;border:1px solid #2a2a35;border-radius:12px;color:#e5e5e5;min-width:160px;padding:0;box-shadow:0 4px 12px rgba(0,0,0,.3)}
+  .drawflow .drawflow-node.selected{border-color:#7c5cfc !important;background:#1c1c28 !important;box-shadow:0 0 0 2px rgba(124,92,252,.3)}
+  .drawflow .drawflow-node .input,.drawflow .drawflow-node .output{width:12px;height:12px;border-radius:50%;border:2px solid #2a2a35;background:#0f0f13}
+  .drawflow .drawflow-node .output{background:#7c5cfc;border-color:#7c5cfc}
+  .drawflow .connection .main-path{stroke:#7c5cfc;stroke-width:2;fill:none;marker-end:url(#arrowhead)}
+  .drawflow .drawflow-delete{background:#ef4444;border:none;color:white;border-radius:50%}
+  .drawflow .point{width:10px;height:10px;background:#7c5cfc;border:2px solid #9b7fff;border-radius:50%;cursor:move}
+  .drawflow .connection .main-path{cursor:pointer}
+  .node-inner{padding:12px 16px}
+  .node-inner .node-title{font-weight:600;font-size:13px;display:flex;align-items:center;gap:6px}
+  .node-inner .node-sub{font-size:10px;color:#6b6b80;margin-top:4px}
+  #scroll-to-bottom{position:absolute;bottom:16px;right:20px;z-index:10;width:36px;height:36px;border-radius:9999px;border:none;background:#7c5cfc;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,.4);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;transform:translateY(8px)}
+  #scroll-to-bottom.visible{opacity:1;pointer-events:auto;transform:translateY(0)}
+  #scroll-to-bottom:hover{background:#9b7fff}
+</style>
 </head>
 <body class="bg-surface text-gray-200 h-screen flex flex-col overflow-hidden">
 
@@ -25,27 +46,25 @@
     <span class="text-xs text-muted bg-surface px-2 py-0.5 rounded-full">v0.2</span>
   </div>
   <div class="flex items-center gap-4">
-    <nav role="tablist" aria-label="Navegação principal" class="flex bg-surface rounded-lg p-0.5 text-xs">
-      <button onclick="switchTab('agents')" id="tab-agents" role="tab" aria-selected="false" aria-controls="view-agents" class="tab-btn px-3 py-1.5 rounded-md transition font-medium text-muted hover:text-white">Agentes</button>
-      <button onclick="switchTab('flow')" id="tab-flow" role="tab" aria-selected="false" aria-controls="view-flow" class="tab-btn px-3 py-1.5 rounded-md transition font-medium text-muted hover:text-white">Flow</button>
-      <button onclick="switchTab('headers')" id="tab-headers" role="tab" aria-selected="false" aria-controls="view-headers" class="tab-btn px-3 py-1.5 rounded-md transition font-medium text-muted hover:text-white">Headers</button>
-      <button onclick="switchTab('run')" id="tab-run" role="tab" aria-selected="true" aria-controls="view-run" class="tab-btn px-3 py-1.5 rounded-md transition font-medium bg-accent/10 text-accent">Executar</button>
-      <button id="tab-settings" class="tab-btn hidden"></button>
-    </nav>
+    <!-- Tabs -->
+    <div class="flex bg-surface rounded-lg p-0.5 text-xs">
+      <button onclick="switchTab('agents')" id="tab-agents" class="tab-btn px-3 py-1.5 rounded-md transition font-medium bg-accent/10 text-accent">Agentes</button>
+      <button onclick="switchTab('flow')" id="tab-flow" class="tab-btn px-3 py-1.5 rounded-md transition font-medium text-muted hover:text-white">Flow</button>
+      <button onclick="switchTab('run')" id="tab-run" class="tab-btn px-3 py-1.5 rounded-md transition font-medium text-muted hover:text-white">Executar</button>
+    </div>
     <div class="flex items-center gap-2 text-xs text-muted">
       <span id="status-dot" class="w-2 h-2 rounded-full bg-emerald-500"></span>
       <span id="status-text">Ready</span>
     </div>
-    <div id="sse-indicator" class="flex items-center gap-1"></div>
   </div>
 </header>
 
 <!-- ═══ TAB: Agents ═══ -->
-<div id="view-agents" role="tabpanel" aria-labelledby="tab-agents" class="flex-1 flex overflow-hidden hidden">
+<div id="view-agents" class="flex-1 flex overflow-hidden">
   <aside class="w-72 border-r border-border bg-card/30 flex flex-col">
     <div class="flex items-center justify-between px-4 py-3 border-b border-border">
       <span class="text-sm font-medium text-muted uppercase tracking-wider">Agentes</span>
-      <button onclick="openModal()" aria-label="Novo agente" class="w-7 h-7 flex items-center justify-center rounded-lg bg-accent/10 text-accent hover:bg-accent/20 transition text-lg leading-none">+</button>
+      <button onclick="openModal()" class="w-7 h-7 flex items-center justify-center rounded-lg bg-accent/10 text-accent hover:bg-accent/20 transition text-lg leading-none">+</button>
     </div>
     <div id="agent-list" class="flex-1 overflow-y-auto p-2 space-y-1"></div>
   </aside>
@@ -55,18 +74,10 @@
 </div>
 
 <!-- ═══ TAB: Flow ═══ -->
-<div id="view-flow" role="tabpanel" aria-labelledby="tab-flow" class="flex-1 flex-col overflow-hidden hidden">
+<div id="view-flow" class="flex-1 flex-col overflow-hidden hidden">
   <div class="flex items-center gap-3 px-4 py-2 border-b border-border bg-card/20 text-xs">
-    <select id="flow-select" onchange="onFlowSelect()" aria-label="Selecionar flow" class="bg-surface border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent/50 transition min-w-[160px]">
-      <option value="">Nenhum flow</option>
-    </select>
-    <button onclick="createFlow()" class="px-2 py-1.5 bg-accent/10 text-accent rounded-lg hover:bg-accent/20 transition font-medium">+ Novo</button>
-    <button onclick="renameFlow()" class="px-2 py-1.5 bg-surface border border-border rounded-lg hover:border-accent/30 transition text-muted hover:text-white">Renomear</button>
-    <button onclick="duplicateFlow()" class="px-2 py-1.5 bg-surface border border-border rounded-lg hover:border-accent/30 transition text-muted hover:text-white">Duplicar</button>
-    <button onclick="deleteFlow()" aria-label="Deletar flow" class="px-2 py-1.5 text-muted hover:text-red-400 rounded-lg hover:bg-red-500/10 transition">✕ Deletar</button>
-    <div class="border-l border-border h-5 mx-1"></div>
     <button onclick="autoLayout()" class="px-3 py-1.5 bg-surface border border-border rounded-lg hover:border-accent/30 transition text-muted hover:text-white">Auto Layout</button>
-    <button onclick="saveFlow()" class="px-3 py-1.5 bg-accent/10 text-accent rounded-lg hover:bg-accent/20 transition font-medium">💾 Salvar</button>
+    <button onclick="saveFlow()" class="px-3 py-1.5 bg-accent/10 text-accent rounded-lg hover:bg-accent/20 transition font-medium">💾 Salvar Flow</button>
     <span class="text-muted" id="flow-info">Arraste agentes do painel. Conecte saídas → entradas.</span>
   </div>
   <div class="flex flex-1 overflow-hidden">
@@ -74,146 +85,25 @@
       <div class="text-xs text-muted uppercase tracking-wider mb-2">Arrastar para o canvas</div>
     </div>
     <div class="flex-1" id="drawflow"></div>
-    <div id="flow-help" class="w-64 border-l border-border bg-card/30 p-4 overflow-y-auto text-xs text-gray-400 space-y-3 transition-all">
-      <div class="flex items-center justify-between">
-        <span class="text-white font-medium text-sm">📖 Guia</span>
-        <button onclick="document.getElementById('flow-help').classList.add('hidden');document.getElementById('flow-help-btn').classList.remove('hidden')" aria-label="Fechar guia" class="text-muted hover:text-white">✕</button>
-      </div>
-      <div class="space-y-2.5 leading-relaxed">
-        <div><span class="text-white">Adicionar agente</span><br>Arraste da paleta à esquerda para o canvas.</div>
-        <div><span class="text-white">Conectar agentes</span><br>Clique na bolinha roxa (saída) e arraste até a bolinha preta (entrada).</div>
-        <div><span class="text-white">⚡ Definir início</span><br>Dê duplo-clique num nó para marcá-lo como ponto de partida.</div>
-        <div><span class="text-white">↩ Aresta de retorno</span><br>Clique num nó → painel de conexões. Clique em <span class="text-amber-400">→ Normal</span> para alternar para <span class="text-amber-400">↩ Return</span>.</div>
-        <div class="border-t border-border/50 pt-2"><span class="text-white">O que é Return?</span><br>A resposta do destinatário volta obrigatoriamente para o remetente.</div>
-        <div><span class="text-white">Remover conexão</span><br>Clique na seta → <span class="text-red-400">✕</span> para deletar.</div>
-        <div><span class="text-white">Remover nó</span><br>Selecione o nó → <span class="text-red-400">✕</span> aparece no canto.</div>
-      </div>
-    </div>
-    <button id="flow-help-btn" onclick="document.getElementById('flow-help').classList.remove('hidden');this.classList.add('hidden')" class="hidden absolute right-2 top-12 z-10 px-2 py-1 bg-card border border-border rounded-lg text-xs text-muted hover:text-white" aria-label="Abrir guia">📖</button>
-  </div>
-</div>
-
-<!-- ═══ TAB: Headers ═══ -->
-<div id="view-headers" role="tabpanel" aria-labelledby="tab-headers" class="flex-1 flex-col overflow-hidden hidden">
-  <div class="flex items-center gap-3 px-5 py-2 border-b border-border bg-card/20">
-    <span class="text-sm font-medium text-muted uppercase tracking-wider">Header Templates</span>
-    <button onclick="openHeaderModal()" class="px-3 py-1.5 bg-accent/10 text-accent text-xs rounded-lg hover:bg-accent/20 transition font-medium">+ Novo</button>
-  </div>
-  <div class="flex flex-1 overflow-hidden">
-    <div class="w-80 border-r border-border bg-card/30 overflow-y-auto p-3 space-y-2" id="header-list"></div>
-    <div class="flex-1 flex flex-col overflow-hidden" id="header-editor-area">
-      <div class="flex-1 flex items-center justify-center text-muted text-sm">
-        <div class="text-center"><span class="text-4xl block mb-2">📝</span>Selecione ou crie um header</div>
-      </div>
-    </div>
-    <div class="w-56 border-l border-border bg-card/30 p-4 overflow-y-auto text-xs">
-      <div class="text-white font-medium text-sm mb-3">Placeholders</div>
-      <div class="space-y-2" id="placeholder-list"></div>
-      <div class="mt-4 text-muted text-[10px] leading-relaxed">Clique para inserir no editor. Placeholders são substituídos em runtime.</div>
-    </div>
-  </div>
-</div>
-
-<!-- ═══ Auth Modal ═══ -->
-<div id="auth-modal" class="fixed inset-0 modal-bg z-50 hidden flex items-center justify-center">
-  <div class="bg-card border border-border rounded-2xl w-[450px] shadow-2xl">
-    <div class="flex items-center justify-between px-6 py-4 border-b border-border">
-      <h2 id="auth-modal-title" class="text-base font-semibold text-white">Login</h2>
-      <button onclick="closeAuthModal()" class="text-muted hover:text-white transition">✕</button>
-    </div>
-    <div class="p-6" id="auth-modal-body"></div>
-    <div class="flex justify-end px-6 py-4 border-t border-border">
-      <button onclick="closeAuthModal()" class="px-5 py-2 bg-accent hover:bg-accentHover text-white text-sm font-medium rounded-lg transition">Pronto</button>
-    </div>
-  </div>
-</div>
-
-<!-- ═══ Header Modal ═══ -->
-<div id="header-modal" role="dialog" aria-modal="true" aria-labelledby="header-modal-title" class="fixed inset-0 modal-bg z-50 hidden flex items-center justify-center">
-  <div class="bg-card border border-border rounded-2xl w-[600px] max-h-[90vh] overflow-y-auto shadow-2xl">
-    <div class="flex items-center justify-between px-6 py-4 border-b border-border">
-      <h2 id="header-modal-title" class="text-base font-semibold text-white">Novo Header</h2>
-      <button onclick="closeHeaderModal()" aria-label="Fechar" class="text-muted hover:text-white transition">✕</button>
-    </div>
-    <div class="p-6 space-y-4">
-      <div class="grid grid-cols-2 gap-4">
-        <div><label class="block text-xs text-muted mb-1.5">ID</label>
-          <input id="h-id" class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent/50 transition" placeholder="meu-header"></div>
-        <div><label class="block text-xs text-muted mb-1.5">Nome</label>
-          <input id="h-name" class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent/50 transition" placeholder="Meu Header"></div>
-      </div>
-      <div><label class="block text-xs text-muted mb-1.5">Descrição</label>
-        <input id="h-desc" class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent/50 transition" placeholder="Breve descrição do header"></div>
-      <div class="grid grid-cols-2 gap-4">
-        <div><label class="block text-xs text-muted mb-1.5">Tipo</label>
-          <select id="h-type" class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent/50 transition">
-            <option value="protocol">Protocol — persona + regras</option>
-            <option value="wrapper">Wrapper — envolve a 1ª mensagem</option>
-            <option value="handoff">Handoff — mensagem entre agentes</option>
-          </select></div>
-        <div class="flex items-end pb-2">
-          <label class="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" id="h-default" class="w-4 h-4 rounded border-border bg-surface accent-amber-500">
-            <span class="text-sm text-gray-400">Usar como padrão</span>
-          </label></div>
-      </div>
-      <div><label class="block text-xs text-muted mb-1.5">Conteúdo</label>
-        <textarea id="h-content" rows="10" class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-accent/50 transition resize-none" placeholder="Conteúdo do header template..."></textarea></div>
-    </div>
-    <div class="flex justify-end gap-3 px-6 py-4 border-t border-border">
-      <button onclick="closeHeaderModal()" class="px-4 py-2 text-sm text-muted hover:text-white transition rounded-lg">Cancelar</button>
-      <button onclick="saveHeader()" class="px-5 py-2 bg-accent hover:bg-accentHover text-white text-sm font-medium rounded-lg transition">Salvar</button>
-    </div>
-  </div>
-</div>
-
-<!-- ═══ TAB: Settings ═══ -->
-<div id="view-settings" role="tabpanel" aria-labelledby="tab-settings" class="flex-1 flex-col overflow-hidden hidden">
-  <div class="p-6 max-w-2xl mx-auto w-full space-y-6">
-    <div>
-      <h2 class="text-lg font-semibold text-white mb-1">⚙ Configurações</h2>
-      <p class="text-xs text-muted">Gerencie os provedores de CLI e autenticação</p>
-    </div>
-    <div>
-      <h3 class="text-sm font-medium text-white mb-3">Provedores de CLI</h3>
-      <div id="providers-list" class="space-y-3">
-        <p class="text-xs text-muted">Carregando...</p>
-      </div>
-    </div>
-    <div>
-      <h3 class="text-sm font-medium text-white mb-3">Coleta de dados</h3>
-      <label class="flex items-center gap-3 cursor-pointer">
-        <input type="checkbox" id="settings-data-collection" onchange="toggleDataCollection(this.checked)" class="w-4 h-4 rounded border-border bg-surface accent-emerald-500">
-        <span class="text-sm text-gray-400">Enviar dados de treinamento (anônimos) para o banco de dados</span>
-      </label>
-    </div>
   </div>
 </div>
 
 <!-- ═══ TAB: Run ═══ -->
-<div id="view-run" role="tabpanel" aria-labelledby="tab-run" class="flex-1 flex-col overflow-hidden" style="display:flex">
-  <!-- Session Tabs -->
-  <div id="run-tabs" class="flex items-center gap-1 px-4 pt-2 border-b border-border bg-card/40 overflow-x-auto no-scrollbar">
-    <div id="run-tabs-list" class="flex items-center gap-1"></div>
-    <button onclick="addRunTab()" title="Nova aba" class="w-8 h-8 flex items-center justify-center rounded-t-lg text-muted hover:text-white hover:bg-white/5 transition text-lg">+</button>
-  </div>
-
+<div id="view-run" class="flex-1 flex-col overflow-hidden hidden">
+  <!-- Project bar -->
   <div class="flex items-center gap-3 px-5 py-2 border-b border-border bg-card/20">
     <label class="text-xs text-muted">📂</label>
-    <select id="project-select" onchange="onProjectChange()" aria-label="Selecionar projeto" class="flex-1 bg-surface border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent/50 transition">
+    <select id="project-select" onchange="onProjectChange()" class="flex-1 bg-surface border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent/50 transition">
       <option value="">Selecione um projeto...</option>
     </select>
     <button onclick="openProjectModal()" class="px-3 py-1.5 bg-accent/10 text-accent text-xs rounded-lg hover:bg-accent/20 transition font-medium">+ Novo</button>
-    <button onclick="deleteProject()" aria-label="Remover projeto" class="px-2 py-1.5 text-muted hover:text-red-400 text-xs rounded-lg hover:bg-red-500/10 transition">✕</button>
-    <div class="border-l border-border h-5 mx-1"></div>
-    <label class="text-xs text-muted">🔀</label>
-    <select id="run-flow-select" onchange="onFlowChange()" aria-label="Selecionar flow para execução" class="bg-surface border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent/50 transition min-w-[140px]">
-      <option value="">Nenhum flow</option>
-    </select>
+    <button onclick="deleteProject()" class="px-2 py-1.5 text-muted hover:text-red-400 text-xs rounded-lg hover:bg-red-500/10 transition">✕</button>
     <button id="btn-open" onclick="openSession()" class="px-3 py-1.5 bg-emerald-500/10 text-emerald-400 text-xs rounded-lg hover:bg-emerald-500/20 transition font-medium hidden">⚡ Abrir</button>
     <button id="btn-close" onclick="closeSession()" class="px-3 py-1.5 bg-red-500/10 text-red-400 text-xs rounded-lg hover:bg-red-500/20 transition font-medium hidden">■ Fechar</button>
   </div>
+  <!-- Body: agent boxes left + chat center -->
   <div class="flex flex-1 overflow-hidden">
+    <!-- Agent boxes -->
     <div class="w-48 border-r border-border bg-card/30 flex flex-col">
       <div class="text-[10px] text-muted uppercase tracking-wider px-3 pt-3 pb-1">Agentes</div>
       <div class="px-2 pb-1">
@@ -228,38 +118,24 @@
           📋 <span>Log</span>
         </div>
       </div>
-      <div class="border-t border-border px-3 py-2">
-        <div onclick="switchTab('settings')" class="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-surface/60 transition">
-          <span class="text-xs text-muted">⚙</span>
-          <span class="text-[10px] text-muted">Configurações</span>
-        </div>
-      </div>
     </div>
+    <!-- Chat area -->
     <div class="flex-1 flex flex-col overflow-hidden relative">
       <div class="px-4 py-2 border-b border-border bg-card/10" id="chat-header">
         <span class="text-sm text-muted">Abra um projeto para começar</span>
       </div>
+      <!-- Messages -->
       <div class="flex-1 overflow-y-auto" id="chat-scroll">
-        <div id="agent-grid" class="grid grid-cols-1 md:grid-cols-2 gap-3 p-4 h-full auto-rows-fr"></div>
-        <div id="chat-messages" class="px-4 py-3 space-y-3 max-w-3xl mx-auto hidden"></div>
+        <div id="chat-messages" class="px-4 py-3 space-y-3 max-w-3xl mx-auto"></div>
         <div id="raw-log" class="px-4 py-3 space-y-1 font-mono text-xs hidden"></div>
       </div>
-      <button id="scroll-to-bottom" aria-label="Rolar para o final">↓</button>
-      <!-- Done floating card -->
-      <div id="done-card" class="hidden mx-4 mb-2 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3 relative">
-        <button onclick="document.getElementById('done-card').classList.add('hidden')" class="absolute top-2 right-2 text-muted hover:text-white text-xs">✕</button>
-        <div class="flex items-center gap-2 mb-1">
-          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-          <span class="text-xs font-medium text-emerald-400" id="done-card-agent"></span>
-          <span class="text-[10px] text-emerald-500/60">@done</span>
-        </div>
-        <div class="text-xs text-gray-300" id="done-card-msg"></div>
-      </div>
+      <button id="scroll-to-bottom" aria-label="Scroll to bottom">↓</button>
+      <!-- Input (bottom) -->
       <div class="px-4 py-3 border-t border-border bg-card/20">
         <div class="flex gap-3 max-w-3xl mx-auto">
-          <textarea id="chat-input" rows="1" placeholder="Mensagem para o swarm... (@agente para falar direto)"
-            class="flex-1 bg-surface border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-accent/50 placeholder-muted transition resize-none overflow-hidden"
-            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px';updateMentionHighlight()" disabled></textarea>
+          <input id="chat-input" type="text" placeholder="Mensagem para o swarm... (@agente para falar direto)"
+            class="flex-1 bg-surface border border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-accent/50 placeholder-muted transition"
+            onkeydown="if(event.key==='Enter')sendChat()" disabled>
           <button id="btn-send" onclick="sendChat()" disabled
             class="px-4 py-2.5 bg-accent hover:bg-accentHover text-white text-sm font-medium rounded-xl transition disabled:opacity-30">
             Enviar</button>
@@ -270,11 +146,11 @@
 </div>
 
 <!-- ═══ Agent Modal ═══ -->
-<div id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" class="fixed inset-0 modal-bg z-50 hidden flex items-center justify-center">
+<div id="modal" class="fixed inset-0 modal-bg z-50 hidden flex items-center justify-center">
   <div class="bg-card border border-border rounded-2xl w-[520px] max-h-[90vh] overflow-y-auto shadow-2xl">
     <div class="flex items-center justify-between px-6 py-4 border-b border-border">
       <h2 id="modal-title" class="text-base font-semibold text-white">Novo Agente</h2>
-      <button onclick="closeModal()" aria-label="Fechar" class="text-muted hover:text-white transition">✕</button>
+      <button onclick="closeModal()" class="text-muted hover:text-white transition">✕</button>
     </div>
     <div class="p-6 space-y-4">
       <div class="grid grid-cols-2 gap-4">
@@ -291,11 +167,6 @@
           </select></div>
         <div><label class="block text-xs text-muted mb-1.5">Modelo</label>
           <input id="m-model" class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent/50 transition" placeholder="auto"></div>
-        <div><label class="block text-xs text-muted mb-1.5">CLI</label>
-          <select id="m-cli-type" class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent/50 transition">
-            <option value="kiro">Kiro CLI</option>
-            <option value="gemini">Gemini CLI</option>
-          </select></div>
       </div>
       <div><label class="block text-xs text-muted mb-1.5">Persona</label>
         <textarea id="m-persona" rows="4" class="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent/50 transition resize-none" placeholder="Você é um..."></textarea></div>
@@ -318,11 +189,11 @@
 </div>
 
 <!-- ═══ Project Modal ═══ -->
-<div id="project-modal" role="dialog" aria-modal="true" aria-labelledby="project-modal-title" class="fixed inset-0 modal-bg z-50 hidden flex items-center justify-center">
+<div id="project-modal" class="fixed inset-0 modal-bg z-50 hidden flex items-center justify-center">
   <div class="bg-card border border-border rounded-2xl w-[400px] shadow-2xl">
     <div class="flex items-center justify-between px-6 py-4 border-b border-border">
-      <h2 id="project-modal-title" class="text-base font-semibold text-white">Novo Projeto</h2>
-      <button onclick="closeProjectModal()" aria-label="Fechar" class="text-muted hover:text-white transition">✕</button>
+      <h2 class="text-base font-semibold text-white">Novo Projeto</h2>
+      <button onclick="closeProjectModal()" class="text-muted hover:text-white transition">✕</button>
     </div>
     <div class="p-6 space-y-4">
       <div><label class="block text-xs text-muted mb-1.5">Nome</label>
@@ -337,18 +208,587 @@
   </div>
 </div>
 
-<div id="toast-container"></div>
+<script>
+const API = '/api';
+let agents = [];
+let projectsList = [];
+let editingId = null;
+let editor = null; // Drawflow instance
 
-<!-- JS modules — order matters: utils → api → state → domain → app -->
-<script src="/static/js/utils.js?v=1776098103"></script>
-<script src="/static/js/api.js?v=1776098103"></script>
-<script src="/static/js/state.js?v=1776098103"></script>
-<script src="/static/js/projects.js?v=1776098103"></script>
-<script src="/static/js/agents.js?v=1776098103"></script>
-<script src="/static/js/flow.js?v=1776098103"></script>
-<script src="/static/js/headers.js?v=1776098103"></script>
-<script src="/static/js/settings.js?v=1776098103"></script>
-<script src="/static/js/run.js?v=1776098103"></script>
-<script src="/static/js/app.js?v=1776098103"></script>
+// ── Projects ─────────────────────────────────────────────────────────────
+
+async function loadProjects() {
+  projectsList = await (await fetch(`${API}/projects`)).json();
+  const sel = document.getElementById('project-select');
+  const cur = sel?.value;
+  sel.innerHTML = '<option value="">Selecione um projeto...</option>' +
+    projectsList.map(p => `<option value="${p.id}" ${p.id===cur?'selected':''}>${p.name} — ${p.path}</option>`).join('');
+}
+function openProjectModal() { document.getElementById('project-modal').classList.remove('hidden'); }
+function closeProjectModal() { document.getElementById('project-modal').classList.add('hidden'); }
+async function saveProject() {
+  const name = document.getElementById('p-name').value.trim();
+  const path = document.getElementById('p-path').value.trim();
+  if (!name || !path) return;
+  const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  await fetch(`${API}/projects`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id,name,path}) });
+  closeProjectModal();
+  await loadProjects();
+  document.getElementById('project-select').value = id;
+  onProjectChange();
+}
+async function deleteProject() {
+  const id = document.getElementById('project-select').value;
+  if (!id || !confirm('Remover projeto?')) return;
+  await fetch(`${API}/projects/${id}`, {method:'DELETE'});
+  loadProjects();
+}
+async function onProjectChange() {
+  const id = document.getElementById('project-select').value;
+  if (!id) { document.getElementById('btn-resume').classList.add('hidden'); return; }
+  try {
+    const r = await fetch(`${API}/swarm-state?project_id=${id}`);
+    const data = await r.json();
+    const btn = document.getElementById('btn-resume');
+    if (data.exists) { btn.classList.remove('hidden'); btn.title = `Round ${data.round_num}, agent: ${data.current_agent_id}`; }
+    else { btn.classList.add('hidden'); }
+  } catch(e) { document.getElementById('btn-resume').classList.add('hidden'); }
+}
+
+// ── MCP rows ─────────────────────────────────────────────────────────────
+
+const MCP_PRESETS = {
+  browser:   { command: 'uv', args: ['--directory', '/mnt/c/Users/jlortiz/Desktop/testes/browser-mcp', 'run', 'python', 'server.py'] },
+  dataflow:  { command: 'uv', args: ['--directory', '/mnt/c/Users/jlortiz/Desktop/testes/dataflow-mcp', 'run', 'python', 'server.py'] },
+  knowledge: { command: 'uv', args: ['--directory', '/mnt/c/Users/jlortiz/Desktop/testes/knowledge-mcp', 'run', 'python', 'server.py'] },
+};
+
+function addMcpPreset(name) {
+  // Don't add if already exists
+  const existing = [...document.querySelectorAll('#m-mcps-list .mcp-name')].map(e => e.value.trim());
+  if (existing.includes(name)) return;
+  const p = MCP_PRESETS[name];
+  addMcpRow(name, p.command, p.args.join(', '));
+}
+
+function addMcpRow(name='', command='', args='') {
+  const list = document.getElementById('m-mcps-list');
+  const row = document.createElement('div');
+  row.className = 'flex gap-2 items-start bg-surface/50 border border-border rounded-lg p-2';
+  row.innerHTML = `
+    <div class="flex-1 space-y-1.5">
+      <input class="mcp-name w-full bg-surface border border-border rounded px-2 py-1 text-xs focus:outline-none focus:border-accent/50 transition" placeholder="Nome (ex: browser)" value="${escHtml(name)}">
+      <input class="mcp-cmd w-full bg-surface border border-border rounded px-2 py-1 text-xs font-mono focus:outline-none focus:border-accent/50 transition" placeholder="Comando (ex: uv)" value="${escHtml(command)}">
+      <input class="mcp-args w-full bg-surface border border-border rounded px-2 py-1 text-xs font-mono focus:outline-none focus:border-accent/50 transition" placeholder="Args separados por vírgula (ex: --directory,/path,run,server.py)" value="${escHtml(args)}">
+    </div>
+    <button onclick="this.parentElement.remove()" class="text-muted hover:text-red-400 text-xs mt-1 px-1">✕</button>`;
+  list.appendChild(row);
+}
+
+function getMcpsFromForm() {
+  const mcps = {};
+  document.querySelectorAll('#m-mcps-list > div').forEach(row => {
+    const name = row.querySelector('.mcp-name').value.trim();
+    const cmd = row.querySelector('.mcp-cmd').value.trim();
+    const argsRaw = row.querySelector('.mcp-args').value.trim();
+    if (!name || !cmd) return;
+    mcps[name] = { command: cmd, args: argsRaw ? argsRaw.split(',').map(s => s.trim()) : [], timeout: 120000 };
+  });
+  return mcps;
+}
+
+function populateMcpRows(mcps) {
+  document.getElementById('m-mcps-list').innerHTML = '';
+  if (!mcps) return;
+  for (const [name, cfg] of Object.entries(mcps)) {
+    addMcpRow(name, cfg.command || '', (cfg.args || []).join(', '));
+  }
+}
+
+// ── Tabs ─────────────────────────────────────────────────────────────────
+
+function switchTab(tab) {
+  document.querySelectorAll('[id^="view-"]').forEach(v => { v.classList.add('hidden'); v.style.display = ''; });
+  document.querySelectorAll('.tab-btn').forEach(b => { b.classList.remove('bg-accent/10','text-accent'); b.classList.add('text-muted'); });
+  const view = document.getElementById('view-' + tab);
+  view.classList.remove('hidden');
+  view.style.display = 'flex';
+  document.getElementById('tab-' + tab).classList.add('bg-accent/10','text-accent');
+  document.getElementById('tab-' + tab).classList.remove('text-muted');
+  if (tab === 'flow') initDrawflow();
+}
+
+// ── Agents ───────────────────────────────────────────────────────────────
+
+async function loadAgents() {
+  agents = await (await fetch(`${API}/agents`)).json();
+  renderAgents();
+  renderPalette();
+}
+
+function renderAgents() {
+  const el = document.getElementById('agent-list');
+  if (!agents.length) { el.innerHTML = '<p class="text-center text-muted text-xs py-8">Nenhum agente</p>'; return; }
+  el.innerHTML = agents.map(a => `
+    <div class="group flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-surface/60 cursor-pointer transition" onclick="editAgent('${a.id}')">
+      <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:${a.color}"></span>
+      <div class="flex-1 min-w-0">
+        <div class="text-sm font-medium text-white truncate">${a.name}</div>
+        <div class="text-xs text-muted truncate">${a.persona.slice(0,50)}...</div>
+      </div>
+      <div class="hidden group-hover:flex gap-1">
+        <button onclick="event.stopPropagation();editAgent('${a.id}')" class="w-6 h-6 flex items-center justify-center rounded text-muted hover:text-white hover:bg-border/50 transition text-xs">✎</button>
+        <button onclick="event.stopPropagation();deleteAgent('${a.id}')" class="w-6 h-6 flex items-center justify-center rounded text-muted hover:text-red-400 hover:bg-red-500/10 transition text-xs">✕</button>
+      </div>
+    </div>`).join('');
+}
+
+function openModal(agent = null) {
+  editingId = agent ? agent.id : null;
+  document.getElementById('modal-title').textContent = agent ? 'Editar Agente' : 'Novo Agente';
+  document.getElementById('m-id').value = agent?.id || '';
+  document.getElementById('m-id').disabled = !!agent;
+  document.getElementById('m-name').value = agent?.name || '';
+  document.getElementById('m-color').value = agent?.color || '#60a5fa';
+  document.getElementById('m-model').value = agent?.model || '';
+  document.getElementById('m-persona').value = agent?.persona || '';
+  populateMcpRows(agent?.mcps);
+  document.getElementById('modal').classList.remove('hidden');
+}
+function closeModal() { document.getElementById('modal').classList.add('hidden'); editingId = null; }
+function editAgent(id) { const a = agents.find(x => x.id === id); if (a) openModal(a); }
+
+async function saveAgent() {
+  const mcps = getMcpsFromForm();
+  const body = {
+    id: document.getElementById('m-id').value.trim(),
+    name: document.getElementById('m-name').value.trim(),
+    color: document.getElementById('m-color').value,
+    model: document.getElementById('m-model').value.trim() || null,
+    persona: document.getElementById('m-persona').value.trim(),
+    mcps,
+  };
+  if (!body.id || !body.name || !body.persona) return;
+  await fetch(editingId ? `${API}/agents/${editingId}` : `${API}/agents`, {
+    method: editingId ? 'PUT' : 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
+  });
+  closeModal(); loadAgents();
+}
+
+async function deleteAgent(id) {
+  if (!confirm(`Remover "${id}"?`)) return;
+  await fetch(`${API}/agents/${id}`, { method: 'DELETE' }); loadAgents();
+}
+
+// ── Drawflow ─────────────────────────────────────────────────────────────
+
+let drawflowReady = false;
+let startNodeId = '';  // agent_id of the start node
+
+function renderPalette() {
+  const el = document.getElementById('flow-palette');
+  el.innerHTML = '<div class="text-xs text-muted uppercase tracking-wider mb-2">Arrastar para o canvas</div>' +
+    agents.map(a => `
+      <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface border border-border cursor-grab hover:border-accent/30 transition text-xs"
+           draggable="true" ondragstart="dragStart(event,'${a.id}')">
+        <span class="w-2 h-2 rounded-full" style="background:${a.color}"></span>
+        <span class="text-white font-medium">${a.name}</span>
+      </div>`).join('');
+}
+
+function dragStart(ev, agentId) { ev.dataTransfer.setData('agentId', agentId); }
+
+function nodeHtml(a, isStart) {
+  return `<div class="node-inner">
+    <div class="node-title"><span class="w-2 h-2 rounded-full" style="background:${a.color}"></span>${isStart ? '⚡ ' : ''}${a.name}</div>
+    <div class="node-sub">${a.id}${isStart ? ' · início' : ''}</div>
+  </div>`;
+}
+
+function refreshStartBadges() {
+  const raw = editor.drawflow.drawflow.Home.data;
+  for (const [nid, n] of Object.entries(raw)) {
+    const a = agents.find(x => x.id === n.data?.agentId);
+    if (!a) continue;
+    const isStart = n.data.agentId === startNodeId;
+    const el = document.getElementById('node-' + nid);
+    if (el) {
+      const content = el.querySelector('.drawflow_content_node');
+      if (content) content.innerHTML = nodeHtml(a, isStart);
+    }
+    // Visual border
+    el?.style.setProperty('border-color', isStart ? '#7c5cfc' : '#2a2a35');
+    el?.style.setProperty('border-width', isStart ? '2px' : '1px');
+  }
+}
+
+function initDrawflow() {
+  if (drawflowReady) return;
+  drawflowReady = true;
+  const container = document.getElementById('drawflow');
+  editor = new Drawflow(container);
+  editor.reroute = true;
+  editor.curvature = 0.3;
+  editor.reroute_curvature_start_end = 0.3;
+  editor.reroute_curvature = 0.3;
+  editor.start();
+
+  const svg = container.querySelector('svg');
+  if (svg) {
+    const defs = document.createElementNS('http://www.w3.org/2000/svg','defs');
+    defs.innerHTML = '<marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#7c5cfc"/></marker>';
+    svg.prepend(defs);
+  }
+
+  // Drop handler
+  container.addEventListener('drop', ev => {
+    ev.preventDefault();
+    const agentId = ev.dataTransfer.getData('agentId');
+    const a = agents.find(x => x.id === agentId);
+    if (!a) return;
+    const existing = Object.values(editor.drawflow.drawflow.Home.data);
+    if (existing.some(n => n.data?.agentId === agentId)) return;
+    const rect = container.getBoundingClientRect();
+    const isFirst = Object.keys(editor.drawflow.drawflow.Home.data).length === 0;
+    if (isFirst) startNodeId = agentId;
+    editor.addNode(a.name, 1, 1, ev.clientX - rect.left, ev.clientY - rect.top, agentId, { agentId }, nodeHtml(a, agentId === startNodeId));
+    if (isFirst) refreshStartBadges();
+  });
+  container.addEventListener('dragover', ev => ev.preventDefault());
+
+  // Double-click node = set as start
+  editor.on('nodeSelected', function(nodeId) {
+    // Store for dblclick
+    container._selectedNodeId = nodeId;
+  });
+  container.addEventListener('dblclick', () => {
+    const nodeId = container._selectedNodeId;
+    if (!nodeId) return;
+    const n = editor.drawflow.drawflow.Home.data[nodeId];
+    if (!n?.data?.agentId) return;
+    startNodeId = n.data.agentId;
+    refreshStartBadges();
+    document.getElementById('flow-info').textContent = `⚡ Início: ${n.name}`;
+  });
+
+  loadFlow();
+}
+
+async function loadFlow() {
+  const data = await (await fetch(`${API}/flow`)).json();
+  startNodeId = data.start_node || '';
+  if (!data.nodes.length) return;
+  editor.clear();
+  const idMap = {};
+  for (const n of data.nodes) {
+    const a = agents.find(x => x.id === n.agent_id);
+    if (!a) continue;
+    if (!startNodeId) startNodeId = n.agent_id;  // default to first
+    const nid = editor.addNode(a.name, 1, 1, n.x, n.y, a.id, { agentId: a.id }, nodeHtml(a, n.agent_id === startNodeId));
+    idMap[n.agent_id] = nid;
+  }
+  for (const e of data.edges) {
+    if (idMap[e.src] && idMap[e.dst]) {
+      editor.addConnection(idMap[e.src], idMap[e.dst], 'output_1', 'input_1');
+    }
+  }
+  refreshStartBadges();
+}
+
+async function saveFlow() {
+  const raw = editor.drawflow.drawflow.Home.data;
+  const nodes = []; const edges = [];
+  const nodeIdToAgent = {};
+  for (const [nid, n] of Object.entries(raw)) {
+    nodes.push({ agent_id: n.data.agentId, x: n.pos_x, y: n.pos_y });
+    nodeIdToAgent[nid] = n.data.agentId;
+  }
+  for (const [nid, n] of Object.entries(raw)) {
+    const conns = n.outputs?.output_1?.connections || [];
+    for (const c of conns) {
+      edges.push({ src: nodeIdToAgent[nid], dst: nodeIdToAgent[c.node] });
+    }
+  }
+  await fetch(`${API}/flow`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ nodes, edges, start_node: startNodeId }) });
+  document.getElementById('flow-info').textContent = `✓ Salvo: ${nodes.length} nós, ${edges.length} conexões, início: ${startNodeId}`;
+}
+
+function autoLayout() {
+  const raw = editor.drawflow.drawflow.Home.data;
+  const ids = Object.keys(raw);
+  const cols = Math.ceil(Math.sqrt(ids.length));
+  ids.forEach((id, i) => {
+    const x = 80 + (i % cols) * 250;
+    const y = 80 + Math.floor(i / cols) * 150;
+    const el = document.getElementById('node-' + id);
+    if (el) { el.style.left = x + 'px'; el.style.top = y + 'px'; raw[id].pos_x = x; raw[id].pos_y = y; }
+  });
+  editor.updateConnectionNodes('node-' + ids[0]);
+}
+
+// ── Session & Chat ───────────────────────────────────────────────────────
+
+let sessionOpen = false;
+let chatTarget = null;  // null = swarm, string = agent_id, '__log__' = raw log
+let eventSource = null;
+let chatHistory = [];   // {type, text, label} — all messages stored for filtering
+
+function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function setStatus(text, running) {
+  document.getElementById('status-text').textContent = text;
+  document.getElementById('status-dot').className = `w-2 h-2 rounded-full ${running ? 'bg-amber-400 running' : 'bg-emerald-500'}`;
+}
+function getColor(name) {
+  const a = agents.find(x => x.name === name);
+  return a?.color || (name === 'GOD' ? '#fbbf24' : '#6b6b80');
+}
+function ts() { return new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'}); }
+
+function setSessionUI(open) {
+  sessionOpen = open;
+  document.getElementById('btn-open').classList.toggle('hidden', open);
+  document.getElementById('btn-close').classList.toggle('hidden', !open);
+  document.getElementById('chat-input').disabled = !open;
+  document.getElementById('btn-send').disabled = !open;
+  document.getElementById('chat-header').innerHTML = open
+    ? '<span class="w-2 h-2 rounded-full bg-emerald-500"></span><span class="text-sm text-white font-medium">Swarm ativo</span><span class="text-xs text-muted ml-2">Digite para enviar ao swarm, @agente para falar direto</span>'
+    : '<span class="text-sm text-muted">Abra um projeto para começar</span>';
+  setStatus(open ? 'Session open' : 'Ready', false);
+}
+
+// ── Open / Close ─────────────────────────────────────────────────────────
+
+async function openSession() {
+  const pid = document.getElementById('project-select').value;
+  if (!pid) return;
+  setStatus('Opening...', true);
+  document.getElementById('chat-messages').innerHTML = '';
+  document.getElementById('raw-log').innerHTML = '';
+  document.getElementById('run-agents').innerHTML = '';
+  chatHistory = [];
+
+  await fetch(`${API}/session/open/${pid}`, { method: 'POST' });
+
+  // Start SSE
+  if (eventSource) eventSource.close();
+  eventSource = new EventSource(`${API}/session/events`);
+  eventSource.addEventListener('orch', e => handleSSE('orch', JSON.parse(e.data)));
+  eventSource.addEventListener('agent', e => handleSSE('agent', JSON.parse(e.data)));
+  eventSource.addEventListener('error', e => { try { handleSSE('error', JSON.parse(e.data)); } catch(ex){} });
+  eventSource.addEventListener('summary', e => handleSSE('summary', JSON.parse(e.data)));
+  eventSource.addEventListener('done', e => handleSSE('done', {}));
+
+  setSessionUI(true);
+}
+
+async function closeSession() {
+  if (eventSource) { eventSource.close(); eventSource = null; }
+  await fetch(`${API}/session/close`, { method: 'POST' });
+  setSessionUI(false);
+  document.getElementById('run-agents').innerHTML = '';
+}
+
+function onProjectChange() {
+  const pid = document.getElementById('project-select').value;
+  document.getElementById('btn-open').classList.toggle('hidden', !pid);
+  if (sessionOpen) closeSession();
+}
+
+// ── Send message ─────────────────────────────────────────────────────────
+
+async function sendChat() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text || !sessionOpen) return;
+  input.value = '';
+
+  // Parse @agent prefix
+  const m = text.match(/^@(\w+)\s+(.*)/s);
+  const agent_id = m ? m[1] : (chatTarget && chatTarget !== '__log__' ? chatTarget : null);
+  const msg = m ? m[2] : text;
+
+  // Show user message in chat
+  addChatBubble('user', msg, agent_id ? `→ ${agent_id}` : '→ swarm');
+  setStatus('Working...', true);
+
+  await fetch(`${API}/session/message`, {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ text: msg, agent_id })
+  });
+}
+
+// ── Chat rendering ───────────────────────────────────────────────────────
+
+function addChatBubble(type, text, label) {
+  chatHistory.push({type, text, label});
+  // If this message matches current filter, append it directly (avoid full re-render)
+  if (shouldShow({type, text, label})) {
+    appendBubble(type, text, label);
+  }
+}
+
+function shouldShow(msg) {
+  if (!chatTarget || chatTarget === '__log__') return true; // swarm or log: show all
+  // For agent view: show only that agent's responses + user messages sent to that agent + summaries/system
+  if (msg.type === 'agent') return msg.label === chatTarget;
+  if (msg.type === 'user') return !msg.label || msg.label === `→ ${chatTarget}`;
+  return msg.type === 'summary' || msg.type === 'system';
+}
+
+function renderChat() {
+  const el = document.getElementById('chat-messages');
+  el.innerHTML = '';
+  chatHistory.filter(shouldShow).forEach(m => appendBubble(m.type, m.text, m.label));
+  const scroll = document.getElementById('chat-scroll');
+  scroll.scrollTop = scroll.scrollHeight;
+}
+
+function appendBubble(type, text, label) {
+  const el = document.getElementById('chat-messages');
+  const div = document.createElement('div');
+  div.className = 'log-line';
+
+  if (type === 'user') {
+    div.innerHTML = `<div class="flex justify-end"><div class="max-w-[75%] bg-accent/10 border border-accent/20 rounded-xl rounded-tr-sm px-4 py-2.5">
+      <div class="text-[10px] text-accent/60 mb-1">${ts()} ${escHtml(label||'')}</div>
+      <div class="text-sm text-white whitespace-pre-wrap">${escHtml(text)}</div>
+    </div></div>`;
+  } else if (type === 'agent') {
+    const c = getColor(label);
+    div.innerHTML = `<div class="flex justify-start"><div class="max-w-[75%] bg-card border border-border rounded-xl rounded-tl-sm px-4 py-2.5">
+      <div class="text-[10px] mb-1" style="color:${c}">${ts()} ${escHtml(label||'')}</div>
+      <div class="text-sm text-gray-300 whitespace-pre-wrap">${escHtml(text)}</div>
+    </div></div>`;
+  } else if (type === 'summary') {
+    div.innerHTML = `<div class="flex justify-center"><div class="bg-emerald-500/5 border border-emerald-500/20 rounded-xl px-4 py-2.5 max-w-[80%]">
+      <div class="text-[10px] text-emerald-400 mb-1">${ts()} ✓ Resumo</div>
+      <div class="text-sm text-emerald-300">${escHtml(text)}</div>
+    </div></div>`;
+  } else if (type === 'system') {
+    div.innerHTML = `<div class="flex justify-center"><div class="text-[10px] text-muted bg-surface/50 px-3 py-1 rounded-full">${escHtml(text)}</div></div>`;
+  }
+
+  el.appendChild(div);
+  const scroll = document.getElementById('chat-scroll');
+  if (isNearBottom(scroll)) scroll.scrollTop = scroll.scrollHeight;
+}
+
+// ── Agent boxes ──────────────────────────────────────────────────────────
+
+const agentStatus = {};  // name → {status, lastText}
+
+function updateAgentBox(name, status, text) {
+  agentStatus[name] = { status, text: (text||'').slice(0,60) };
+  renderAgentBoxes();
+}
+
+function renderAgentBoxes() {
+  const el = document.getElementById('run-agents');
+  el.innerHTML = Object.entries(agentStatus).filter(([n]) => n !== 'GOD').map(([name, s]) => {
+    const c = getColor(name);
+    const isSel = chatTarget === name;
+    const isActive = s.status === 'working';
+    return `<div onclick="selectChatTarget('${escHtml(name)}')"
+      class="agent-box flex flex-col gap-1 px-3 py-2.5 rounded-lg border cursor-pointer transition ${isSel ? 'border-accent/50 bg-accent/5' : 'border-border bg-surface hover:border-accent/20'}">
+      <div class="flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full ${isActive?'running':''}" style="background:${c}"></span>
+        <span class="text-xs font-medium text-white">${escHtml(name)}</span>
+      </div>
+      <div class="text-[10px] text-muted truncate">${escHtml(s.text||'Pronto')}</div>
+    </div>`;
+  }).join('');
+}
+
+function selectChatTarget(target) {
+  chatTarget = target;
+  renderAgentBoxes();
+  const log = document.getElementById('raw-log');
+  const msgs = document.getElementById('chat-messages');
+  log.classList.add('hidden'); msgs.classList.remove('hidden');
+
+  // Highlight
+  document.querySelectorAll('.agent-box').forEach(b => { b.classList.remove('border-accent/50','bg-accent/5'); b.classList.add('border-border','bg-surface'); });
+
+  if (target === '__log__') {
+    log.classList.remove('hidden'); msgs.classList.add('hidden');
+    document.getElementById('chat-header').innerHTML = '<span class="text-sm text-muted">📋 Log bruto</span>';
+    document.getElementById('chat-input').placeholder = 'Mensagem para o swarm...';
+    document.getElementById('box-__log__').classList.add('border-accent/50','bg-accent/5');
+  } else if (target) {
+    const c = getColor(target);
+    document.getElementById('chat-header').innerHTML = `<span class="w-2 h-2 rounded-full" style="background:${c}"></span><span class="text-sm font-medium text-white">${escHtml(target)}</span><span class="text-xs text-muted ml-2">Mensagens vão direto para este agente</span>`;
+    document.getElementById('chat-input').placeholder = `Mensagem para ${target}...`;
+  } else {
+    document.getElementById('chat-header').innerHTML = sessionOpen
+      ? '<span class="w-2 h-2 rounded-full bg-emerald-500"></span><span class="text-sm text-white font-medium">Swarm</span><span class="text-xs text-muted ml-2">Mensagens seguem o flow configurado</span>'
+      : '<span class="text-sm text-muted">Abra um projeto para começar</span>';
+    document.getElementById('chat-input').placeholder = 'Mensagem para o swarm... (@agente para falar direto)';
+    document.getElementById('box-swarm').classList.add('border-accent/50','bg-accent/5');
+    document.getElementById('box-swarm').classList.remove('border-border','bg-surface');
+  }
+  renderChat();
+}
+
+// ── Raw log ──────────────────────────────────────────────────────────────
+
+function appendLog(html) {
+  const log = document.getElementById('raw-log');
+  const div = document.createElement('div');
+  div.className = 'log-line'; div.innerHTML = html; log.appendChild(div);
+  if (chatTarget === '__log__') {
+    const scroll = document.getElementById('chat-scroll');
+    if (isNearBottom(scroll)) scroll.scrollTop = scroll.scrollHeight;
+  }
+}
+
+// ── SSE handler ──────────────────────────────────────────────────────────
+
+function handleSSE(type, data) {
+  const t = ts();
+  if (type === 'orch') {
+    appendLog(`<span class="text-muted">${t}</span> <span class="text-amber-400 font-medium">[ORCH]</span> ${escHtml(data.msg)}`);
+    const hm = data.msg.match(/^→ (.+?): (.+)/);
+    if (hm) addChatBubble('system', `→ Handoff para ${hm[1]}: ${hm[2]}`);
+    const rm = data.msg.match(/^Round (\d+): (.+)/);
+    if (rm) updateAgentBox(rm[2], 'working', 'Processando...');
+  } else if (type === 'agent') {
+    const c = data.name === 'GOD' ? '#fbbf24' : getColor(data.name);
+    appendLog(`<span class="text-muted">${t}</span> <span style="color:${c}" class="font-medium">[${escHtml(data.name)}]</span> <span class="text-muted">${escHtml(data.event)}</span>`);
+    if (data.text) {
+      for (const l of data.text.split('\n').slice(0,15))
+        appendLog(`<span class="text-muted ml-4">│</span> <span class="text-gray-400">${escHtml(l)}</span>`);
+    }
+    if (data.name !== 'GOD') {
+      if (data.event.includes('ready')) updateAgentBox(data.name, 'ready', 'Pronto');
+      if (data.event.includes('← prompt')) updateAgentBox(data.name, 'working', 'Processando...');
+      if (data.event.includes('→ response')) {
+        updateAgentBox(data.name, 'ready', (data.text||'').slice(0,60));
+        addChatBubble('agent', data.text||'', data.name);
+      }
+      if (data.event.includes('← direct')) updateAgentBox(data.name, 'working', 'Respondendo...');
+    }
+  } else if (type === 'summary') {
+    addChatBubble('summary', data.text);
+    setStatus('Session open');
+  } else if (type === 'error') {
+    appendLog(`<span class="text-muted">${t}</span> <span class="text-red-400">[ERROR]</span> ${escHtml(data.msg)}`);
+  } else if (type === 'done') {
+    setStatus('Session open');
+  }
+}
+
+// ── Scroll-to-bottom ─────────────────────────────────────────────────────
+function isNearBottom(el, threshold=100) { return (el.scrollHeight - el.scrollTop - el.clientHeight) < threshold; }
+(function(){
+  const sc = document.getElementById('chat-scroll'), btn = document.getElementById('scroll-to-bottom');
+  sc.addEventListener('scroll', () => btn.classList.toggle('visible', !isNearBottom(sc)));
+  btn.addEventListener('click', () => sc.scrollTo({top: sc.scrollHeight, behavior:'smooth'}));
+})();
+
+// ── Init ─────────────────────────────────────────────────────────────────
+document.addEventListener('keydown', e => { if (e.key==='Escape') { closeModal(); closeProjectModal(); } });
+loadAgents();
+loadProjects();
+</script>
 </body>
 </html>

@@ -16,19 +16,10 @@ run.sh run  → orchestrator.py → Execução batch CLI
 
 ### 1.3 Spawn de Agentes
 Para cada nó no grafo de fluxo:
-1. `make_clean_env(mcps, workdir)` — Cria HOME temporário:
+1. `make_clean_env(mcps)` — Cria HOME temporário:
    - `tempfile.mkdtemp(prefix='kiro_agent_')`
    - Symlinks: `.config`, `.local`, `.bashrc`, `.profile`, `.zshrc`
    - Copia `.kiro/` e escreve `mcp.json` com MCPs do agente
-   - Se `workdir` fornecido e `ENV_MCP_AUTO_INJECT=True`: injeta MCP `env-manager` automaticamente no `mcp.json`:
-     ```json
-     "env-manager": {
-       "command": "python3",
-       "args": ["<path_abs>/env_mcp_server.py", "--state-dir", "/tmp/kiro-env-{hash}/"],
-       "timeout": 300
-     }
-     ```
-   - `state_dir` compartilhado entre agentes do mesmo projeto (hash do workdir) — permite que agente B veja processos iniciados por agente A
 2. `pexpect.spawn('kiro-cli chat --wrap never -a', env=env)` — Inicia processo
 3. `_read_until_prompt(timeout=60)` — Aguarda prompt inicial do kiro-cli
 4. `agent.send(persona + protocol_instructions + "Responda apenas: Entendido.")` — Injeta persona

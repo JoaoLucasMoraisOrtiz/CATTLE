@@ -223,6 +223,9 @@ class SwarmSession:
             self._auto_compact(match, agent)
             with self._lock:
                 target_exists = signal.kind == 'handoff' and signal.target in self.agents
+            # Release sender before starting handoff chain
+            self._busy.discard(match)
+            self._drain_queue(match)
             if target_exists:
                 self.cb.on_orch(f'→ {signal.target}: {signal.summary}')
                 msg = self._handoff_msg(defn.name, signal)
@@ -230,7 +233,6 @@ class SwarmSession:
             self.cb.on_done()
         finally:
             self._busy.discard(match)
-            self._drain_queue(match)
 
     def _drain_queue(self, agent_id):
         q = self._agent_queues.get(agent_id, [])
