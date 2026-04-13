@@ -118,14 +118,20 @@ class Agent:
             if saw_processing:
                 # Emit screen snapshot
                 self._emit_chunk(clean)
-                # Also extract response text for the return value
-                if self._driver.response_prefix:
-                    for line in clean.split('\n'):
-                        s = line.strip()
-                        if s.startswith(self._driver.response_prefix):
-                            buf.append(s[len(self._driver.response_prefix):].strip())
-                else:
-                    buf.append(clean)
+        # Extract response from final pyte screen
+        if self._pty._screen:
+            in_response = False
+            for line in self._pty._screen.display:
+                s = line.strip()
+                if not s:
+                    continue
+                if s.startswith(self._driver.response_prefix):
+                    in_response = True
+                    buf.append(s[len(self._driver.response_prefix):].strip())
+                elif in_response:
+                    if self._driver.tui_chrome_re and self._driver.tui_chrome_re.match(s):
+                        break
+                    buf.append(s)
         return '\n'.join(buf)
 
     def _send_line(self, message):
