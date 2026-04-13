@@ -110,10 +110,12 @@ class PtyProcess:
 
     def write(self, text: str) -> None:
         assert self.proc and self.proc.isalive()
-        # For TUI CLIs, real newlines act as Enter (submits partial messages)
-        # Replace with literal \n so the text stays as one message
+        # For TUI CLIs, escape shell mode if active
         if self._screen is not None:
-            text = text.replace('\n', '\\n')
+            if any('shell mode' in line.lower() for line in self._screen.display):
+                self.proc.send('\x1b')  # Esc to exit shell mode
+                import time; time.sleep(0.5)
+            text = ' '.join(text.split())
         self.proc.send(text)
         import time; time.sleep(0.3)
         self.proc.send(self.driver.submit_suffix)
