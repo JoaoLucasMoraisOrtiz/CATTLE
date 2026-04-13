@@ -172,8 +172,6 @@ class Agent:
 
     def _emit_chunk(self, clean):
         if not self.on_chunk: return
-        s = clean.strip()
-        if not s or SPINNER_RE.match(s): return
         # For TUI CLIs: send screen snapshot (replace mode)
         if self._pty._screen:
             lines = []
@@ -184,9 +182,10 @@ class Agent:
             screen_text = '\n'.join(lines)
             if screen_text != self._last_screen:
                 self._last_screen = screen_text
-                if self.on_chunk:
-                    self.on_chunk(screen_text, True)  # True = replace
+                self.on_chunk(screen_text, True)
             return
+        s = clean.strip()
+        if not s or SPINNER_RE.match(s): return
         self._chunk_buf += clean
         if time.time() - self._last_chunk_ts >= CHUNK_THROTTLE:
             self._flush_chunk()
