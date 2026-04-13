@@ -102,7 +102,7 @@ class PtyProcess:
         )
         # For TUI-based CLIs, use pyte virtual terminal
         if self.driver.tui_chrome_re and pyte:
-            self._screen = pyte.Screen(200, 60)
+            self._screen = pyte.Screen(200, 500)
             self._stream = pyte.Stream(self._screen)
         else:
             self._screen = None
