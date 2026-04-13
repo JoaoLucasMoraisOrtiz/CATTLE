@@ -151,8 +151,10 @@ class Agent:
                     in_response = True
                     buf.append(s[len(self._driver.response_prefix):].strip())
                 elif in_response:
+                    # Skip chrome (tool boxes, bars) but keep collecting
                     if self._driver.tui_chrome_re and self._driver.tui_chrome_re.match(s):
-                        break
+                        in_response = False
+                        continue
                     buf.append(s)
         return '\n'.join(buf)
 
