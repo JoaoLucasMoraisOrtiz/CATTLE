@@ -43,7 +43,31 @@ GEMINI_DRIVER = CliDriver(
     model_flag='--model',
     yolo_flag='--yolo',
     response_prefix='✦',
-    tui_chrome_re=re.compile(r'^[─▀▄│╭╮╰╯▐▌░▒▓█\s]+$|^\s*YOLO\b|^\s*workspace\b|^\s*/mnt/|^\s*sandbox\b|^\s*\? for shortcuts'),
+    tui_chrome_re=re.compile(
+        r'^[─▀▄│╭╮╰╯▐▌░▒▓█\s]+$'
+        r'|^\s*YOLO\b'
+        r'|^\s*workspace\b'
+        r'|^\s*/mnt/'
+        r'|^\s*sandbox\b'
+        r'|^\s*\? for shortcuts'
+        r'|^\s*Type your message'
+        r'|^\s*Gemini CLI'
+        r'|^\s*Signed in with'
+        r'|^\s*Plan:'
+        r'|^\s*MCP servers'
+        r'|^\s*Waiting for auth'
+        r'|^\s*Read more:'
+        r'|^\s*We.re making changes'
+        r'|^\s*What.s Changing'
+        r'|^\s*How it affects'
+        r'|^\s*periods of high'
+        r'|^\s*Tips for getting'
+        r'|^\s*\d+\.\s*(Create GEMINI|/help|Ask coding|Be specific)'
+        r'|^\s*Auto \(Gemini'
+        r'|^\s*no sandbox'
+        r'|^\s*branch\b'
+        r'|^\x1b'
+    ),
 )
 
 DRIVERS = {'kiro': KIRO_DRIVER, 'gemini': GEMINI_DRIVER}

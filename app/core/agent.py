@@ -52,17 +52,15 @@ class Agent:
     def start(self):
         self._pty.spawn()
         real_cb = self.on_chunk
-        def filt(text):
-            if not real_cb: return
-            s = text.strip()
-            if not s or s[0] in '⠀⢀⢰⢸⠸╭│╰' or 'Did you know' in s: return
-            real_cb(text)
-        self.on_chunk = filt
+        self.on_chunk = None  # suppress ALL output during startup
         raw = self._read_until_prompt(STARTUP_TIMEOUT)
         # Handle gemini trust dialog
         if self._pty._screen and self._pty.screen_contains('Trust folder'):
             self._pty.proc.send('1')
             time.sleep(2)
+            raw += self._read_until_prompt(STARTUP_TIMEOUT)
+        # Handle gemini auth dialog
+        if self._pty._screen and self._pty.screen_contains('Waiting for authentication'):
             raw += self._read_until_prompt(STARTUP_TIMEOUT)
         self.on_chunk = real_cb
         if not self._pty.is_alive():
@@ -176,6 +174,11 @@ class Agent:
         if not self.on_chunk: return
         s = clean.strip()
         if not s or SPINNER_RE.match(s): return
+        # Filter TUI chrome for gemini
+        if self._driver.tui_chrome_re:
+            lines = [l for l in clean.split('\n') if l.strip() and not self._driver.tui_chrome_re.match(l.strip())]
+            clean = '\n'.join(lines)
+            if not clean.strip(): return
         self._chunk_buf += clean
         if time.time() - self._last_chunk_ts >= CHUNK_THROTTLE:
             self._flush_chunk()
