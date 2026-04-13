@@ -110,6 +110,9 @@ class PtyProcess:
 
     def write(self, text: str) -> None:
         assert self.proc and self.proc.isalive()
+        # For TUI CLIs: '!' triggers shell mode in Gemini
+        if self._screen is not None:
+            text = text.replace('!', '.')
         self.proc.send(text)
         import time; time.sleep(0.3)
         self.proc.send(self.driver.submit_suffix)
