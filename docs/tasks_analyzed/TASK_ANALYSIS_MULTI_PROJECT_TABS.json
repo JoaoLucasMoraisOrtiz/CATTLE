@@ -1,0 +1,135 @@
+{
+  "taskId": "multi-project-tabs",
+  "resumo": {
+    "objetivo": "Suportar a abertura e execução de múltiplos projetos em paralelo através de uma interface de abas (tabs) na tela de Execução.",
+    "problema": "Atualmente o sistema permite abrir apenas um projeto por vez. Ao trocar de projeto, a sessão anterior é fechada. Não é possível monitorar ou interagir com múltiplos swarms simultaneamente.",
+    "resultadoEsperado": "Usuário pode criar novas abas na tela 'Executar'. Cada aba mantém seu próprio estado de sessão (projeto, flow, histórico de chat, status dos agentes e conexão SSE). O backend suporta múltiplas sessões ativas identificadas por project_id."
+  },
+  "arquivosRelevantes": [
+    {
+      "caminho": "app/models/schemas.py",
+      "motivo": "Necessário adicionar project_id ao MessageIn para que o backend saiba para qual sessão enviar a mensagem.",
+      "acoes": ["modify"]
+    },
+    {
+      "caminho": "app/controllers/session.py",
+      "motivo": "Roteamento de mensagens e eventos baseado em project_id. Endpoints precisam diferenciar as sessões ativas.",
+      "acoes": ["modify"]
+    },
+    {
+      "caminho": "static/index.html",
+      "motivo": "Adição da barra de abas e botões de controle de abas na UI.",
+      "acoes": ["modify"]
+    },
+    {
+      "caminho": "static/js/state.js",
+      "motivo": "Gerenciamento do estado global das abas (lista de abas e aba ativa).",
+      "acoes": ["modify"]
+    },
+    {
+      "caminho": "static/js/run.js",
+      "motivo": "Refatoração completa para isolar o estado de cada sessão e gerenciar múltiplas conexões SSE em paralelo.",
+      "acoes": ["modify"]
+    },
+    {
+      "caminho": "static/js/app.js",
+      "motivo": "Inicialização da primeira aba e sincronização da UI ao trocar de tab principal.",
+      "acoes": ["modify"]
+    },
+    {
+      "caminho": "static/js/projects.js",
+      "motivo": "Limpeza de abas órfãs ao deletar um projeto.",
+      "acoes": ["modify"]
+    }
+  ],
+  "caminhoDosDados": {
+    "entrada": "Usuário clica em '+' para nova aba, seleciona projeto/flow, envia mensagens.",
+    "processamento": [
+      "Frontend: Mantém objeto 'sessions' indexado por project_id contendo todo o estado volátil.",
+      "Frontend: Gerencia múltiplas instâncias de EventSource, cada uma ouvindo /api/session/events/{project_id}.",
+      "Backend: Mantém dict '_sessions' indexado por project_id contendo SwarmSession e Queue de eventos.",
+      "Backend: Roteia mensagens via POST /api/session/message usando o project_id no corpo da requisição."
+    ],
+    "armazenamento": "Sessões ativas em memória (servidor). Estado das abas em memória (cliente).",
+    "recuperacao": "Frontend recupera estado da sessão ao alternar abas via objeto local 'sessions'.",
+    "exibicao": "Barra de abas no topo da view-run. Grid de agentes e chat filtrados pela aba ativa."
+  },
+  "codigoAModificar": [
+    {
+      "arquivo": "app/models/schemas.py",
+      "classe": "MessageIn",
+      "metodo": null,
+      "motivo": "Incluir project_id para identificação da sessão alvo.",
+      "mudancas": [
+        "Adicionar campo project_id: str | None = None"
+      ]
+    },
+    {
+      "arquivo": "app/controllers/session.py",
+      "classe": null,
+      "metodo": "send_message, session_event_stream, etc.",
+      "motivo": "Suportar múltiplos contextos de sessão simultâneos.",
+      "mudancas": [
+        "Alterar _sessions para dicionário project_id -> SessionState.",
+        "Atualizar endpoints para buscar SessionState pelo project_id fornecido.",
+        "Adicionar project_id como parâmetro opcional em rotas de interrupção e restart."
+      ]
+    },
+    {
+      "arquivo": "static/js/run.js",
+      "classe": null,
+      "metodo": "Refatoração geral",
+      "motivo": "Isolar lógica de sessão por projeto.",
+      "mudancas": [
+        "Substituir variáveis globais (chatHistory, agentStatus, etc) por um mapeamento 'sessions'.",
+        "Atualizar connectSSE para aceitar projectId e gerenciar múltiplas conexões.",
+        "Implementar renderRunUI() para reconstruir a tela ao alternar abas.",
+        "Adicionar funções addRunTab, removeRunTab, switchRunTab."
+      ]
+    }
+  ],
+  "codigoNovo": [],
+  "casosDeTeste": {
+    "unitarios": [],
+    "integracao": [
+      {
+        "descricao": "Enviar mensagem com project_id roteia para a sessão correta",
+        "arquivo": "test_session_api.py",
+        "endpoint": "/api/session/message"
+      }
+    ],
+    "e2e": [
+      {
+        "descricao": "Abrir dois projetos em abas diferentes, enviar mensagens em ambas e verificar que os históricos são independentes.",
+        "fluxo": [
+          "Criar Aba 1, selecionar Projeto A",
+          "Criar Aba 2, selecionar Projeto B",
+          "Enviar 'oi' na Aba 1",
+          "Trocar para Aba 2, verificar chat vazio",
+          "Enviar 'tchau' na Aba 2",
+          "Trocar para Aba 1, verificar 'oi' presente e 'tchau' ausente"
+        ]
+      }
+    ]
+  },
+  "subTarefas": [
+    {
+      "taskId": "multi-project-tabs-1-backend",
+      "titulo": "Adaptação do Backend para Múltiplas Sessões",
+      "prioridade": 1,
+      "resumo": { "objetivo": "Permitir que o servidor gerencie várias SwarmSession simultâneas indexadas por ID de projeto." }
+    },
+    {
+      "taskId": "multi-project-tabs-2-frontend-state",
+      "titulo": "Refatoração do Estado no Frontend",
+      "prioridade": 2,
+      "resumo": { "objetivo": "Isolar dados de chat e agentes por projeto no JavaScript para evitar colisão ao trocar de abas." }
+    },
+    {
+      "taskId": "multi-project-tabs-3-ui",
+      "titulo": "Implementação da Interface de Abas",
+      "prioridade": 3,
+      "resumo": { "objetivo": "Adicionar elementos visuais de abas e lógica de navegação/renderização dinâmica." }
+    }
+  ]
+}
