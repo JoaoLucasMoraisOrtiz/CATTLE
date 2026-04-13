@@ -586,6 +586,7 @@ function handleSSE(projectId, type, data) {
         updateGridPanel(projectId, data.name, 'Processando...', '');
       }
       if (data.event === '⏳ streaming' || data.event === '⏳ streaming-replace') {
+        console.log('STREAM', data.event, 'pid=', projectId, 'active=', activeProjectId, 'name=', data.name, 'textLen=', (data.text||'').length);
         updateAgentBox(projectId, data.name, 'working', (data.text || '').slice(0, 60));
         if (data.event === '⏳ streaming-replace') {
           replaceGridPanel(projectId, data.name, data.text || '');
