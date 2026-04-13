@@ -34,6 +34,21 @@ class Agent:
             )
         return False
 
+    def _screen_is_idle(self):
+        """Check if TUI screen shows idle (no processing, no tool spinners)."""
+        if not self._pty._screen:
+            return False
+        if not self._pty.screen_contains(self._driver.idle_pattern):
+            return False
+        for line in self._pty._screen.display:
+            for kw in self._driver.processing_keywords:
+                if kw in line:
+                    return False
+            # Braille spinners indicate tool execution
+            if '⠋' in line or '⠙' in line or '⠹' in line or '⠸' in line:
+                return False
+        return True
+
     def _is_prompt(self, text):
         # For TUI CLIs, check the virtual screen
         if self._pty._screen:
@@ -90,6 +105,8 @@ class Agent:
         """Read loop for TUI-based CLIs (gemini). Uses pyte screen for state detection."""
         buf = []
         saw_processing = False
+        idle_streak = 0
+        IDLE_CONFIRM = 3  # consecutive idle checks to confirm done
         deadline = time.time() + RESPONSE_TIMEOUT
         silence = 0
         while time.time() < deadline:
@@ -99,31 +116,27 @@ class Agent:
                 break
             if chunk is None:
                 if saw_processing:
-                    # Check if back to idle (processing done)
-                    if self._pty.screen_contains(self._driver.idle_pattern):
-                        screen_processing = any(
-                            kw in line for line in self._pty._screen.display for kw in self._driver.processing_keywords
-                        )
-                        if not screen_processing:
+                    if self._screen_is_idle():
+                        idle_streak += 1
+                        if idle_streak >= IDLE_CONFIRM:
                             break
+                    else:
+                        idle_streak = 0
                     silence += 1
                     if silence >= MAX_SILENCE * 2:
                         break
                 continue
             silence = 0
             clean = strip_ansi(chunk)
-            # Detect processing start
             if not saw_processing and self._is_processing(clean):
                 saw_processing = True
             if saw_processing:
-                # Check if back to idle even while receiving chunks
-                if self._pty.screen_contains(self._driver.idle_pattern):
-                    screen_processing = any(
-                        kw in line for line in self._pty._screen.display for kw in self._driver.processing_keywords
-                    )
-                    if not screen_processing:
+                if self._screen_is_idle():
+                    idle_streak += 1
+                    if idle_streak >= IDLE_CONFIRM:
                         break
-                # Emit screen snapshot
+                else:
+                    idle_streak = 0
                 self._emit_chunk(clean)
         # Extract response from final pyte screen
         if self._pty._screen:
