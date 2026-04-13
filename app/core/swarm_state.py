@@ -69,10 +69,10 @@ def load_swarm_state(workdir: str) -> SwarmState | None:
     return SwarmState(**data)
 
 
-def resume_agent(agent_id: str, name: str, workdir: str, model: str | None = None):
+def resume_agent(agent_id: str, name: str, workdir: str, model: str | None = None, mcps: dict | None = None, cli_type: str = 'kiro'):
     from app.core.agent import Agent
 
-    agent = Agent(name, workdir, model)
+    agent = Agent(name, workdir, model, mcps=mcps, cli_type=cli_type)
     agent.start()
     path = _agent_save_path(workdir, agent_id)
     agent._pty.write(f'/chat load {path}\r')

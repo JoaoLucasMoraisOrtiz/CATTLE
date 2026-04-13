@@ -25,7 +25,7 @@ from app.services.agent_helpers import resolve_header_ids, compose_persona, buil
 
 
 def _init_agent(defn: AgentDef, agent_list: str, workdir: str, log: Logger, header_ids: list[str] | None = None) -> Agent:
-    agent = Agent(defn.name, workdir, defn.model)
+    agent = Agent(defn.name, workdir, defn.model, mcps=defn.mcps, cli_type=defn.cli_type)
     agent.start()
     persona = compose_persona(defn, header_ids or [DEFAULT_PROTOCOL_ID], agent_list)
     persona += '\n\nResponda apenas: "Entendido." Nada mais.'
@@ -129,7 +129,7 @@ def run_swarm(question: str, workdir: str = '.', flow: Flow | None = None, log: 
                 continue
             if saved and nid in saved.agent_ids:
                 log.orch(f'Resuming {defn.name}...')
-                live_agents[nid] = resume_agent(nid, defn.name, workdir, defn.model)
+                live_agents[nid] = resume_agent(nid, defn.name, workdir, defn.model, mcps=defn.mcps, cli_type=defn.cli_type)
                 log.agent(defn.name, 'resumed', '')
             else:
                 agent_list = build_agent_list_for(nid, agent_defs, flow)

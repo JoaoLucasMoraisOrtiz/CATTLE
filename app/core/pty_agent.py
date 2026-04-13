@@ -34,16 +34,49 @@ def make_clean_env(mcps: dict | None = None, workdir: str | None = None, driver:
             "args": [script, "--state-dir", state_dir],
             "timeout": ENV_MCP_TIMEOUT,
         }
-    # Kiro-specific: write MCP config
+    # Driver-specific: write MCP config
     d = driver or KIRO_DRIVER
     if d.name == 'kiro':
         real_kiro = os.path.join(real_home, '.kiro')
         if os.path.exists(real_kiro):
             shutil.copytree(real_kiro, os.path.join(tmp, '.kiro'))
-            mcp_path = os.path.join(tmp, '.kiro', 'settings', 'mcp.json')
-            os.makedirs(os.path.dirname(mcp_path), exist_ok=True)
-            with open(mcp_path, 'w') as f:
-                f.write(json.dumps({"mcpServers": merged}))
+        
+        mcp_path = os.path.join(tmp, '.kiro', 'settings', 'mcp.json')
+        os.makedirs(os.path.dirname(mcp_path), exist_ok=True)
+        with open(mcp_path, 'w') as f:
+            f.write(json.dumps({"mcpServers": merged}))
+    
+    elif d.name == 'gemini':
+        real_gemini = os.path.join(real_home, '.gemini')
+        if os.path.exists(real_gemini):
+            shutil.copytree(real_gemini, os.path.join(tmp, '.gemini'))
+        
+        settings_path = os.path.join(tmp, '.gemini', 'settings.json')
+        os.makedirs(os.path.dirname(settings_path), exist_ok=True)
+        
+        settings = {}
+        if os.path.exists(settings_path):
+            try:
+                with open(settings_path, 'r') as f:
+                    settings = json.load(f)
+            except Exception:
+                pass
+        
+        # Add trust=True to automatically injected MCPs for zero friction
+        for name, config in merged.items():
+            if isinstance(config, dict):
+                config['trust'] = True
+        
+        settings['mcpServers'] = merged
+        # Ensure mcp.allowed contains our servers
+        mcp_config = settings.get('mcp', {})
+        allowed = set(mcp_config.get('allowed', []))
+        allowed.update(merged.keys())
+        mcp_config['allowed'] = list(allowed)
+        settings['mcp'] = mcp_config
+
+        with open(settings_path, 'w') as f:
+            f.write(json.dumps(settings, indent=2))
     env = os.environ.copy()
     env['HOME'] = tmp
     return env, tmp
