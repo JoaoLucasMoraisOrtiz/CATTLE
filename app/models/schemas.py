@@ -11,7 +11,6 @@ class AgentIn(BaseModel):
     model: str | None = None
     mcps: dict = {}
     cli_type: str = 'kiro'
-    yolo: bool = False
 
 
 class FlowIn(BaseModel):

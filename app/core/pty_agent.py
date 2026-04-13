@@ -83,11 +83,10 @@ def make_clean_env(mcps: dict | None = None, workdir: str | None = None, driver:
 
 
 class PtyProcess:
-    def __init__(self, workdir: str, model: str | None = None, mcps: dict | None = None, cli_type: str = 'kiro', yolo: bool = False):
+    def __init__(self, workdir: str, model: str | None = None, mcps: dict | None = None, cli_type: str = 'kiro'):
         self.workdir = workdir
         self.model = model
         self.mcps = mcps
-        self.yolo = yolo
         self.driver = get_driver(cli_type)
         self.proc: pexpect.spawn | None = None
         self._tmp_home: str | None = None
@@ -95,8 +94,6 @@ class PtyProcess:
     def spawn(self) -> None:
         env, self._tmp_home = make_clean_env(self.mcps, self.workdir, self.driver)
         cmd = self.driver.spawn_cmd
-        if self.yolo and self.driver.yolo_flag:
-            cmd += f' {self.driver.yolo_flag}'
         if self.model and self.driver.model_flag:
             cmd += f' {self.driver.model_flag} {self.model}'
         self.proc = pexpect.spawn(
@@ -113,11 +110,6 @@ class PtyProcess:
 
     def write(self, text: str) -> None:
         assert self.proc and self.proc.isalive()
-        if self._screen is not None:
-            # Always send Esc to ensure we're in chat mode (not shell mode)
-            self.proc.send('\x1b')
-            import time; time.sleep(0.3)
-            text = ' '.join(text.split())
         self.proc.send(text)
         import time; time.sleep(0.3)
         self.proc.send(self.driver.submit_suffix)

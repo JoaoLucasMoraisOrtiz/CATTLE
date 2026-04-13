@@ -34,7 +34,7 @@ KIRO_DRIVER = CliDriver(
 
 GEMINI_DRIVER = CliDriver(
     name='gemini',
-    spawn_cmd='gemini --approval-mode auto_edit',
+    spawn_cmd='gemini --yolo',
     prompt_re=re.compile(r'Type your message|for shortcuts'),
     processing_keywords=('Thinking', 'Responding'),
     idle_pattern='Type your message',
