@@ -16,12 +16,13 @@ router = APIRouter(prefix="/api/session", tags=["session"])
 
 class SessionState:
     """Encapsulates mutable session state (thread-safe per instance)."""
-    __slots__ = ('session', 'events', 'loop')
+    __slots__ = ('session', 'events', 'loop', '_subscribers')
 
     def __init__(self):
         self.session: SwarmSession | None = None
         self.events: asyncio.Queue | None = None
         self.loop: asyncio.AbstractEventLoop | None = None
+        self._subscribers: list[asyncio.Queue] = []
 
 
 _sessions: dict[str, SessionState] = {}
@@ -60,8 +61,12 @@ async def open_session(project_id: str, body: OpenSessionIn | None = None):
 
     class SSECallback(EventCallback):
         def _push(self, event, data):
-            state.loop.call_soon_threadsafe(state.events.put_nowait,
-                {"event": event, "data": json.dumps(data, ensure_ascii=False)})
+            msg = {"event": event, "data": json.dumps(data, ensure_ascii=False)}
+            for q in state._subscribers:
+                try:
+                    state.loop.call_soon_threadsafe(q.put_nowait, msg)
+                except Exception:
+                    pass
         def on_orch(self, msg): self._push("orch", {"msg": msg})
         def on_agent(self, name, event, text): self._push("agent", {"name": name, "event": event, "text": text[:4000] if text else ""})
         def on_error(self, msg): self._push("error", {"msg": msg})
@@ -164,10 +169,16 @@ async def session_event_stream(project_id: str):
     if not state or not state.events:
         raise HTTPException(400, 'No active session')
 
+    q = asyncio.Queue()
+    state._subscribers.append(q)
+
     async def stream():
-        while True:
-            item = await state.events.get()
-            yield item
+        try:
+            while True:
+                item = await q.get()
+                yield item
+        finally:
+            state._subscribers.remove(q)
 
     return EventSourceResponse(stream())
 
@@ -179,10 +190,16 @@ async def session_event_stream_legacy():
     if not state or not state.events:
         raise HTTPException(400, 'No active session')
 
+    q = asyncio.Queue()
+    state._subscribers.append(q)
+
     async def stream():
-        while True:
-            item = await state.events.get()
-            yield item
+        try:
+            while True:
+                item = await q.get()
+                yield item
+        finally:
+            state._subscribers.remove(q)
 
     return EventSourceResponse(stream())
 
