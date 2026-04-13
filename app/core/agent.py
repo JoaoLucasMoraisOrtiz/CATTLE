@@ -105,8 +105,8 @@ class Agent:
         """Read loop for TUI-based CLIs (gemini). Uses pyte screen for state detection."""
         buf = []
         saw_processing = False
-        idle_streak = 0
-        IDLE_CONFIRM = 3  # consecutive idle checks to confirm done
+        idle_since = 0  # timestamp when idle started
+        IDLE_SECONDS = 8  # seconds of continuous idle to confirm done
         deadline = time.time() + RESPONSE_TIMEOUT
         silence = 0
         while time.time() < deadline:
@@ -117,11 +117,12 @@ class Agent:
             if chunk is None:
                 if saw_processing:
                     if self._screen_is_idle():
-                        idle_streak += 1
-                        if idle_streak >= IDLE_CONFIRM:
+                        if not idle_since:
+                            idle_since = time.time()
+                        elif time.time() - idle_since >= IDLE_SECONDS:
                             break
                     else:
-                        idle_streak = 0
+                        idle_since = 0
                     silence += 1
                     if silence >= MAX_SILENCE * 2:
                         break
@@ -132,11 +133,12 @@ class Agent:
                 saw_processing = True
             if saw_processing:
                 if self._screen_is_idle():
-                    idle_streak += 1
-                    if idle_streak >= IDLE_CONFIRM:
+                    if not idle_since:
+                        idle_since = time.time()
+                    elif time.time() - idle_since >= IDLE_SECONDS:
                         break
                 else:
-                    idle_streak = 0
+                    idle_since = 0
                 self._emit_chunk(clean)
         # Extract response from final pyte screen
         if self._pty._screen:
