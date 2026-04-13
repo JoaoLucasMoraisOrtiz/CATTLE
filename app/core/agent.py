@@ -116,6 +116,13 @@ class Agent:
             if not saw_processing and self._is_processing(clean):
                 saw_processing = True
             if saw_processing:
+                # Check if back to idle even while receiving chunks
+                if self._pty.screen_contains(self._driver.idle_pattern):
+                    screen_processing = any(
+                        kw in line for line in self._pty._screen.display for kw in self._driver.processing_keywords
+                    )
+                    if not screen_processing:
+                        break
                 # Emit screen snapshot
                 self._emit_chunk(clean)
         # Extract response from final pyte screen
@@ -186,11 +193,12 @@ class Agent:
                 if s:
                     lines.append(s)
             screen_text = '\n'.join(lines)
-            # Cap size to avoid SSE chunked encoding issues
             if len(screen_text) > 4000:
                 screen_text = screen_text[-4000:]
-            if screen_text != self._last_screen:
+            now = time.time()
+            if screen_text != self._last_screen and now - self._last_chunk_ts >= CHUNK_THROTTLE:
                 self._last_screen = screen_text
+                self._last_chunk_ts = now
                 self.on_chunk(screen_text, True)
             return
         s = clean.strip()

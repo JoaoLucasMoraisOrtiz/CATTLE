@@ -144,31 +144,40 @@ function onProjectChange() {
   const pid = document.getElementById('project-select').value;
   if (!pid) return;
 
-  // Rename current tab if it was new
   const tab = State.get('runTabs').find(t => t.id === activeProjectId);
-  if (tab && tab.id === 'new') {
-    // If there's already a session with this project, just switch to it
-    if (sessions[pid]) {
-      removeRunTab('new');
-      switchRunTab(pid);
-      return;
-    }
-    // Otherwise, convert this 'new' tab to the actual project tab
+  if (!tab) return;
+
+  // If selecting a project that already has a session in another tab, switch to it
+  if (sessions[pid] && activeProjectId !== pid) {
+    const oldId = activeProjectId;
+    switchRunTab(pid);
+    if (oldId === 'new') removeRunTab('new');
+    return;
+  }
+
+  // Rename current tab if it was 'new' or if it changed its project
+  if (activeProjectId !== pid) {
+    const oldId = activeProjectId;
+    const proj = projectsList.find(p => p.id === pid);
+    
     tab.id = pid;
     tab.projectId = pid;
-    const proj = projectsList.find(p => p.id === pid);
     tab.name = proj ? proj.name : pid;
 
-    sessions[pid] = sessions['new'];
-    delete sessions['new'];
+    // Move session data
+    sessions[pid] = sessions[oldId];
+    delete sessions[oldId];
+    
     activeProjectId = pid;
-    State.set('runTabs', [...State.get('runTabs')]); // trigger UI update
+    State.set('activeTabId', pid);
+    State.set('runTabs', [...State.get('runTabs')]); // Trigger UI update for tab bar
   }
 
   const s = sessions[pid];
   if (s) {
     s.projectId = pid;
     setSessionUI(s.sessionOpen);
+    renderRunUI(); // Refresh the whole view to sync labels and fields
   }
 }
 

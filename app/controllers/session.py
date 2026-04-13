@@ -16,13 +16,14 @@ router = APIRouter(prefix="/api/session", tags=["session"])
 
 class SessionState:
     """Encapsulates mutable session state (thread-safe per instance)."""
-    __slots__ = ('session', 'events', 'loop', '_subscribers')
+    __slots__ = ('session', 'events', 'loop', '_subscribers', '_history')
 
     def __init__(self):
         self.session: SwarmSession | None = None
         self.events: asyncio.Queue | None = None
         self.loop: asyncio.AbstractEventLoop | None = None
         self._subscribers: list[asyncio.Queue] = []
+        self._history: list[dict] = []
 
 
 _sessions: dict[str, SessionState] = {}
@@ -58,10 +59,16 @@ async def open_session(project_id: str, body: OpenSessionIn | None = None):
 
     state.loop = asyncio.get_event_loop()
     state.events = asyncio.Queue()
+    state._history = []
 
     class SSECallback(EventCallback):
         def _push(self, event, data):
             msg = {"event": event, "data": json.dumps(data, ensure_ascii=False)}
+            
+            # Buffer non-streaming events for new subscribers
+            if event not in ("agent",) or (data.get("event") not in ("⏳ streaming", "⏳ streaming-replace")):
+                state._history.append(msg)
+
             # Always put in main queue (for legacy endpoint)
             try:
                 state.loop.call_soon_threadsafe(state.events.put_nowait, msg)
@@ -176,8 +183,12 @@ async def session_event_stream(project_id: str):
         raise HTTPException(400, 'No active session')
 
     q = asyncio.Queue()
+    # Re-emit history to the new subscriber
+    for msg in state._history:
+        q.put_nowait(msg)
+    
     state._subscribers.append(q)
-    print(f"[SSE] Client connected for project {project_id}, subscribers: {len(state._subscribers)}")
+    print(f"[SSE] Client connected for project {project_id}, history: {len(state._history)}, subscribers: {len(state._subscribers)}")
 
     async def stream():
         try:
@@ -198,6 +209,10 @@ async def session_event_stream_legacy():
         raise HTTPException(400, 'No active session')
 
     q = asyncio.Queue()
+    # Re-emit history to the new subscriber
+    for msg in state._history:
+        q.put_nowait(msg)
+        
     state._subscribers.append(q)
 
     async def stream():

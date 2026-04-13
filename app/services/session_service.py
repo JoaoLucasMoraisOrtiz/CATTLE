@@ -109,14 +109,22 @@ class SwarmSession:
         self._abort.set()
         with self._lock:
             agents_copy = list(self.agents.items())
-        for aid, agent in agents_copy:
+        
+        def close_one(aid, agent):
             try:
-                (agent._pty.write(agent._driver.compact_cmd + '\r') if agent._driver.compact_cmd else None)
-                agent._read_until_prompt(timeout=30)
-                save_agent_session(agent, aid, self.project_path)
+                if agent._pty.is_alive():
+                    (agent._pty.write(agent._driver.compact_cmd + '\r') if agent._driver.compact_cmd else None)
+                    agent._read_until_prompt(timeout=10)
+                    save_agent_session(agent, aid, self.project_path)
             except Exception: pass
+            finally:
+                agent.quit()
+
+        threads = [threading.Thread(target=close_one, args=(aid, a)) for aid, a in agents_copy]
+        for t in threads: t.start()
+        for t in threads: t.join(timeout=15)
+
         self._save_state()
-        for _, a in agents_copy: a.quit()
         # E5: cleanup env-manager state dir
         env_dir = f"/tmp/kiro-env-{hashlib.md5(self.project_path.encode()).hexdigest()[:12]}"
         shutil.rmtree(env_dir, ignore_errors=True)
