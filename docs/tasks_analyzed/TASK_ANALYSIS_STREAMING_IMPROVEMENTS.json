@@ -1,0 +1,73 @@
+{
+  "taskId": "streaming-improvements",
+  "resumo": {
+    "objetivo": "Melhorar a experiência de streaming em tempo real na tela de execução, garantindo fluidez, suporte a cores (ANSI) e maior visibilidade do processo interno dos agentes.",
+    "problema": "Streaming atual é 'truncado' (throttle de 0.5s), não suporta cores ANSI no grid, filtra excessivamente saídas úteis e não diferencia tipos de informação (pensamento vs. saída de ferramenta vs. resposta final).",
+    "resultadoEsperado": "Grid de execução com emulação de terminal (Xterm.js), streaming mais responsivo (<100ms lag), suporte total a ANSI, e indicadores visuais de progresso e custo em tempo real."
+  },
+  "arquivosRelevantes": [
+    {"caminho": "app/core/agent.py", "motivo": "Lógica de captura e emissão de chunks (throttling e filtros)", "acoes": ["modify"]},
+    {"caminho": "app/services/session_service.py", "motivo": "Encaminhamento de eventos do agente para o callback SSE", "acoes": ["modify"]},
+    {"caminho": "app/controllers/session.py", "motivo": "Endpoint SSE e formatação de eventos", "acoes": ["modify"]},
+    {"caminho": "static/js/run.js", "motivo": "Manipulação do DOM para streaming e reconexão SSE", "acoes": ["modify"]},
+    {"caminho": "static/index.html", "motivo": "Inclusão de bibliotecas (Xterm.js) e novos elementos de UI", "acoes": ["modify"]}
+  ],
+  "caminhoDosDados": {
+    "entrada": "Saída bruta do PTY do agente (com códigos ANSI)",
+    "processamento": [
+      "1. Agent.py captura chunks e emite via on_chunk sem filtrar ANSI.",
+      "2. SwarmSession encapsula em evento 'agent_chunk' com metadados (tipo: output/thought).",
+      "3. Controller envia via SSE.",
+      "4. Frontend (run.js) despacha para o terminal Xterm.js correspondente."
+    ],
+    "armazenamento": "Logs de sessão continuam salvos em disco (swarm_state.py), mas o streaming em tempo real é volátil.",
+    "recuperacao": "Ao reconectar, o frontend pode solicitar o 'buffer' atual do terminal para sincronizar.",
+    "exibicao": "Xterm.js para saída bruta (grid) e Marked.js para resposta final formatada (chat)."
+  },
+  "codigoAModificar": [
+    {
+      "arquivo": "app/core/agent.py",
+      "classe": "Agent",
+      "metodo": "_emit_chunk, _send_line, _send_tui",
+      "motivo": "Reduzir CHUNK_THROTTLE, remover filtros agressivos e manter ANSI se solicitado.",
+      "mudancas": [
+        "Reduzir CHUNK_THROTTLE para 0.1s.",
+        "Garantir que _flush_chunk seja chamado em todos os pontos de saída.",
+        "Adicionar parâmetro para habilitar/desabilitar strip_ansi no streaming."
+      ]
+    },
+    {
+      "arquivo": "static/js/run.js",
+      "classe": null,
+      "metodo": "appendGridPanel, connectSSE, handleSSE",
+      "motivo": "Integrar Xterm.js e melhorar resiliência.",
+      "mudancas": [
+        "Substituir grid-content div por uma instância de Terminal (Xterm.js).",
+        "Implementar detecção de 'fim de stream' para renderizar Markdown na bolha de chat.",
+        "Melhorar reconexão exponencial com status visual mais claro."
+      ]
+    }
+  ],
+  "pontosDeQuebra": [
+    {
+      "descricao": "Sobrecarga de DOM com muitos agentes streamando simultaneamente",
+      "severidade": "media",
+      "deteccao": "Browser trava ou fica lento durante execuções pesadas",
+      "mitigacao": "Xterm.js já resolve muito disso (canvas/webgl), mas usar requestAnimationFrame para atualizações de UI acessórias."
+    },
+    {
+      "descricao": "Perda de eventos SSE durante micro-quedas de rede",
+      "severidade": "alta",
+      "deteccao": "Streaming para de atualizar mas o status continua 'working'",
+      "mitigacao": "Implementar heartbeat (ping) no SSE e Last-Event-ID para reconexão segura."
+    }
+  ],
+  "ordemDeExecucao": [
+    "1. Pesquisa: Validar performance do Xterm.js com múltiplos terminais na mesma página.",
+    "2. Backend: Ajustar Agent.py (throttle/ansi) e SwarmSession (event types).",
+    "3. Frontend: Adicionar Xterm.js ao index.html.",
+    "4. Frontend: Refatorar run.js para usar terminais no Grid.",
+    "5. Validação: Testar com fluxos de múltiplos agentes simultâneos.",
+    "6. Melhoria: Adicionar indicadores de token/cost em tempo real por agente."
+  ]
+}
