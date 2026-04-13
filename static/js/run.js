@@ -273,12 +273,11 @@ function appendGridPanel(projectId, name, text) {
 
 function replaceGridPanel(projectId, name, text) {
   const s = sessions[projectId];
-  if (!s) { console.warn('replaceGrid: no session for', projectId); return; }
-  if (projectId !== activeProjectId) { console.warn('replaceGrid: not active', projectId, '!=', activeProjectId); return; }
+  if (!s) return;
+  if (projectId !== activeProjectId) return;
   ensureGridPanel(projectId, name);
   const c = document.getElementById('grid-content-' + name);
   if (c) { c.textContent = text; c.scrollTop = c.scrollHeight; }
-  else { console.warn('replaceGrid: no element grid-content-' + name); }
 }
 
 function showView(view) {
