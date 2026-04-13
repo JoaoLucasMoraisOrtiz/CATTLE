@@ -13,6 +13,8 @@ const State = {
     sessionOpen: false,
     chatTarget: null,
     chatHistory: [],
+    runTabs: [], // [{id, projectId, flowId, ...}]
+    activeTabId: null,
     startNodeId: '',
   },
   get(key) { return this._data[key]; },

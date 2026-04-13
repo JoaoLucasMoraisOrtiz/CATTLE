@@ -192,6 +192,12 @@
 
 <!-- ═══ TAB: Run ═══ -->
 <div id="view-run" role="tabpanel" aria-labelledby="tab-run" class="flex-1 flex-col overflow-hidden" style="display:flex">
+  <!-- Session Tabs -->
+  <div id="run-tabs" class="flex items-center gap-1 px-4 pt-2 border-b border-border bg-card/40 overflow-x-auto no-scrollbar">
+    <div id="run-tabs-list" class="flex items-center gap-1"></div>
+    <button onclick="addRunTab()" title="Nova aba" class="w-8 h-8 flex items-center justify-center rounded-t-lg text-muted hover:text-white hover:bg-white/5 transition text-lg">+</button>
+  </div>
+
   <div class="flex items-center gap-3 px-5 py-2 border-b border-border bg-card/20">
     <label class="text-xs text-muted">📂</label>
     <select id="project-select" onchange="onProjectChange()" aria-label="Selecionar projeto" class="flex-1 bg-surface border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent/50 transition">

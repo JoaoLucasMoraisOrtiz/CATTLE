@@ -35,6 +35,7 @@ class ProjectIn(BaseModel):
 
 
 class MessageIn(BaseModel):
+    project_id: str | None = None
     text: str
     agent_id: str | None = None
 

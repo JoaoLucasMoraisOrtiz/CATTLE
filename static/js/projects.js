@@ -40,5 +40,8 @@ async function deleteProject() {
   const id = document.getElementById('project-select').value;
   if (!id || !confirm('Remover projeto?')) return;
   const r = await apiDelete(`${API}/projects/${id}`);
-  if (r.ok) loadProjects();
+  if (r.ok) {
+    if (typeof removeRunTab === 'function') removeRunTab(id);
+    loadProjects();
+  }
 }

@@ -144,7 +144,7 @@ def session_costs(project_id: str | None = None):
 
 @router.post("/message")
 async def send_message(body: MessageIn):
-    state = _find_active_state(None)
+    state = _find_active_state(body.project_id)
     if not state or not state.session or not state.session.alive:
         raise HTTPException(400, 'No active session')
 

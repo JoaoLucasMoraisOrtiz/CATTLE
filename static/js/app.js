@@ -20,6 +20,7 @@ function switchTab(tab) {
   btn.setAttribute('tabindex', '0');
   if (tab === 'flow') initDrawflow();
   if (tab === 'settings') loadProviders();
+  if (tab === 'run') renderRunUI();
 }
 
 // ── ARIA keyboard navigation for tabs ────────────────────────────────────
@@ -50,3 +51,4 @@ loadProjects();
 loadFlows();
 loadHeaders();
 loadSettings();
+addRunTab();
