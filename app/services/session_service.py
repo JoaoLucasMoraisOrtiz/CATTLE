@@ -73,7 +73,7 @@ class SwarmSession:
                 visible = [a for a in all_defs if a.id in targets]
                 agent_list = '\n'.join(f'- {a.id}: {a.name} — {a.persona[:80]}...' for a in visible) if visible else '(nenhum — use @done)'
                 persona = self._compose_persona(nid, defn, agent_list)
-                agent = Agent(defn.name, self.project_path, defn.model, defn.mcps or None, defn.cli_type)
+                agent = Agent(defn.name, self.project_path, defn.model, defn.mcps or None, defn.cli_type, getattr(defn, 'yolo', False))
                 agent.on_chunk = lambda text, replace=False, n=defn.name: self.cb.on_agent(n, '⏳ streaming-replace' if replace else '⏳ streaming', text)
                 agent.start()
                 agent._persona = persona
@@ -342,7 +342,7 @@ class SwarmSession:
         visible = [a for a in all_defs if a.id in targets]
         agent_list = '\n'.join(f'- {a.id}: {a.name} — {a.persona[:80]}...' for a in visible) if visible else '(nenhum — use @done)'
         persona = self._compose_persona(nid, defn, agent_list)
-        agent = Agent(defn.name, self.project_path, defn.model, defn.mcps or None, defn.cli_type)
+        agent = Agent(defn.name, self.project_path, defn.model, defn.mcps or None, defn.cli_type, getattr(defn, 'yolo', False))
         agent.on_chunk = lambda text, replace=False, n=defn.name: self.cb.on_agent(n, '⏳ streaming-replace' if replace else '⏳ streaming', text)
         agent.start()
         agent._persona = persona

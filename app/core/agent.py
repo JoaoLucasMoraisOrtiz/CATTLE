@@ -13,10 +13,10 @@ MAX_SILENCE = 3
 
 
 class Agent:
-    def __init__(self, name, workdir, model=None, mcps=None, cli_type='kiro'):
+    def __init__(self, name, workdir, model=None, mcps=None, cli_type='kiro', yolo=False):
         self.name = name
         self.cli_type = cli_type
-        self._pty = PtyProcess(workdir, model, mcps, cli_type)
+        self._pty = PtyProcess(workdir, model, mcps, cli_type, yolo)
         self._driver = self._pty.driver
         self.log = []
         self.on_chunk = None

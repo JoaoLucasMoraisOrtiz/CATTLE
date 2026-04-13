@@ -83,10 +83,11 @@ def make_clean_env(mcps: dict | None = None, workdir: str | None = None, driver:
 
 
 class PtyProcess:
-    def __init__(self, workdir: str, model: str | None = None, mcps: dict | None = None, cli_type: str = 'kiro'):
+    def __init__(self, workdir: str, model: str | None = None, mcps: dict | None = None, cli_type: str = 'kiro', yolo: bool = False):
         self.workdir = workdir
         self.model = model
         self.mcps = mcps
+        self.yolo = yolo
         self.driver = get_driver(cli_type)
         self.proc: pexpect.spawn | None = None
         self._tmp_home: str | None = None
@@ -94,6 +95,8 @@ class PtyProcess:
     def spawn(self) -> None:
         env, self._tmp_home = make_clean_env(self.mcps, self.workdir, self.driver)
         cmd = self.driver.spawn_cmd
+        if self.yolo and self.driver.yolo_flag:
+            cmd += f' {self.driver.yolo_flag}'
         if self.model and self.driver.model_flag:
             cmd += f' {self.driver.model_flag} {self.model}'
         self.proc = pexpect.spawn(
