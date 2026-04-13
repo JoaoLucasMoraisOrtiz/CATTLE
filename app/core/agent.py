@@ -45,7 +45,7 @@ class Agent:
                 if kw in line:
                     return False
             # Braille spinners indicate tool execution
-            if '⠋' in line or '⠙' in line or '⠹' in line or '⠸' in line:
+            if any(c in line for c in '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'):
                 return False
         return True
 
