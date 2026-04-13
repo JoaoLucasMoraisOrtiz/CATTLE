@@ -12,6 +12,16 @@ STATIC_DIR = Path(__file__).parent.parent / 'static'
 
 def create_app() -> FastAPI:
     app = FastAPI(title="ReDo!")
+
+    from starlette.middleware.base import BaseHTTPMiddleware
+    class NoCacheMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request, call_next):
+            response = await call_next(request)
+            if request.url.path.startswith("/static/"):
+                response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            return response
+    app.add_middleware(NoCacheMiddleware)
+
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
     for router in all_routers:
