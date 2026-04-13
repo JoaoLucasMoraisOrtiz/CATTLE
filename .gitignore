@@ -1,4 +1,57 @@
+# Python
 __pycache__/
 *.pyc
-.env
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# CATTLE runtime
 .kiro-swarm/
+.kiro/
+.gemini/
+
+# Environment
+.env
+.env.*
+
+# Legacy root files (pre-refactor — real code is in app/)
+/agent.py
+/agents.json
+/app.py
+/checkpoint.py
+/config.py
+/flow.json
+/flow.py
+/god.py
+/logger.py
+/orchestrator.py
+/output_parser.py
+/projects.py
+/protocol.py
+/pty_agent.py
+/registry.py
+/server.py
+/session.py
+/swarm_state.py
+/headers.py
+/data_collector.py
+
+# Task analysis files dumped in root by agents
+/TASK_ANALYSIS_*.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temp
+/tmp/
+*.tmp
