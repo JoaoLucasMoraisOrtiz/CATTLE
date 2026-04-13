@@ -110,11 +110,10 @@ class PtyProcess:
 
     def write(self, text: str) -> None:
         assert self.proc and self.proc.isalive()
-        # For TUI CLIs, escape shell mode if active
         if self._screen is not None:
-            if any('shell mode' in line.lower() for line in self._screen.display):
-                self.proc.send('\x1b')  # Esc to exit shell mode
-                import time; time.sleep(0.5)
+            # Always send Esc to ensure we're in chat mode (not shell mode)
+            self.proc.send('\x1b')
+            import time; time.sleep(0.3)
             text = ' '.join(text.split())
         self.proc.send(text)
         import time; time.sleep(0.3)
