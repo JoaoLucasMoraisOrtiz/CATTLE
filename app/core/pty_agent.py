@@ -17,18 +17,27 @@ except ImportError:
     pyte = None
 
 
+_home_cache = {}  # workdir -> tmp home path
+
 def make_clean_env(mcps: dict | None = None, workdir: str | None = None, driver: CliDriver | None = None) -> tuple[dict, str]:
     real_home = os.path.expanduser('~')
-    tmp = tempfile.mkdtemp(prefix='kiro_agent_')
-    for item in os.listdir(real_home):
-        if item in HOME_ALLOWLIST:
-            src = os.path.join(real_home, item)
-            if os.path.exists(src):
-                os.symlink(src, os.path.join(tmp, item))
-        elif item in HOME_COPYLIST:
-            src = os.path.join(real_home, item)
-            if os.path.isdir(src):
-                shutil.copytree(src, os.path.join(tmp, item), symlinks=True)
+    cache_key = os.path.abspath(workdir) if workdir else None
+
+    if cache_key and cache_key in _home_cache and os.path.isdir(_home_cache[cache_key]):
+        tmp = _home_cache[cache_key]
+    else:
+        tmp = tempfile.mkdtemp(prefix='kiro_agent_')
+        for item in os.listdir(real_home):
+            if item in HOME_ALLOWLIST:
+                src = os.path.join(real_home, item)
+                if os.path.exists(src):
+                    os.symlink(src, os.path.join(tmp, item))
+            elif item in HOME_COPYLIST:
+                src = os.path.join(real_home, item)
+                if os.path.isdir(src):
+                    shutil.copytree(src, os.path.join(tmp, item), symlinks=True)
+        if cache_key:
+            _home_cache[cache_key] = tmp
     merged = dict(mcps or {})
     if workdir and ENV_MCP_AUTO_INJECT:
         state_dir = f"/tmp/kiro-env-{hashlib.md5(workdir.encode()).hexdigest()[:12]}"
