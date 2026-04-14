@@ -13,6 +13,7 @@ Sistema de orquestração multi-agente que coordena múltiplas instâncias do `k
 - Cada agente recebe um HOME temporário (`tempfile.mkdtemp`) com symlinks seletivos do HOME real
 - MCPs configurados por agente via `mcp.json` no HOME temporário
 - Allowlist de arquivos do HOME: `.config`, `.local`, `.bashrc`, `.profile`, `.zshrc`
+- `env_mcp_server.py` — MCP server standalone injetado automaticamente em todo agente, expõe ferramentas de gerenciamento de processos background (`env_run`, `env_status`, `env_logs`, `env_stop`, `env_input`). Resolve o problema de `execute_bash` bloqueante do kiro-cli para comandos long-running (servidores, builds, etc.)
 
 ### 2. Camada de Agente (Interface de Alto Nível)
 - `agent.py` — Compõe PTY + output parser em interface send/receive limpa
@@ -27,8 +28,9 @@ Sistema de orquestração multi-agente que coordena múltiplas instâncias do `k
 
 ### 4. Camada de Orquestração
 - `orchestrator.py` — Loop principal: envia mensagem → recebe resposta → parse sinal → roteia
-- `session.py` — Versão persistente do orchestrator para uso web/interativo
-- `flow.py` — Grafo dirigido (nós = agentes, arestas = rotas permitidas de handoff)
+- `session_service.py` — Versão persistente do orchestrator para uso web/interativo
+- `agent_helpers.py` — Lógica compartilhada entre orchestrator e session (composição de persona, resolução de headers)
+- `flow.py` — Grafo dirigido (nós = agentes, arestas = rotas permitidas de handoff, com suporte a return edges)
 
 ### 5. Camada de Supervisão
 - `god.py` — GOD_AGENT: watchdog assíncrono que monitora saúde técnica do swarm
@@ -37,14 +39,20 @@ Sistema de orquestração multi-agente que coordena múltiplas instâncias do `k
 
 ### 6. Camada de Persistência
 - `checkpoint.py` — Git auto-commit após cada round, rollback em caso de erro
-- `swarm_state.py` — Salva estado do swarm em `~/.kiro-swarm/sessions/`
+- `swarm_state.py` — Salva estado do swarm em `~/.kiro-swarm/sessions/` (função pública `project_dir()`)
 - `registry.py` — CRUD de definições de agentes em `agents.json`
 - `projects.py` — CRUD de projetos em `~/.kiro-swarm/projects.json`
+
+### 6.5. Camada de Serviços
+- `header_service.py` — CRUD + composição de header templates (protocol, wrapper, handoff)
+- `flow_service.py` — CRUD de múltiplos flows em `~/.kiro-swarm/flows.json`
+- `data_collector.py` — Coleta de training data em MySQL remoto
+- `settings_service.py` — Key-value store de configurações do usuário
 
 ### 7. Camada de Interface
 - **CLI**: `orchestrator.py` direto via `python3 orchestrator.py`
 - **TUI**: `app.py` — Interface Textual com CRUD de agentes e execução do swarm
-- **Web**: `server.py` (FastAPI) + `static/index.html` — REST API + SSE para streaming
+- **Web**: `main.py` (FastAPI) + controllers modulares + `static/` — REST API + SSE para streaming
 - Entry point unificado: `run.sh [web|tui|run]`
 
 ## Dependências Externas
@@ -52,9 +60,15 @@ Sistema de orquestração multi-agente que coordena múltiplas instâncias do `k
 - `fastapi` + `uvicorn` — Web server
 - `sse-starlette` — Server-Sent Events
 - `textual` — TUI framework
+- `pymysql` — MySQL connector (opcional, para data_collector)
+- `python-dotenv` — Carrega `.env` para configuração
+- `mcp` — SDK MCP do PyPI (≥1.0), usado pelo `env_mcp_server.py` para expor tools de gerenciamento de processos
 - `kiro-cli` — O LLM agent que cada processo executa
 
 ## Configuração
 - `agents.json` — Definições de agentes (id, nome, persona, cor, modelo, MCPs)
-- `flow.json` — Grafo de fluxo (nós com posições x/y, arestas src→dst, start_node)
+- `flows.json` — Múltiplos grafos de fluxo (nós com posições x/y, arestas src→dst com return flag, start_node, default_header_ids)
+- `headers.json` — Header templates (protocol, wrapper, handoff) com composição dinâmica
+- `settings.json` — Configurações de usuário (data_collection, etc.)
 - `config.py` — Constantes: timeouts, limites de retry, template de protocolo, persona do GOD
+- `app/models/header.py` — Single source of truth para IDs de headers default

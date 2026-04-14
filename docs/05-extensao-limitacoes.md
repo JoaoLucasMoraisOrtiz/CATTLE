@@ -21,8 +21,8 @@
 - Cada agente pode ter um conjunto completamente diferente de ferramentas
 
 ### 4. Implementar Novos EventCallbacks
-- `session.py:EventCallback` é uma interface com métodos: `on_orch`, `on_agent`, `on_error`, `on_summary`, `on_done`
-- Implementações existentes: `SSECallback` (web), `TuiLogger` (TUI)
+- `session_service.py:EventCallback` é uma interface com métodos: `on_orch`, `on_agent`, `on_error`, `on_summary`, `on_done`
+- Implementações existentes: `SSECallback` (em `controllers/session.py`), `TuiLogger` (TUI)
 - Pode-se criar callbacks para: Slack, Discord, arquivo de log, métricas, etc.
 
 ### 5. Substituir o Logger
@@ -35,13 +35,30 @@
 - Pode-se adicionar novos comandos (requer mudança em `god.py:_CMD_RE` e no orchestrator)
 
 ### 7. Adicionar Novos Endpoints na API Web
-- `server.py` usa FastAPI — adicionar rotas é trivial
-- O `active_session` é global e acessível de qualquer endpoint
+- `main.py` usa FastAPI com controllers modulares — adicionar rotas é trivial
+- O estado da sessão é encapsulado em `SessionState` (classe com `__slots__` em `controllers/session.py`)
+
+### 8. Customizar Header Templates
+- Headers são gerenciados via `header_service.py` com CRUD completo
+- Três tipos: `protocol` (instruções de protocolo), `wrapper` (envolve 1ª mensagem), `handoff` (mensagem de handoff)
+- Placeholders disponíveis por tipo definidos em `app/models/header.py:AVAILABLE_PLACEHOLDERS`
+- Headers podem ser atribuídos por nó do flow ou como default do flow
+
+### 9. Coleta de Training Data
+- `data_collector.py` salva pares input/output em MySQL remoto
+- Configurável via `.env` (MYSQL_HOST, MYSQL_DB, etc.)
+- Desativável via `settings_service` (`data_collection: false`)
+
+### 10. Estender o Environment Manager (env-manager)
+- `env_mcp_server.py` expõe 5 tools via MCP — novas tools podem ser adicionadas com decorators do SDK `mcp`
+- Ring buffer configurável via `ENV_MCP_BUFFER_LINES` em `config.py`
+- Injeção automática desativável via `ENV_MCP_AUTO_INJECT=False` em `config.py`
+- Extensões futuras planejadas: port forwarding awareness, health checks HTTP, monitoramento de CPU/memória, integração Docker
 
 ## Limitações Conhecidas
 
 ### 1. Sessão Única (Web)
-- Apenas uma `SwarmSession` ativa por vez (`active_session` global em `server.py`)
+- Apenas uma `SwarmSession` ativa por vez (encapsulada em `SessionState` em `controllers/session.py`)
 - Não suporta múltiplos usuários/projetos simultâneos
 - Abrir nova sessão fecha a anterior
 
@@ -97,6 +114,22 @@
 - Erros do GOD_AGENT são silenciados
 
 ### 12. Configuração Estática de Agentes
-- `agents.json` e `flow.json` são lidos no startup
+- `agents.json` e `flows.json` são lidos no startup
 - Mudanças durante execução não são refletidas (exceto via API web que recarrega)
 - Não há hot-reload de personas ou configurações
+
+### 13. Bug: `_init_agent` Duplicada no Orchestrator
+- `orchestrator.py` define `_init_agent` duas vezes — a segunda sobrescreve a primeira
+- A primeira usa `compose_persona()` de `agent_helpers`, a segunda reimplementa inline
+- Impacto: a versão com `agent_helpers` nunca é executada no modo batch
+
+## Limitações Resolvidas
+
+### ~~execute_bash Bloqueante~~ (resolvido pelo Environment Manager)
+- **Problema**: `execute_bash` do kiro-cli é síncrono — comandos long-running (servidores, builds) bloqueavam o agente indefinidamente. Impossível subir múltiplos serviços ou ver erros de runtime.
+- **Solução**: MCP `env-manager` injetado automaticamente em todo agente, expondo `env_run`/`env_status`/`env_logs`/`env_stop`/`env_input` para gerenciamento de processos background sem bloqueio.
+- **Limitações residuais do env-manager**:
+  - Ring buffer de 500 linhas — logs muito longos perdem linhas antigas
+  - Sem detecção automática de portas abertas pelos processos
+  - Sem health checks HTTP automáticos
+  - `state_dir` em `/tmp/` — perdido em reboot do sistema

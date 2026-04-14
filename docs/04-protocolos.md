@@ -145,7 +145,45 @@ SSECallback (em SwarmSession)
 
 ## 6. Flow Graph Atual (flow.json)
 
-### 6.1 Topologia
+## 6. Protocolo MCP do Environment Manager (env-manager)
+
+### 6.1 Visão Geral
+O `env_mcp_server.py` é um MCP server stdio-based injetado automaticamente em todo agente. Permite que agentes iniciem, monitorem e parem processos long-running (servidores, builds) sem bloquear o `execute_bash`.
+
+### 6.2 Transporte
+- **Protocolo**: MCP (Model Context Protocol) sobre stdio
+- **Lifecycle**: kiro-cli spawna o MCP server como processo filho → comunica via stdin/stdout JSON-RPC → ao sair, stdin EOF dispara cleanup via `atexit`
+
+### 6.3 Tools Expostas
+
+| Tool | Params | Retorno | Descrição |
+|------|--------|---------|-----------|
+| `env_run` | `command: str`, `name: str`, `cwd?: str` | `{name, pid, status: 'running'}` | Inicia processo em background. Retorna imediatamente. |
+| `env_status` | `name?: str` | `{name, pid, status, exit_code?, uptime_seconds, last_output_lines}` | Status de um ou todos os processos. |
+| `env_logs` | `name: str`, `lines?: int (default=50)` | `{name, lines: str[]}` | Últimas N linhas do ring buffer (stdout+stderr merged). |
+| `env_stop` | `name: str`, `force?: bool (default=false)` | `{name, status: 'stopped', exit_code}` | SIGTERM (default) ou SIGKILL (force). |
+| `env_input` | `name: str`, `text: str` | `{ok: true}` | Envia texto para stdin do processo. |
+
+### 6.4 Estado Compartilhado
+- **state_dir**: `/tmp/kiro-env-{md5(workdir)[:12]}/`
+- **processes.json**: Mapa `{name: {pid, command, start_time}}` — persistido a cada `env_run`/`env_stop`
+- **Compartilhamento**: Múltiplos agentes do mesmo projeto usam o mesmo `state_dir` (mesmo hash de workdir), permitindo que agente B veja processos iniciados por agente A
+- **Reconciliação**: No startup, lê `processes.json` e verifica PIDs vivos via `os.kill(pid, 0)` — processos órfãos marcados como `zombie`
+
+### 6.5 Ring Buffer
+- 500 linhas por processo (`ENV_MCP_BUFFER_LINES`)
+- stdout e stderr merged via `Popen(stderr=STDOUT)`
+- Thread daemon por processo faz `readline()` em loop e appenda no `deque(maxlen=500)`
+
+### 6.6 Cleanup
+- `atexit.register` + signal handler SIGTERM
+- Mata todos os processos filhos gerenciados
+- Limpa `processes.json`
+- Safety net adicional: `session_service.close()` faz `shutil.rmtree` do `state_dir`
+
+## 7. Flow Graph Atual (flow.json)
+
+### 7.1 Topologia
 ```
 architect ──→ consultor ──→ analyst
                   ↑              │
@@ -156,7 +194,7 @@ architect ──→ consultor ──→ analyst
 - **consultor** pode fazer handoff para: `architect`, `analyst`
 - **analyst** pode fazer handoff para: `consultor`
 
-### 6.2 Implicação
+### 7.2 Implicação
 - O `consultor` é o hub central de comunicação
 - `architect` e `analyst` não se comunicam diretamente
 - Toda comunicação entre architect e analyst passa pelo consultor
