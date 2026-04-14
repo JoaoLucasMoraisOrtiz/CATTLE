@@ -11,7 +11,8 @@ MAX_SIGNAL_NUDGES = 1
 
 NUDGE_MESSAGE = "Se você já finalizou suas tasks, responda como o protocolo pede, com @done. Se não, avalie sua próxima task e execute."
 
-HOME_ALLOWLIST = {'.config', '.local', '.bashrc', '.profile', '.zshrc', '.nvm', '.npm'}
+HOME_ALLOWLIST = {'.bashrc', '.profile', '.zshrc', '.nvm', '.npm'}
+HOME_COPYLIST = {'.config', '.local'}  # CLIs write locks/sessions here — must be isolated
 
 # Environment Manager MCP
 ENV_MCP_BUFFER_LINES = 500

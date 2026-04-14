@@ -8,7 +8,7 @@ import tempfile
 import time
 import pexpect
 
-from app.config import HOME_ALLOWLIST, ENV_MCP_AUTO_INJECT, ENV_MCP_TIMEOUT
+from app.config import HOME_ALLOWLIST, HOME_COPYLIST, ENV_MCP_AUTO_INJECT, ENV_MCP_TIMEOUT
 from app.core.cli_driver import CliDriver, get_driver, KIRO_DRIVER
 
 try:
@@ -25,6 +25,10 @@ def make_clean_env(mcps: dict | None = None, workdir: str | None = None, driver:
             src = os.path.join(real_home, item)
             if os.path.exists(src):
                 os.symlink(src, os.path.join(tmp, item))
+        elif item in HOME_COPYLIST:
+            src = os.path.join(real_home, item)
+            if os.path.isdir(src):
+                shutil.copytree(src, os.path.join(tmp, item), symlinks=True)
     merged = dict(mcps or {})
     if workdir and ENV_MCP_AUTO_INJECT:
         state_dir = f"/tmp/kiro-env-{hashlib.md5(workdir.encode()).hexdigest()[:12]}"
