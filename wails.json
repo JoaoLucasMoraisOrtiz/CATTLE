@@ -1,0 +1,13 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "redo",
+  "outputfilename": "redo",
+  "frontend:install": "",
+  "frontend:build": "",
+  "build:tags": "webkit2_41",
+  "frontend:dev:watcher": "",
+  "frontend:dev:serverUrl": "",
+  "author": {
+    "name": "jlortiz"
+  }
+}

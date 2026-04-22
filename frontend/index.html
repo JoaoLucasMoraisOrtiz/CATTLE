@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ReDo!</title>
+<link rel="stylesheet" href="lib/xterm.css">
+<link rel="stylesheet" href="src/style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Home screen -->
+    <div id="home-screen">
+      <h1>ReDo! <span style="opacity:.4;font-size:.5em">v2</span></h1>
+      <p class="home-subtitle">Open a project to start</p>
+      <div id="home-projects"></div>
+      <button class="btn-new-project" onclick="showNewProjectForm()">+ New Project</button>
+    </div>
+
+    <!-- Workspace (hidden until a project is opened) -->
+    <div id="workspace" style="display:none">
+      <div id="tabs"></div>
+      <div id="panes"></div>
+      <div id="input-area">
+        <div id="injection-preview"></div>
+        <div id="input-row">
+          <span id="prompt">&gt;</span>
+          <input id="input" type="text" placeholder="Click here to use @agent broadcast (Esc to return to terminal)" >
+          <button id="send-btn" onclick="sendMessage()">Send</button>
+        </div>
+      </div>
+      <div id="status-bar"></div>
+    </div>
+  </div>
+
+<!-- Project Picker Modal -->
+<div id="project-modal" class="modal-overlay" onclick="if(event.target===this)closeProjectModal()">
+  <div class="modal">
+    <h3>Open Project</h3>
+    <div id="project-list"></div>
+    <hr style="border-color:#30363d;margin:12px 0">
+    <button class="btn-new-project" onclick="closeProjectModal();showNewProjectForm()">+ New Project</button>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeProjectModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- New Project Modal -->
+<div id="new-project-modal" class="modal-overlay" onclick="if(event.target===this)closeNewProjectModal()">
+  <div class="modal">
+    <h3>New Project</h3>
+    <label>Name</label>
+    <input id="new-proj-name" type="text" placeholder="my-project">
+    <label>Path</label>
+    <input id="new-proj-path" type="text" placeholder="/home/user/projects/my-project">
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeNewProjectModal()">Cancel</button>
+      <button class="btn-spawn" onclick="createProject()">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- Spawn Agent Modal -->
+<div id="spawn-modal" class="modal-overlay" onclick="if(event.target===this)closeSpawnModal()">
+  <div class="modal">
+    <h3>New Agent</h3>
+    <label>Name</label>
+    <input id="spawn-name" type="text" placeholder="backend, frontend, tester...">
+    <label>Agent Type</label>
+    <div id="agent-buttons" class="agent-grid">
+      <button class="agent-btn" data-cmd="kiro-cli chat" data-type="kiro" data-yolo="-a" onclick="selectAgentType(this)">
+        <span class="agent-icon">⚡</span> Kiro
+      </button>
+      <button class="agent-btn" data-cmd="gemini" data-type="gemini" data-yolo="-y" onclick="selectAgentType(this)">
+        <span class="agent-icon">💎</span> Gemini
+      </button>
+      <button class="agent-btn" data-cmd="claude" data-type="claude" data-yolo="--dangerously-skip-permissions" onclick="selectAgentType(this)">
+        <span class="agent-icon">🟣</span> Claude
+      </button>
+      <button class="agent-btn" data-cmd="codex" data-type="codex" data-yolo="--full-auto" onclick="selectAgentType(this)">
+        <span class="agent-icon">🔵</span> Codex
+      </button>
+    </div>
+    <div class="yolo-row">
+      <label class="toggle-label">
+        <input id="spawn-yolo" type="checkbox"> YOLO mode (auto-approve)
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeSpawnModal()">Cancel</button>
+      <button class="btn-spawn" id="btn-do-spawn" onclick="doSpawn()" disabled>Spawn</button>
+    </div>
+  </div>
+</div>
+  <script src="lib/xterm.js"></script>
+  <script src="lib/xterm-addon-fit.js"></script>
+  <script src="src/main.js"></script>
+</body>
+</html>
