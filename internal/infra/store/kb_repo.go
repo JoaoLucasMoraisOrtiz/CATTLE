@@ -24,12 +24,16 @@ func (r *KBRepo) SaveChunk(chunk *domain.KBChunk) error {
 }
 
 func (r *KBRepo) FindRelevant(project, query string, queryVec []float32, limit int) ([]domain.KBChunk, error) {
-	rows, _ := r.db.Query(
-		`SELECT k.id, k.project, k.source_file, k.chunk_index, k.content, k.embedding, bm25(kb_fts) AS score
-		 FROM kb_fts f JOIN kb_chunks k ON f.rowid = k.id
-		 WHERE k.project=? AND kb_fts MATCH ? ORDER BY score LIMIT ?`,
-		project, query, limit*3,
-	)
+	fq := ftsQuery(query)
+	var rows *sql.Rows
+	if fq != "" {
+		rows, _ = r.db.Query(
+			`SELECT k.id, k.project, k.source_file, k.chunk_index, k.content, k.embedding, bm25(kb_fts) AS score
+			 FROM kb_fts f JOIN kb_chunks k ON f.rowid = k.id
+			 WHERE k.project=? AND kb_fts MATCH ? ORDER BY score LIMIT ?`,
+			project, fq, limit*3,
+		)
+	}
 
 	type scored struct {
 		chunk domain.KBChunk

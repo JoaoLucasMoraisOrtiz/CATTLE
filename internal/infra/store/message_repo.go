@@ -46,12 +46,16 @@ func (r *MessageRepo) FindBySession(sessionID string) ([]domain.Message, error) 
 // FindRelevant does hybrid search: cosine similarity + FTS5 BM25.
 func (r *MessageRepo) FindRelevant(project, query string, queryVec []float32, limit int) ([]domain.Message, error) {
 	// FTS5 candidates
-	ftsRows, _ := r.db.Query(
-		`SELECT m.id, m.project, m.agent, m.session_id, m.role, m.content, m.embedding, bm25(messages_fts) AS score
-		 FROM messages_fts f JOIN messages m ON f.rowid = m.id
-		 WHERE m.project=? AND messages_fts MATCH ? ORDER BY score LIMIT ?`,
-		project, query, limit*3,
-	)
+	fq := ftsQuery(query)
+	var ftsRows *sql.Rows
+	if fq != "" {
+		ftsRows, _ = r.db.Query(
+			`SELECT m.id, m.project, m.agent, m.session_id, m.role, m.content, m.embedding, bm25(messages_fts) AS score
+			 FROM messages_fts f JOIN messages m ON f.rowid = m.id
+			 WHERE m.project=? AND messages_fts MATCH ? ORDER BY score LIMIT ?`,
+			project, fq, limit*3,
+		)
+	}
 
 	type scored struct {
 		msg   domain.Message
