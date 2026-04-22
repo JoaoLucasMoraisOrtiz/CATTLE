@@ -9,9 +9,15 @@ let projectPanes = {};    // projectName -> { sessionID -> { term, fitAddon, age
 
 // --- Init ---
 async function init() {
-  projects = await window.go.main.App.GetProjects();
+  console.log('[init] starting');
+  try {
+    projects = await window.go.main.App.GetProjects();
+    console.log('[init] projects:', JSON.stringify(projects));
+  } catch(e) {
+    console.error('[init] GetProjects error:', e);
+  }
   setupInput();
-  showHome();
+  await showHome();
 }
 
 // --- Home Screen ---
@@ -95,6 +101,7 @@ function renderTabs() {
   html += `<div class="tab-actions">
     <button onclick="showProjectPicker()">+ Project</button>
     <button onclick="spawnNextAgent()">+ Agent</button>
+    <button onclick="showSettings()">⚙</button>
   </div>`;
   el.innerHTML = html;
 }
@@ -126,6 +133,7 @@ function switchTab(tabIdx) {
 
   renderTabs();
   updateStatus();
+  renderKBList();
   refitAll();
 }
 
@@ -353,12 +361,71 @@ async function doSpawn() {
 }
 
 // --- Input ---
+let searchTimer = null;
+let pendingChunks = [];
+
 function setupInput() {
   const input = document.getElementById('input');
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); sendMessage(); } });
+  input.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    const q = input.value.trim();
+    if (q.length < 3) { hidePreview(); return; }
+    searchTimer = setTimeout(() => searchPreview(q), 400);
+  });
   input.addEventListener('focus', () => {
     document.querySelectorAll('.pane').forEach(p => { p.classList.remove('focused'); p.style.borderColor = '#30363d'; p.style.boxShadow = 'none'; });
   });
+}
+
+async function searchPreview(query) {
+  if (activeTab < 0) return;
+  const proj = projects[openedProjects[activeTab]];
+  if (!proj) return;
+  try {
+    console.log('[searchPreview] query:', query, 'project:', proj.name);
+    const hits = await window.go.main.App.SearchChunks(proj.name, query, 3);
+    console.log('[searchPreview] hits:', hits);
+    if (!hits || hits.length === 0) { hidePreview(); return; }
+    pendingChunks = hits;
+    const el = document.getElementById('injection-preview');
+    el.innerHTML = hits.map((h, i) =>
+      `<div class="preview-chip" onclick="toggleChip(this,${i})">
+        <span class="chip-source">${h.type === 'kb' ? '📚' : '💬'} ${escapeHtml(h.source)}</span>
+        <span class="chip-text">${escapeHtml(h.content.substring(0, 120))}${h.content.length > 120 ? '...' : ''}</span>
+      </div>`
+    ).join('');
+    el.classList.add('visible');
+    el.querySelectorAll('.preview-chip').forEach(c => c.classList.add('selected'));
+  } catch(e) {
+    console.error('[searchPreview] error:', e);
+  }
+}
+
+function toggleChip(el, idx) {
+  el.classList.toggle('selected');
+}
+
+function hidePreview() {
+  pendingChunks = [];
+  const el = document.getElementById('injection-preview');
+  el.innerHTML = '';
+  el.classList.remove('visible');
+}
+
+function getSelectedContext() {
+  const chips = document.querySelectorAll('#injection-preview .preview-chip.selected');
+  if (chips.length === 0 || pendingChunks.length === 0) return '';
+  let ctx = '--- Relevant context ---\n';
+  chips.forEach(chip => {
+    const idx = parseInt(chip.querySelector('.chip-source') ? Array.from(chip.parentNode.children).indexOf(chip) : 0);
+    if (pendingChunks[idx]) {
+      const h = pendingChunks[idx];
+      ctx += `[${h.source}] ${h.content}\n\n`;
+    }
+  });
+  ctx += '--- End context ---\n\n';
+  return ctx;
 }
 
 function sendMessage() {
@@ -366,10 +433,18 @@ function sendMessage() {
   const raw = input.value.trim();
   if (!raw) return;
   input.value = '';
+
   const words = raw.split(/\s+/);
   const targets = [], textParts = [];
   for (const w of words) { if (w.startsWith('@')) targets.push(w.slice(1)); else textParts.push(w); }
-  const text = textParts.join(' ');
+  const userText = textParts.join(' ');
+
+  // Prepend selected context chunks
+  const ctx = getSelectedContext();
+  const text = ctx ? ctx + userText : userText;
+
+  hidePreview();
+
   let sessionIDs = [];
   if (targets.length === 0) { if (focusedPane) sessionIDs = [focusedPane]; }
   else { for (const [sid, info] of Object.entries(panes)) { if (targets.includes(info.agent.name)) sessionIDs.push(sid); } }
@@ -383,6 +458,126 @@ function updateStatus() {
   document.getElementById('status-bar').textContent = proj
     ? `${proj.path} | ${running} agent${running !== 1 ? 's' : ''} running`
     : '';
+}
+
+// --- KB Sidebar ---
+function renderKBList() {
+  const el = document.getElementById('kb-list');
+  if (activeTab < 0) { el.innerHTML = ''; return; }
+  const proj = projects[openedProjects[activeTab]];
+  if (!proj || !proj.kb_docs || proj.kb_docs.length === 0) {
+    el.innerHTML = '<div style="padding:12px;color:#8b949e;font-size:12px;text-align:center">No docs added</div>';
+    return;
+  }
+  el.innerHTML = proj.kb_docs.map(doc => {
+    const name = doc.split('/').pop();
+    return `<div class="kb-item">
+      <span class="kb-name" title="${doc}" onclick="openKBViewer('${doc}')" style="cursor:pointer">${name}</span>
+      <span class="kb-remove" onclick="removeKBDoc('${doc}')">✕</span>
+    </div>`;
+  }).join('');
+}
+
+async function addKBDoc() {
+  if (activeTab < 0) return;
+  const path = await window.go.main.App.PickFile();
+  if (!path) return;
+  const proj = projects[openedProjects[activeTab]];
+  await window.go.main.App.AddKBDoc(proj.name, path);
+  projects = await window.go.main.App.GetProjects();
+  renderKBList();
+  updateStatus();
+}
+
+async function removeKBDoc(path) {
+  if (activeTab < 0) return;
+  const proj = projects[openedProjects[activeTab]];
+  await window.go.main.App.RemoveKBDoc(proj.name, path);
+  projects = await window.go.main.App.GetProjects();
+  renderKBList();
+}
+
+async function reindexKB() {
+  if (activeTab < 0) return;
+  const proj = projects[openedProjects[activeTab]];
+  const result = await window.go.main.App.ReindexKB(proj.name);
+  alert(result);
+}
+
+// --- KB Viewer ---
+let kbViewerData = { path: '', content: '', chunks: [] };
+
+async function openKBViewer(docPath) {
+  document.getElementById('kb-viewer-title').textContent = docPath.split('/').pop();
+  document.getElementById('kb-viewer-modal').classList.add('active');
+
+  const proj = projects[openedProjects[activeTab]];
+  // Load content and chunks in parallel
+  const [content, chunks] = await Promise.all([
+    window.go.main.App.ReadFileContent(docPath),
+    window.go.main.App.GetKBChunks(proj.name, docPath),
+  ]);
+  kbViewerData = { path: docPath, content: content || '(empty)', chunks: chunks || [] };
+  switchKBView('doc', document.querySelector('.kb-vtab'));
+}
+
+function switchKBView(view, btn) {
+  document.querySelectorAll('.kb-vtab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const el = document.getElementById('kb-viewer-content');
+  if (view === 'doc') {
+    el.textContent = kbViewerData.content;
+  } else {
+    if (kbViewerData.chunks.length === 0) {
+      el.innerHTML = '<div style="color:#8b949e;padding:20px;text-align:center">No chunks — reindex to generate</div>';
+    } else {
+      el.innerHTML = kbViewerData.chunks.map((c, i) =>
+        `<div class="chunk-card"><div class="chunk-header">Chunk ${i + 1} / ${kbViewerData.chunks.length} — ${c.length} chars</div><div class="chunk-body">${escapeHtml(c)}</div></div>`
+      ).join('');
+    }
+  }
+}
+
+function closeKBViewer() { document.getElementById('kb-viewer-modal').classList.remove('active'); }
+
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// --- Settings ---
+async function showSettings() {
+  try {
+    const s = await window.go.main.App.GetSettings();
+    document.getElementById('set-gemini').value = (s && s.gemini_api_key) || '';
+    const sqliteOn = !s || s.sqlite_enabled !== 'false';
+    document.getElementById('set-sqlite').checked = sqliteOn;
+    document.getElementById('sqlite-warning').style.display = 'none';
+  } catch(e) {
+    console.error('[showSettings] error:', e);
+  }
+  // Show warning when unchecking
+  document.getElementById('set-sqlite').onchange = function() {
+    document.getElementById('sqlite-warning').style.display = this.checked ? 'none' : 'block';
+  };
+  document.getElementById('settings-modal').classList.add('active');
+}
+function closeSettings() { document.getElementById('settings-modal').classList.remove('active'); }
+async function saveSettings() {
+  const sqliteOn = document.getElementById('set-sqlite').checked;
+  const wasOn = (await window.go.main.App.GetSettings()).sqlite_enabled !== 'false';
+
+  // If turning off, confirm and wipe
+  if (wasOn && !sqliteOn) {
+    if (!confirm('This will DELETE all stored data (embeddings, conversation history, KB chunks). Continue?')) return;
+    await window.go.main.App.WipeSQLite();
+  }
+
+  const r = await window.go.main.App.SaveSettings(
+    document.getElementById('set-gemini').value.trim(),
+    sqliteOn,
+  );
+  closeSettings();
+  if (r !== 'ok') alert(r);
 }
 
 // --- Resize ---

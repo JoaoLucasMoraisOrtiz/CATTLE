@@ -9,8 +9,8 @@ import (
 )
 
 type fileConfig struct {
-	MySQLDSN    string           `json:"mysql_dsn"`
 	GeminiKey   string           `json:"gemini_api_key"`
+	SQLiteOn    *bool            `json:"sqlite_enabled,omitempty"`
 	Projects    []domain.Project `json:"projects"`
 }
 
@@ -49,5 +49,20 @@ func (c *JSONConfig) SaveProjects(projects []domain.Project) error {
 	return os.WriteFile(c.path, raw, 0644)
 }
 
-func (c *JSONConfig) MySQLDSN() string  { return c.data.MySQLDSN }
 func (c *JSONConfig) GeminiKey() string { return c.data.GeminiKey }
+func (c *JSONConfig) SQLiteEnabled() bool {
+	if c.data.SQLiteOn == nil {
+		return true
+	}
+	return *c.data.SQLiteOn
+}
+
+func (c *JSONConfig) SaveSettings(geminiKey string, sqliteOn bool) error {
+	c.data.GeminiKey = geminiKey
+	c.data.SQLiteOn = &sqliteOn
+	raw, err := json.MarshalIndent(c.data, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(c.path, raw, 0644)
+}

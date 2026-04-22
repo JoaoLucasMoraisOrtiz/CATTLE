@@ -23,6 +23,7 @@ type Session struct {
 	ID        string
 	Project   string
 	AgentName string
+	CLIType   string // kiro, gemini, claude
 	HomeDir   string // temp HOME for this session
 	Active    bool
 }

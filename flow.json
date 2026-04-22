@@ -1,0 +1,42 @@
+{
+  "nodes": [
+    {
+      "agent_id": "analyst",
+      "x": 368,
+      "y": 274
+    },
+    {
+      "agent_id": "consultor",
+      "x": 687,
+      "y": 215
+    },
+    {
+      "agent_id": "architect",
+      "x": 382,
+      "y": 47
+    }
+  ],
+  "edges": [
+    {
+      "src": "analyst",
+      "dst": "consultor"
+    },
+    {
+      "src": "consultor",
+      "dst": "architect"
+    },
+    {
+      "src": "consultor",
+      "dst": "analyst"
+    },
+    {
+      "src": "architect",
+      "dst": "consultor"
+    },
+    {
+      "src": "architect",
+      "dst": "analyst"
+    }
+  ],
+  "start_node": "architect"
+}

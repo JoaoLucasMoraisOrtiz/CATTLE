@@ -15,12 +15,27 @@
       <p class="home-subtitle">Open a project to start</p>
       <div id="home-projects"></div>
       <button class="btn-new-project" onclick="showNewProjectForm()">+ New Project</button>
+      <button class="btn-new-project" onclick="showSettings()" style="margin-top:8px;border-style:solid">⚙ Settings</button>
     </div>
 
     <!-- Workspace (hidden until a project is opened) -->
     <div id="workspace" style="display:none">
       <div id="tabs"></div>
-      <div id="panes"></div>
+      <div id="workspace-body">
+        <div id="sidebar">
+          <div class="sidebar-header">
+            <span>📚 Knowledge Base</span>
+          </div>
+          <div id="kb-list"></div>
+          <div class="sidebar-actions">
+            <button onclick="addKBDoc()" style="width:100%">+ Add Document</button>
+          </div>
+          <button class="btn-reindex" onclick="reindexKB()">↻ Reindex All</button>
+        </div>
+        <div id="main-area">
+          <div id="panes"></div>
+        </div>
+      </div>
       <div id="input-area">
         <div id="injection-preview"></div>
         <div id="input-row">
@@ -58,6 +73,42 @@
       <button class="btn-cancel" onclick="closeNewProjectModal()">Cancel</button>
       <button class="btn-spawn" onclick="createProject()">Create</button>
     </div>
+  </div>
+</div>
+
+<!-- Settings Modal -->
+<div id="settings-modal" class="modal-overlay" onclick="if(event.target===this)closeSettings()">
+  <div class="modal">
+    <h3>⚙ Settings</h3>
+    <div class="toggle-row">
+      <label class="toggle-label">
+        <input id="set-sqlite" type="checkbox"> SQLite Database (embeddings, RAG, conversation history)
+      </label>
+    </div>
+    <div id="sqlite-warning" style="display:none;color:#da3633;font-size:11px;padding:4px 0 8px;margin-left:24px">
+      ⚠ Disabling will delete all stored data (embeddings, conversation history, KB chunks)
+    </div>
+    <label>Gemini API Key <span style="color:#8b949e;font-size:11px">(for image descriptions)</span></label>
+    <input id="set-gemini" type="password" placeholder="AIza...">
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeSettings()">Cancel</button>
+      <button class="btn-spawn" onclick="saveSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- KB Document Viewer Modal -->
+<div id="kb-viewer-modal" class="modal-overlay" onclick="if(event.target===this)closeKBViewer()">
+  <div class="modal modal-large">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h3 id="kb-viewer-title" style="margin:0"></h3>
+      <span style="cursor:pointer;color:#8b949e;font-size:18px" onclick="closeKBViewer()">✕</span>
+    </div>
+    <div class="kb-viewer-tabs">
+      <button class="kb-vtab active" onclick="switchKBView('doc',this)">📄 Document</button>
+      <button class="kb-vtab" onclick="switchKBView('chunks',this)">🧩 Chunks</button>
+    </div>
+    <div id="kb-viewer-content" class="kb-viewer-body"></div>
   </div>
 </div>
 

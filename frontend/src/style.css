@@ -59,16 +59,6 @@ body {
 .tab-actions button:hover { color: #c9d1d9; border-color: #8b949e; }
 
 /* Panes */
-#panes {
-  flex: 1;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px;
-  padding: 4px;
-  overflow-y: auto;
-  min-height: 0;
-}
-
 .pane {
   flex: 1 1 48%;
   min-width: 300px;
@@ -139,11 +129,30 @@ body {
 #injection-preview {
   font-size: 12px;
   color: #3fb950;
-  font-style: italic;
   padding: 0 4px 4px;
   display: none;
+  max-height: 180px;
+  overflow-y: auto;
 }
 #injection-preview.visible { display: block; }
+
+.preview-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px;
+  margin-bottom: 4px;
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0.5;
+  transition: all .15s;
+}
+.preview-chip.selected { opacity: 1; border-color: #3fb950; }
+.preview-chip:hover { background: #161b22; }
+.chip-source { font-size: 11px; font-weight: 600; color: #58a6ff; }
+.chip-text { font-size: 11px; color: #8b949e; line-height: 1.4; }
 
 #input-row {
   display: flex;
@@ -287,6 +296,105 @@ body {
 .project-list-item .pli-path { font-size: 11px; color: #8b949e; }
 
 #workspace { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+
+/* Workspace body: sidebar + main */
+#workspace-body { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+
+#main-area { flex: 1; display: flex; min-width: 0; }
+#main-area #panes { flex: 1; display: flex; flex-wrap: wrap; gap: 2px; padding: 4px; overflow-y: auto; min-height: 0; }
+
+/* Sidebar */
+#sidebar {
+  width: 240px;
+  background: #161b22;
+  border-right: 1px solid #30363d;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow-y: auto;
+}
+.sidebar-header {
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  border-bottom: 1px solid #30363d;
+}
+#kb-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+.kb-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  font-size: 12px;
+  border-bottom: 1px solid #21262d;
+}
+.kb-item:hover { background: #21262d; }
+.kb-item .kb-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #58a6ff; }
+.kb-item .kb-remove { cursor: pointer; color: #8b949e; font-size: 11px; margin-left: 6px; }
+.kb-item .kb-remove:hover { color: #da3633; }
+.sidebar-actions {
+  padding: 8px;
+  display: flex;
+  gap: 4px;
+  border-top: 1px solid #30363d;
+}
+.sidebar-actions input {
+  flex: 1;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  color: #c9d1d9;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: inherit;
+  outline: none;
+}
+.sidebar-actions input:focus { border-color: #1f6feb; }
+.sidebar-actions button {
+  background: #238636;
+  color: #fff;
+  border: none;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.btn-reindex {
+  margin: 4px 8px 8px;
+  background: #21262d;
+  color: #8b949e;
+  border: 1px solid #30363d;
+  padding: 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+}
+.btn-reindex:hover { color: #c9d1d9; border-color: #8b949e; }
+
+/* KB Viewer Modal */
+.modal-large { width: 720px; max-height: 85vh; display: flex; flex-direction: column; }
+.kb-viewer-tabs { display: flex; gap: 4px; margin-bottom: 12px; }
+.kb-vtab {
+  background: #21262d; color: #8b949e; border: 1px solid #30363d;
+  padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 12px; font-family: inherit;
+}
+.kb-vtab:hover { color: #c9d1d9; }
+.kb-vtab.active { background: #0d1117; color: #c9d1d9; border-color: #1f6feb; }
+.kb-viewer-body {
+  flex: 1; overflow-y: auto; background: #0d1117; border: 1px solid #30363d;
+  border-radius: 6px; padding: 12px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-break: break-word;
+}
+.chunk-card {
+  background: #161b22; border: 1px solid #30363d; border-radius: 6px;
+  padding: 10px 12px; margin-bottom: 8px;
+}
+.chunk-card .chunk-header { font-size: 11px; color: #8b949e; margin-bottom: 6px; font-weight: 600; }
+.chunk-card .chunk-body { font-size: 12px; white-space: pre-wrap; word-break: break-word; }
 .modal input[type="text"]:focus { border-color: #1f6feb; }
 
 .agent-grid {
@@ -327,6 +435,7 @@ body {
   width: 16px;
   height: 16px;
 }
+.toggle-row { margin: 8px 0; }
 
 .modal-actions {
   margin-top: 18px;

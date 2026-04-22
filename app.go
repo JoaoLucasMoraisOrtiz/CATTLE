@@ -3,6 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -10,16 +14,24 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"github.com/jlortiz/redo/internal/domain"
+	"github.com/jlortiz/redo/internal/infra/config"
+	"github.com/jlortiz/redo/internal/infra/embedding"
+	"github.com/jlortiz/redo/internal/infra/store"
 	"github.com/jlortiz/redo/internal/infra/terminal"
+	"github.com/jlortiz/redo/internal/service/kb"
 )
 
 // App is the Wails bridge — its exported methods are callable from JS.
 type App struct {
-	ctx       context.Context
-	config    domain.ConfigRepository
-	terminals map[string]*terminal.PtyTerminal
-	sessions  map[string]*domain.Session
-	mu        sync.Mutex
+	ctx         context.Context
+	config      domain.ConfigRepository
+	terminals   map[string]*terminal.PtyTerminal
+	sessions    map[string]*domain.Session
+	mu          sync.Mutex
+	msgRepo     *store.MessageRepo
+	kbRepo      *store.KBRepo
+	embedder    *embedding.Client
+	embedServer *embedding.Server
 }
 
 func NewApp(config domain.ConfigRepository) *App {
@@ -32,6 +44,34 @@ func NewApp(config domain.ConfigRepository) *App {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	// Try to connect MySQL + embeddings (non-fatal if unavailable)
+	a.initServices()
+}
+
+func (a *App) initServices() {
+	cfg := a.config.(*config.JSONConfig)
+
+	// SQLite — only if enabled
+	if cfg.SQLiteEnabled() {
+		db, err := store.Open()
+		if err != nil {
+			fmt.Printf("[Store] open failed: %v\n", err)
+		} else {
+			a.msgRepo = store.NewMessageRepo(db)
+			a.kbRepo = store.NewKBRepo(db)
+			fmt.Println("[Store] SQLite ready")
+		}
+	} else {
+		a.msgRepo = nil
+		a.kbRepo = nil
+	}
+
+	a.embedder = embedding.NewClient("")
+
+	if a.msgRepo != nil {
+		// TODO: conversation ingestion — define strategy later
+		// a.startIngestionLoop()
+	}
 }
 
 func (a *App) shutdown(ctx context.Context) {
@@ -43,6 +83,9 @@ func (a *App) shutdown(ctx context.Context) {
 			terminal.CleanupEnv(s.HomeDir)
 		}
 	}
+	if a.embedServer != nil {
+		a.embedServer.Stop()
+	}
 }
 
 // --- Methods exposed to frontend ---
@@ -51,6 +94,44 @@ func (a *App) shutdown(ctx context.Context) {
 func (a *App) GetProjects() []domain.Project {
 	projects, _ := a.config.LoadProjects()
 	return projects
+}
+
+// GetSettings returns global settings.
+func (a *App) GetSettings() map[string]string {
+	cfg := a.config.(*config.JSONConfig)
+	sqliteOn := "true"
+	if !cfg.SQLiteEnabled() {
+		sqliteOn = "false"
+	}
+	return map[string]string{
+		"gemini_api_key": cfg.GeminiKey(),
+		"sqlite_enabled": sqliteOn,
+	}
+}
+
+// SaveSettings persists global settings and reinitializes services.
+func (a *App) SaveSettings(geminiKey string, sqliteOn bool) string {
+	cfg := a.config.(*config.JSONConfig)
+	if err := cfg.SaveSettings(geminiKey, sqliteOn); err != nil {
+		return "error: " + err.Error()
+	}
+	a.initServices()
+	return "ok"
+}
+
+// WipeSQLite deletes the SQLite database.
+func (a *App) WipeSQLite() string {
+	home, _ := os.UserHomeDir()
+	dbPath := filepath.Join(home, ".redo", "redo.db")
+	a.msgRepo = nil
+	a.kbRepo = nil
+	if err := os.Remove(dbPath); err != nil && !os.IsNotExist(err) {
+		return "error: " + err.Error()
+	}
+	// Also remove WAL/SHM
+	os.Remove(dbPath + "-wal")
+	os.Remove(dbPath + "-shm")
+	return "ok"
 }
 
 // SaveProjects persists project configuration.
@@ -105,6 +186,7 @@ func (a *App) SpawnAgent(projectName, agentName, command, color, cliType string)
 		ID:        sessionID,
 		Project:   projectName,
 		AgentName: agentName,
+		CLIType:   cliType,
 		HomeDir:   homeDir,
 		Active:    true,
 	}
@@ -213,14 +295,14 @@ func (a *App) GetConversation(sessionID string) []domain.Message {
 		return nil
 	}
 
-	driver := terminal.Drivers[session.AgentName]
+	driver := terminal.Drivers[session.CLIType]
 	if driver == nil {
 		return nil
 	}
 
 	// Kiro: pass workdir (key in SQLite). Gemini: pass isolated HOME.
 	var path string
-	switch session.AgentName {
+	switch session.CLIType {
 	case "kiro":
 		projects, _ := a.config.LoadProjects()
 		for _, p := range projects {
@@ -238,7 +320,7 @@ func (a *App) GetConversation(sessionID string) []domain.Message {
 
 	msgs, err := driver.ParseSessionFile(path)
 	if err != nil {
-		fmt.Printf("[GetConversation] %s error: %v\n", session.AgentName, err)
+		fmt.Printf("[GetConversation] %s error: %v\n", session.CLIType, err)
 		return nil
 	}
 	return msgs
@@ -294,6 +376,7 @@ func (a *App) RespawnProject(projectName string) map[string]string {
 			ID:        sessionID,
 			Project:   projectName,
 			AgentName: agent.Name,
+			CLIType:   agent.CLIType,
 			HomeDir:   homeDir,
 			Active:    true,
 		}
@@ -347,4 +430,351 @@ func (a *App) removeAgentFromProject(projectName, agentName string) {
 			}
 		}
 	}
+}
+
+// PickFile opens a native file dialog and returns the selected path.
+func (a *App) PickFile() string {
+	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "Select Knowledge Document",
+		Filters: []runtime.FileFilter{
+			{DisplayName: "Documents", Pattern: "*.md;*.txt;*.py;*.go;*.js;*.ts;*.json;*.yaml;*.yml;*.toml"},
+			{DisplayName: "All Files", Pattern: "*"},
+		},
+	})
+	if err != nil {
+		return ""
+	}
+	return path
+}
+
+// PickDirectory opens a native directory dialog.
+func (a *App) PickDirectory() string {
+	path, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "Select Directory",
+	})
+	if err != nil {
+		return ""
+	}
+	return path
+}
+
+// --- KB Management ---
+
+// AddKBDoc adds a file to the project's KB and ingests it.
+func (a *App) AddKBDoc(projectName, filePath string) string {
+	// Save to project config
+	projects, _ := a.config.LoadProjects()
+	for i := range projects {
+		if projects[i].Name == projectName {
+			for _, existing := range projects[i].KBDocs {
+				if existing == filePath {
+					return "already added"
+				}
+			}
+			projects[i].KBDocs = append(projects[i].KBDocs, filePath)
+			a.config.SaveProjects(projects)
+			break
+		}
+	}
+
+	// Ingest to SQLite
+	if a.kbRepo != nil {
+		n, err := kb.Ingest(a.kbRepo, a.embedder, projectName, filePath)
+		if err != nil {
+			fmt.Printf("[AddKBDoc] ingest error: %v\n", err)
+			return fmt.Sprintf("error: %v", err)
+		}
+		fmt.Printf("[AddKBDoc] %s: %d chunks indexed\n", filePath, n)
+		return fmt.Sprintf("ok: %d chunks indexed", n)
+	}
+	return "ok: saved (database not available)"
+}
+
+// RemoveKBDoc removes a file from the project's KB.
+func (a *App) RemoveKBDoc(projectName, filePath string) {
+	projects, _ := a.config.LoadProjects()
+	for i := range projects {
+		if projects[i].Name == projectName {
+			docs := projects[i].KBDocs
+			for j := range docs {
+				if docs[j] == filePath {
+					projects[i].KBDocs = append(docs[:j], docs[j+1:]...)
+					break
+				}
+			}
+			a.config.SaveProjects(projects)
+			break
+		}
+	}
+	if a.kbRepo != nil {
+		a.kbRepo.DeleteBySource(projectName, filePath)
+	}
+}
+
+// GetKBChunks returns the chunks for a KB doc (from MySQL or re-chunked on the fly).
+func (a *App) GetKBChunks(projectName, filePath string) []string {
+	if a.kbRepo != nil {
+		chunks, err := a.kbRepo.GetChunksBySource(projectName, filePath)
+		if err == nil && len(chunks) > 0 {
+			result := make([]string, len(chunks))
+			for i, c := range chunks {
+				result[i] = c.Content
+			}
+			return result
+		}
+	}
+	// Fallback: read and chunk locally
+	content := a.ReadFileContent(filePath)
+	if content == "" {
+		return nil
+	}
+	return kb.Chunk(content)
+}
+
+// ReadFileContent reads a file. For PDFs, extracts text via Python helper.
+func (a *App) ReadFileContent(filePath string) string {
+	ext := strings.ToLower(filepath.Ext(filePath))
+	switch ext {
+	case ".pdf":
+		return a.extractPDF(filePath)
+	case ".png", ".jpg", ".jpeg", ".gif", ".webp":
+		return a.describeImage(filePath)
+	default:
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			return ""
+		}
+		return string(data)
+	}
+}
+
+func (a *App) extractPDF(path string) string {
+	home, _ := os.UserHomeDir()
+	python := filepath.Join(home, ".redo", "embed-venv", "bin", "python")
+	out, err := exec.Command(python, "-c", fmt.Sprintf(
+		`import fitz; doc=fitz.open(%q); print("\n\n".join(p.get_text() for p in doc))`, path,
+	)).Output()
+	if err != nil {
+		fmt.Printf("[PDF] extract error: %v\n", err)
+		return ""
+	}
+	return string(out)
+}
+
+func (a *App) describeImage(path string) string {
+	home, _ := os.UserHomeDir()
+	python := filepath.Join(home, ".redo", "embed-venv", "bin", "python")
+	geminiKey := a.config.(*config.JSONConfig).GeminiKey()
+	if geminiKey == "" {
+		return "[Image: " + filepath.Base(path) + " — set Gemini API Key in Settings to enable image description]"
+	}
+	cmd := exec.Command(python, "-c", fmt.Sprintf(`
+import google.generativeai as genai, PIL.Image
+genai.configure(api_key=%q)
+img = PIL.Image.open(%q)
+model = genai.GenerativeModel("gemini-2.0-flash")
+r = model.generate_content(["Describe this image in detail for a knowledge base. Include all text, diagrams, and technical details.", img])
+print(r.text)
+`, geminiKey, path))
+	out, err := cmd.Output()
+	if err != nil {
+		fmt.Printf("[Image] describe error: %v\n", err)
+		return "[Image: " + filepath.Base(path) + "]"
+	}
+	return string(out)
+}
+
+// ReindexKB re-ingests all KB docs for a project.
+func (a *App) ReindexKB(projectName string) string {
+	if a.kbRepo == nil {
+		return "error: database not available"
+	}
+	projects, _ := a.config.LoadProjects()
+	for _, p := range projects {
+		if p.Name == projectName {
+			total := 0
+			for _, doc := range p.KBDocs {
+				n, err := kb.Ingest(a.kbRepo, a.embedder, projectName, doc)
+				if err != nil {
+					fmt.Printf("[ReindexKB] %s: %v\n", doc, err)
+					continue
+				}
+				total += n
+			}
+			return fmt.Sprintf("ok: %d chunks indexed from %d docs", total, len(p.KBDocs))
+		}
+	}
+	return "error: project not found"
+}
+
+// ChunkHit represents a search result for the frontend preview.
+type ChunkHit struct {
+	Source  string `json:"source"`
+	Content string `json:"content"`
+	Type    string `json:"type"` // "kb" or "conversation"
+}
+
+// SearchChunks returns top-N relevant KB chunks for a query (for live preview).
+func (a *App) SearchChunks(projectName, query string, limit int) []ChunkHit {
+	fmt.Printf("[SearchChunks] project=%s query=%q kbRepo=%v\n", projectName, query, a.kbRepo != nil)
+	if a.kbRepo == nil || query == "" {
+		return nil
+	}
+	if limit <= 0 {
+		limit = 3
+	}
+
+	var queryVec []float32
+	if a.embedder != nil {
+		queryVec, _ = a.embedder.Embed(query)
+	}
+
+	chunks, _ := a.kbRepo.FindRelevant(projectName, query, queryVec, limit)
+	var hits []ChunkHit
+	for _, c := range chunks {
+		name := c.SourceFile
+		if idx := strings.LastIndex(name, "/"); idx >= 0 {
+			name = name[idx+1:]
+		}
+		hits = append(hits, ChunkHit{
+			Source:  name,
+			Content: c.Content,
+			Type:    "kb",
+		})
+	}
+	return hits
+}
+
+// SearchContext finds relevant messages + KB chunks for a query.
+// Returns formatted context string ready for injection.
+func (a *App) SearchContext(projectName, query string, limit int) string {
+	if a.msgRepo == nil || a.embedder == nil {
+		return ""
+	}
+	if limit <= 0 {
+		limit = 5
+	}
+
+	queryVec, err := a.embedder.Embed(query)
+	if err != nil {
+		fmt.Printf("[SearchContext] embed error: %v\n", err)
+		queryVec = nil // fallback to keyword-only
+	}
+
+	var parts []string
+
+	// Search messages
+	msgs, err := a.msgRepo.FindRelevant(projectName, query, queryVec, limit)
+	if err == nil {
+		for _, m := range msgs {
+			parts = append(parts, fmt.Sprintf("[%s/%s] %s", m.Agent, m.Role, m.Content))
+		}
+	}
+
+	// Search KB
+	if a.kbRepo != nil {
+		chunks, err := a.kbRepo.FindRelevant(projectName, query, queryVec, limit)
+		if err == nil {
+			for _, c := range chunks {
+				parts = append(parts, fmt.Sprintf("[KB:%s] %s", c.SourceFile, c.Content))
+			}
+		}
+	}
+
+	if len(parts) == 0 {
+		return ""
+	}
+
+	result := "--- Relevant context ---\n"
+	for _, p := range parts {
+		result += p + "\n"
+	}
+	result += "--- End context ---"
+	return result
+}
+
+// --- Conversation Ingestion ---
+
+// startIngestionLoop polls active sessions every 30s and ingests new messages.
+func (a *App) startIngestionLoop() {
+	ticker := time.NewTicker(30 * time.Second)
+	go func() {
+		for range ticker.C {
+			a.ingestAll()
+		}
+	}()
+}
+
+// ingestAll reads conversations from all active sessions and saves new messages.
+func (a *App) ingestAll() {
+	a.mu.Lock()
+	sessions := make([]*domain.Session, 0, len(a.sessions))
+	for _, s := range a.sessions {
+		sessions = append(sessions, s)
+	}
+	a.mu.Unlock()
+
+	for _, s := range sessions {
+		msgs := a.getConversationForSession(s)
+		if len(msgs) == 0 {
+			continue
+		}
+
+		// Check how many we already have
+		existing, _ := a.msgRepo.FindBySession(s.ID)
+		if len(msgs) <= len(existing) {
+			continue
+		}
+
+		// Ingest only new messages
+		newMsgs := msgs[len(existing):]
+		fmt.Printf("[Ingest] %s/%s: %d new messages\n", s.Project, s.AgentName, len(newMsgs))
+
+		// Batch embed
+		texts := make([]string, len(newMsgs))
+		for i, m := range newMsgs {
+			texts[i] = m.Content
+		}
+		vecs, err := a.embedder.EmbedBatch(texts)
+		if err != nil {
+			fmt.Printf("[Ingest] embed error: %v (saving without embeddings)\n", err)
+			vecs = make([][]float32, len(newMsgs))
+		}
+
+		for i, m := range newMsgs {
+			m.Project = s.Project
+			m.Agent = s.AgentName
+			m.SessionID = s.ID
+			m.Embedding = vecs[i]
+			if err := a.msgRepo.Save(&m); err != nil {
+				fmt.Printf("[Ingest] save error: %v\n", err)
+			}
+		}
+	}
+}
+
+// getConversationForSession reads conversation from the agent's native storage.
+func (a *App) getConversationForSession(s *domain.Session) []domain.Message {
+	driver := terminal.Drivers[s.CLIType]
+	if driver == nil {
+		return nil
+	}
+	var path string
+	switch s.CLIType {
+	case "kiro":
+		projects, _ := a.config.LoadProjects()
+		for _, p := range projects {
+			if p.Name == s.Project {
+				path = p.Path
+				break
+			}
+		}
+	default:
+		path = s.HomeDir
+	}
+	if path == "" {
+		return nil
+	}
+	msgs, _ := driver.ParseSessionFile(path)
+	return msgs
 }

@@ -85,3 +85,24 @@ export namespace domain {
 
 }
 
+export namespace main {
+	
+	export class ChunkHit {
+	    source: string;
+	    content: string;
+	    type: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ChunkHit(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.source = source["source"];
+	        this.content = source["content"];
+	        this.type = source["type"];
+	    }
+	}
+
+}
+
