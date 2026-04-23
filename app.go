@@ -857,9 +857,14 @@ func (a *App) IsAgentBusy(sessionID string) bool {
 // --- Explain Change ---
 
 // SearchMessagesForCode searches agent conversations for messages related to a code snippet.
-// Returns matching messages with surrounding context.
+// Searches both live sessions and stored history in SQLite.
 func (a *App) SearchMessagesForCode(projectName, codeSnippet string) []map[string]string {
-	// Search across all active sessions for this project
+	keywords := extractKeywords(codeSnippet)
+	if len(keywords) == 0 {
+		return nil
+	}
+
+	// 1. Collect from live sessions
 	a.mu.Lock()
 	var allMsgs []domain.Message
 	for _, s := range a.sessions {
@@ -867,21 +872,40 @@ func (a *App) SearchMessagesForCode(projectName, codeSnippet string) []map[strin
 			msgs := a.getConversationForSession(s)
 			for i := range msgs {
 				msgs[i].Agent = s.AgentName
+				msgs[i].SessionID = s.ID
 			}
 			allMsgs = append(allMsgs, msgs...)
 		}
 	}
 	a.mu.Unlock()
 
+	// 2. Collect from SQLite (past sessions)
+	if a.msgRepo != nil {
+		query := strings.Join(keywords, " ")
+		var queryVec []float32
+		if a.embedder != nil {
+			queryVec, _ = a.embedder.Embed(query)
+		}
+		stored, _ := a.msgRepo.FindRelevant(projectName, query, queryVec, 20)
+		// Avoid duplicates with live sessions
+		liveIDs := map[string]bool{}
+		for _, m := range allMsgs {
+			liveIDs[m.SessionID] = true
+		}
+		for _, m := range stored {
+			if !liveIDs[m.SessionID] {
+				allMsgs = append(allMsgs, m)
+			}
+		}
+	}
+
 	if len(allMsgs) == 0 {
 		return nil
 	}
 
-	// Simple keyword search: find messages containing parts of the code
-	keywords := extractKeywords(codeSnippet)
+	// 3. Score by keyword match
 	type scored struct {
 		idx   int
-		agent string
 		score int
 	}
 	var matches []scored
@@ -894,7 +918,7 @@ func (a *App) SearchMessagesForCode(projectName, codeSnippet string) []map[strin
 			}
 		}
 		if s > 0 {
-			matches = append(matches, scored{i, m.Agent, s})
+			matches = append(matches, scored{i, s})
 		}
 	}
 
@@ -907,7 +931,7 @@ func (a *App) SearchMessagesForCode(projectName, codeSnippet string) []map[strin
 		}
 	}
 
-	// Return top 3 matches with ±2 context messages
+	// Return top matches with ±2 context
 	var result []map[string]string
 	seen := map[int]bool{}
 	for _, m := range matches {
