@@ -35,6 +35,20 @@
         <div id="main-area">
           <div id="panes"></div>
         </div>
+        <!-- Code Viewer right panel -->
+        <div id="code-panel-tab" onclick="toggleCodePanel()">◀ Code</div>
+        <div id="code-panel" style="display:none">
+          <div id="code-panel-resize" onmousedown="startResizeCodePanel(event)"></div>
+          <div id="code-panel-header">
+            <span>Code Viewer</span>
+            <button onclick="openCodeConfig()" style="background:none;border:none;color:#8b949e;cursor:pointer">⚙</button>
+            <span style="cursor:pointer;margin-left:auto" onclick="toggleCodePanel()">▶</span>
+          </div>
+          <div id="code-panel-inner">
+            <div id="cv-timeline"></div>
+            <div id="cv-detail"></div>
+          </div>
+        </div>
       </div>
       <div id="input-area">
         <div id="term-panel">
@@ -160,5 +174,6 @@
   <script src="lib/xterm.js"></script>
   <script src="lib/xterm-addon-fit.js"></script>
   <script src="src/main.js"></script>
+  <script src="src/codeview.js"></script>
 </body>
 </html>

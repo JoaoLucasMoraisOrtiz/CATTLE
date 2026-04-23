@@ -12,10 +12,19 @@ type Agent struct {
 
 // Project represents a workspace with agents and knowledge bases.
 type Project struct {
-	Name   string   `json:"name"`
-	Path   string   `json:"path"`
-	KBDocs []string `json:"kb_docs,omitempty"`
-	Agents []Agent  `json:"agents"`
+	Name    string        `json:"name"`
+	Path    string        `json:"path"`
+	KBDocs  []string      `json:"kb_docs,omitempty"`
+	Agents  []Agent       `json:"agents"`
+	CodeCfg ProjectConfig `json:"code_config,omitempty"`
+}
+
+type ProjectConfig struct {
+	Language  string `json:"language,omitempty"`
+	Framework string `json:"framework,omitempty"`
+	EntryFile string `json:"entry_file,omitempty"`
+	TestCmd   string `json:"test_cmd,omitempty"`
+	BuildCmd  string `json:"build_cmd,omitempty"`
 }
 
 // Session represents an active terminal session.

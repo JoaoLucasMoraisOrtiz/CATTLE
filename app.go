@@ -18,8 +18,9 @@ import (
 	"github.com/jlortiz/redo/internal/infra/embedding"
 	"github.com/jlortiz/redo/internal/infra/store"
 	"github.com/jlortiz/redo/internal/infra/terminal"
-	"github.com/jlortiz/redo/internal/service/kb"
+	"github.com/jlortiz/redo/internal/service/codeview"
 	ctxopt "github.com/jlortiz/redo/internal/service/context"
+	"github.com/jlortiz/redo/internal/service/kb"
 )
 
 // App is the Wails bridge — its exported methods are callable from JS.
@@ -693,6 +694,70 @@ func (a *App) SearchChunks(projectName, query string, limit int) []ChunkHit {
 	return hits
 }
 
+
+// --- Code Viewer ---
+
+func (a *App) getProjectPath(name string) string {
+	projects, _ := a.config.LoadProjects()
+	for _, p := range projects {
+		if p.Name == name {
+			return p.Path
+		}
+	}
+	return ""
+}
+
+func (a *App) GetCommits(projectName string, limit int) []codeview.Commit {
+	path := a.getProjectPath(projectName)
+	if path == "" {
+		return nil
+	}
+	if limit <= 0 {
+		limit = 30
+	}
+	commits, _ := codeview.ListCommits(path, limit)
+	return commits
+}
+
+func (a *App) GetDiffFiles(projectName, hash string) []codeview.FileDiff {
+	path := a.getProjectPath(projectName)
+	if path == "" {
+		return nil
+	}
+	files, _ := codeview.GetDiffFiles(path, hash)
+	return files
+}
+
+func (a *App) GetFilePatch(projectName, hash, filePath string) string {
+	path := a.getProjectPath(projectName)
+	if path == "" {
+		return ""
+	}
+	patch, _ := codeview.GetFilePatch(path, hash, filePath)
+	return patch
+}
+
+func (a *App) SaveProjectConfig(projectName string, cfg domain.ProjectConfig) string {
+	projects, _ := a.config.LoadProjects()
+	for i := range projects {
+		if projects[i].Name == projectName {
+			projects[i].CodeCfg = cfg
+			a.config.SaveProjects(projects)
+			return "ok"
+		}
+	}
+	return "error: project not found"
+}
+
+func (a *App) GetProjectConfig(projectName string) domain.ProjectConfig {
+	projects, _ := a.config.LoadProjects()
+	for _, p := range projects {
+		if p.Name == projectName {
+			return p.CodeCfg
+		}
+	}
+	return domain.ProjectConfig{}
+}
 // --- Context Optimization ---
 
 // CompressAgent compresses an agent's conversation context.
