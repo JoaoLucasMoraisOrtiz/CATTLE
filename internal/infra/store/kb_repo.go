@@ -42,6 +42,7 @@ func (r *KBRepo) FindRelevant(project, query string, queryVec []float32, limit i
 		final float64
 	}
 	var candidates []scored
+	seen := map[int64]bool{}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -53,6 +54,31 @@ func (r *KBRepo) FindRelevant(project, query string, queryVec []float32, limit i
 				s.cos = cosine(queryVec, v)
 			}
 			candidates = append(candidates, s)
+			seen[s.chunk.ID] = true
+		}
+	}
+
+	// Embedding-only candidates (semantic matches without keyword overlap)
+	if queryVec != nil {
+		allRows, _ := r.db.Query(
+			`SELECT id, project, source_file, chunk_index, content, embedding FROM kb_chunks WHERE project=?`, project,
+		)
+		if allRows != nil {
+			defer allRows.Close()
+			for allRows.Next() {
+				var c domain.KBChunk
+				var emb []byte
+				allRows.Scan(&c.ID, &c.Project, &c.SourceFile, &c.ChunkIndex, &c.Content, &emb)
+				if seen[c.ID] {
+					continue
+				}
+				if v := decodeVec(emb); v != nil {
+					cos := cosine(queryVec, v)
+					if cos > 0.3 {
+						candidates = append(candidates, scored{chunk: c, cos: cos})
+					}
+				}
+			}
 		}
 	}
 

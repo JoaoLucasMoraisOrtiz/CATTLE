@@ -52,3 +52,38 @@ func (c *Client) EmbedBatch(texts []string) ([][]float32, error) {
 	}
 	return result.Embeddings, nil
 }
+
+// Tokenize returns token counts for each text and the total.
+func (c *Client) Tokenize(texts []string) ([]int, int, error) {
+	body, _ := json.Marshal(map[string]any{"texts": texts})
+	resp, err := http.Post(c.url+"/tokenize", "application/json", bytes.NewReader(body))
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+	var result struct {
+		Counts []int `json:"counts"`
+		Total  int   `json:"total"`
+	}
+	json.NewDecoder(resp.Body).Decode(&result)
+	return result.Counts, result.Total, nil
+}
+
+// Summarize compresses messages into a summary via LLM.
+func (c *Client) Summarize(messages []map[string]string, geminiKey string, maxTokens int) (string, error) {
+	body, _ := json.Marshal(map[string]any{
+		"messages":   messages,
+		"gemini_key": geminiKey,
+		"max_tokens": maxTokens,
+	})
+	resp, err := http.Post(c.url+"/summarize", "application/json", bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	var result struct {
+		Summary string `json:"summary"`
+	}
+	json.NewDecoder(resp.Body).Decode(&result)
+	return result.Summary, nil
+}

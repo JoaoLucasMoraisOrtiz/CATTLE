@@ -5,6 +5,10 @@ import {main} from '../models';
 
 export function AddKBDoc(arg1:string,arg2:string):Promise<string>;
 
+export function CheckTokens(arg1:string):Promise<Record<string, number>>;
+
+export function CompressAgent(arg1:string):Promise<string>;
+
 export function GetConversation(arg1:string):Promise<Array<domain.Message>>;
 
 export function GetKBChunks(arg1:string,arg2:string):Promise<Array<string>>;
@@ -39,12 +43,12 @@ export function SaveSettings(arg1:string,arg2:boolean):Promise<string>;
 
 export function SearchChunks(arg1:string,arg2:string,arg3:number):Promise<Array<main.ChunkHit>>;
 
-export function SearchContext(arg1:string,arg2:string,arg3:number):Promise<string>;
-
 export function SendInput(arg1:Array<string>,arg2:string):Promise<void>;
 
 export function SendRaw(arg1:string,arg2:string):Promise<void>;
 
 export function SpawnAgent(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<string>;
+
+export function SpawnShell(arg1:string):Promise<string>;
 
 export function WipeSQLite():Promise<string>;

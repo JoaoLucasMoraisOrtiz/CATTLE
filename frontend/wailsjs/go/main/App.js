@@ -6,6 +6,14 @@ export function AddKBDoc(arg1, arg2) {
   return window['go']['main']['App']['AddKBDoc'](arg1, arg2);
 }
 
+export function CheckTokens(arg1) {
+  return window['go']['main']['App']['CheckTokens'](arg1);
+}
+
+export function CompressAgent(arg1) {
+  return window['go']['main']['App']['CompressAgent'](arg1);
+}
+
 export function GetConversation(arg1) {
   return window['go']['main']['App']['GetConversation'](arg1);
 }
@@ -74,10 +82,6 @@ export function SearchChunks(arg1, arg2, arg3) {
   return window['go']['main']['App']['SearchChunks'](arg1, arg2, arg3);
 }
 
-export function SearchContext(arg1, arg2, arg3) {
-  return window['go']['main']['App']['SearchContext'](arg1, arg2, arg3);
-}
-
 export function SendInput(arg1, arg2) {
   return window['go']['main']['App']['SendInput'](arg1, arg2);
 }
@@ -88,6 +92,10 @@ export function SendRaw(arg1, arg2) {
 
 export function SpawnAgent(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['SpawnAgent'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function SpawnShell(arg1) {
+  return window['go']['main']['App']['SpawnShell'](arg1);
 }
 
 export function WipeSQLite() {

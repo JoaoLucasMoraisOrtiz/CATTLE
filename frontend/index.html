@@ -37,8 +37,21 @@
         </div>
       </div>
       <div id="input-area">
+        <div id="term-panel">
+          <div id="term-panel-bar" onclick="toggleTermPanel()">
+            <span>Terminal</span>
+            <div id="term-tabs"></div>
+            <button id="term-add-btn" onclick="event.stopPropagation(); addShellTab()">+</button>
+          </div>
+          <div id="term-panel-body" style="display:none">
+            <div id="term-panel-content"></div>
+          </div>
+        </div>
         <div id="injection-preview"></div>
         <div id="input-row">
+          <label class="ctx-toggle" title="Context search on/off">
+            <input id="ctx-toggle" type="checkbox" checked onchange="onCtxToggle()"> 📚
+          </label>
           <span id="prompt">&gt;</span>
           <input id="input" type="text" placeholder="Click here to use @agent broadcast (Esc to return to terminal)" >
           <button id="send-btn" onclick="sendMessage()">Send</button>

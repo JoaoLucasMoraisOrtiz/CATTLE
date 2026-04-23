@@ -250,6 +250,8 @@ function createPane(sessionID, agent) {
       <span class="dot" style="background:${agent.color || '#8b949e'}"></span>
       <span class="agent-name">${agent.name}</span>
       <span class="agent-type">${agent.cli_type || ''}</span>
+      <span class="token-count" id="tokens-${sessionID}" title="Token count">—</span>
+      <span class="compress-btn" onclick="event.stopPropagation(); compressAgent('${sessionID}')" title="Compress context">🗜</span>
       <span class="close-btn" onclick="event.stopPropagation(); killPane('${sessionID}', true)">✕</span>
     </div>
     <div class="pane-terminal" id="term-${sessionID}"></div>
@@ -277,8 +279,13 @@ function createPane(sessionID, agent) {
   window.runtime.EventsOn('pty:output:' + sessionID, (data) => { term.write(data); });
   window.runtime.EventsOn('pty:exit:' + sessionID, () => { term.write('\r\n\x1b[31m[Process exited]\x1b[0m\r\n'); });
 
+  // Listen for token count updates from backend
+  window.runtime.EventsOn('tokens:update:' + sessionID, (info) => {
+    updateTokenDisplay(sessionID, info);
+  });
+
   updateStatus();
-  setTimeout(() => { fitAddon.fit(); window.go.main.App.ResizeTerminal(sessionID, term.rows, term.cols); refitAll(); }, 200);
+  setTimeout(() => { fitAddon.fit(); window.go.main.App.ResizeTerminal(sessionID, term.rows, term.cols); refitAll(); refreshTokenCount(sessionID); }, 200);
 }
 
 function killPane(sessionID, removeFromConfig = false) {
@@ -363,19 +370,41 @@ async function doSpawn() {
 // --- Input ---
 let searchTimer = null;
 let pendingChunks = [];
+let searching = false;
+let ctxEnabled = true;
 
 function setupInput() {
   const input = document.getElementById('input');
-  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); sendMessage(); } });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (!document.getElementById('send-btn').disabled) sendMessage();
+    }
+  });
   input.addEventListener('input', () => {
     clearTimeout(searchTimer);
     const q = input.value.trim();
-    if (q.length < 3) { hidePreview(); return; }
+    if (!ctxEnabled || q.length < 3) { hidePreview(); setSendEnabled(true); return; }
+    setSendEnabled(false);
+    searching = true;
     searchTimer = setTimeout(() => searchPreview(q), 400);
   });
   input.addEventListener('focus', () => {
     document.querySelectorAll('.pane').forEach(p => { p.classList.remove('focused'); p.style.borderColor = '#30363d'; p.style.boxShadow = 'none'; });
   });
+}
+
+function setSendEnabled(enabled) {
+  document.getElementById('send-btn').disabled = !enabled;
+}
+
+function onCtxToggle() {
+  ctxEnabled = document.getElementById('ctx-toggle').checked;
+  document.querySelector('.ctx-toggle').classList.toggle('off', !ctxEnabled);
+  if (!ctxEnabled) {
+    hidePreview();
+    setSendEnabled(true);
+  }
 }
 
 async function searchPreview(query) {
@@ -386,11 +415,11 @@ async function searchPreview(query) {
     console.log('[searchPreview] query:', query, 'project:', proj.name);
     const hits = await window.go.main.App.SearchChunks(proj.name, query, 3);
     console.log('[searchPreview] hits:', hits);
-    if (!hits || hits.length === 0) { hidePreview(); return; }
+    if (!hits || hits.length === 0) { hidePreview(); searching = false; setSendEnabled(true); return; }
     pendingChunks = hits;
     const el = document.getElementById('injection-preview');
     el.innerHTML = hits.map((h, i) =>
-      `<div class="preview-chip" onclick="toggleChip(this,${i})">
+      `<div class="preview-chip" onclick="toggleChip(this,${i})" onmouseenter="showChunkTooltip(event,${i})" onmouseleave="hideChunkTooltip()">
         <span class="chip-source">${h.type === 'kb' ? '📚' : '💬'} ${escapeHtml(h.source)}</span>
         <span class="chip-text">${escapeHtml(h.content.substring(0, 120))}${h.content.length > 120 ? '...' : ''}</span>
       </div>`
@@ -400,10 +429,38 @@ async function searchPreview(query) {
   } catch(e) {
     console.error('[searchPreview] error:', e);
   }
+  searching = false;
+  setSendEnabled(true);
 }
 
 function toggleChip(el, idx) {
   el.classList.toggle('selected');
+}
+
+function showChunkTooltip(e, idx) {
+  if (!pendingChunks[idx]) return;
+  let tip = document.getElementById('chunk-tooltip');
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.id = 'chunk-tooltip';
+    tip.onmouseenter = () => { tip._hover = true; };
+    tip.onmouseleave = () => { tip._hover = false; tip.style.display = 'none'; };
+    document.body.appendChild(tip);
+  }
+  const h = pendingChunks[idx];
+  tip.innerHTML = `<div class="tt-source">${h.type === 'kb' ? '📚' : '💬'} ${escapeHtml(h.source)}</div><div class="tt-body">${escapeHtml(h.content)}</div>`;
+  tip.style.display = 'block';
+  tip._hover = false;
+  const rect = e.currentTarget.getBoundingClientRect();
+  tip.style.left = rect.left + 'px';
+  tip.style.bottom = (window.innerHeight - rect.top + 4) + 'px';
+}
+
+function hideChunkTooltip() {
+  setTimeout(() => {
+    const tip = document.getElementById('chunk-tooltip');
+    if (tip && !tip._hover) tip.style.display = 'none';
+  }, 100);
 }
 
 function hidePreview() {
@@ -460,6 +517,107 @@ function updateStatus() {
     : '';
 }
 
+// --- Terminal Panel (multi-tab) ---
+let shellTabs = []; // { sid, term, fitAddon, name }
+let activeShellTab = -1;
+
+function toggleTermPanel() {
+  const panel = document.getElementById('term-panel');
+  const body = document.getElementById('term-panel-body');
+  if (panel.classList.contains('open')) {
+    panel.classList.remove('open');
+    body.style.display = 'none';
+  } else {
+    panel.classList.add('open');
+    body.style.display = '';
+    if (shellTabs.length === 0) addShellTab();
+    else if (activeShellTab >= 0) {
+      shellTabs[activeShellTab].fitAddon.fit();
+      shellTabs[activeShellTab].term.focus();
+    }
+  }
+}
+
+async function addShellTab() {
+  if (activeTab < 0) return;
+  const proj = projects[openedProjects[activeTab]];
+  if (!proj) return;
+
+  const sid = await window.go.main.App.SpawnShell(proj.name);
+  if (!sid || sid.startsWith('error:')) return;
+
+  const term = new Terminal({
+    theme: { background: '#0d1117', foreground: '#c9d1d9', cursor: '#c9d1d9' },
+    fontFamily: "'SF Mono', 'Cascadia Code', 'Fira Code', monospace",
+    fontSize: 12, cursorBlink: true,
+  });
+  const fitAddon = new FitAddon.FitAddon();
+  term.loadAddon(fitAddon);
+
+  const idx = shellTabs.length;
+  shellTabs.push({ sid, term, fitAddon, name: 'shell ' + (idx + 1) });
+
+  term.onData((data) => { window.go.main.App.SendRaw(sid, data); });
+  window.runtime.EventsOn('pty:output:' + sid, (data) => { term.write(data); });
+  window.runtime.EventsOn('pty:exit:' + sid, () => { term.write('\r\n\x1b[31m[exited]\x1b[0m\r\n'); });
+
+  // Open panel if closed
+  const panel = document.getElementById('term-panel');
+  if (!panel.classList.contains('open')) {
+    panel.classList.add('open');
+    document.getElementById('term-panel-body').style.display = '';
+  }
+
+  switchShellTab(idx);
+}
+
+function switchShellTab(idx) {
+  // Detach current
+  if (activeShellTab >= 0 && shellTabs[activeShellTab]) {
+    const el = shellTabs[activeShellTab].term.element;
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+  }
+
+  activeShellTab = idx;
+  const container = document.getElementById('term-panel-content');
+  container.innerHTML = '';
+  const tab = shellTabs[idx];
+  if (!tab.term.element) {
+    tab.term.open(container);
+  } else {
+    container.appendChild(tab.term.element);
+  }
+  tab.fitAddon.fit();
+  window.go.main.App.ResizeTerminal(tab.sid, tab.term.rows, tab.term.cols);
+  tab.term.focus();
+  renderShellTabs();
+}
+
+function closeShellTab(idx) {
+  const tab = shellTabs[idx];
+  window.go.main.App.KillSession(tab.sid);
+  window.runtime.EventsOff('pty:output:' + tab.sid);
+  window.runtime.EventsOff('pty:exit:' + tab.sid);
+  tab.term.dispose();
+  shellTabs.splice(idx, 1);
+  if (shellTabs.length === 0) {
+    activeShellTab = -1;
+    document.getElementById('term-panel-content').innerHTML = '';
+    toggleTermPanel();
+  } else {
+    if (activeShellTab >= shellTabs.length) activeShellTab = shellTabs.length - 1;
+    switchShellTab(activeShellTab);
+  }
+}
+
+function renderShellTabs() {
+  document.getElementById('term-tabs').innerHTML = shellTabs.map((t, i) =>
+    `<span class="term-tab ${i === activeShellTab ? 'active' : ''}" onclick="event.stopPropagation(); switchShellTab(${i})">
+      ${t.name}<span class="tt-close" onclick="event.stopPropagation(); closeShellTab(${i})">✕</span>
+    </span>`
+  ).join('');
+}
+
 // --- KB Sidebar ---
 function renderKBList() {
   const el = document.getElementById('kb-list');
@@ -483,7 +641,9 @@ async function addKBDoc() {
   const path = await window.go.main.App.PickFile();
   if (!path) return;
   const proj = projects[openedProjects[activeTab]];
-  await window.go.main.App.AddKBDoc(proj.name, path);
+  showKBLoading('Indexing ' + path.split('/').pop() + '...');
+  const result = await window.go.main.App.AddKBDoc(proj.name, path);
+  hideKBLoading();
   projects = await window.go.main.App.GetProjects();
   renderKBList();
   updateStatus();
@@ -500,8 +660,26 @@ async function removeKBDoc(path) {
 async function reindexKB() {
   if (activeTab < 0) return;
   const proj = projects[openedProjects[activeTab]];
+  showKBLoading('Reindexing all docs...');
   const result = await window.go.main.App.ReindexKB(proj.name);
+  hideKBLoading();
   alert(result);
+}
+
+function showKBLoading(text) {
+  let el = document.getElementById('kb-loading');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'kb-loading';
+    document.getElementById('kb-list').prepend(el);
+  }
+  el.innerHTML = `<span class="kb-spinner"></span> ${text}`;
+  el.style.display = 'flex';
+}
+
+function hideKBLoading() {
+  const el = document.getElementById('kb-loading');
+  if (el) el.style.display = 'none';
 }
 
 // --- KB Viewer ---
@@ -579,6 +757,40 @@ async function saveSettings() {
   closeSettings();
   if (r !== 'ok') alert(r);
 }
+
+// --- Context Optimization ---
+async function compressAgent(sessionID) {
+  if (!confirm('Compress context? This will respawn the agent with a summarized conversation.')) return;
+  const el = document.getElementById('tokens-' + sessionID);
+  if (el) el.textContent = '🗜...';
+  const result = await window.go.main.App.CompressAgent(sessionID);
+  if (result.startsWith('error:')) {
+    alert(result);
+  }
+  // Terminal will reconnect via pty:output events
+  setTimeout(() => refreshTokenCount(sessionID), 5000);
+}
+
+async function refreshTokenCount(sessionID) {
+  const info = await window.go.main.App.CheckTokens(sessionID);
+  updateTokenDisplay(sessionID, info);
+}
+
+function updateTokenDisplay(sessionID, info) {
+  const el = document.getElementById('tokens-' + sessionID);
+  if (!el || !info) return;
+  const pct = Math.round((info.tokens / info.threshold) * 100);
+  el.textContent = `${info.tokens}t`;
+  el.style.color = pct > 90 ? '#da3633' : pct > 70 ? '#d29922' : '#8b949e';
+  if (info.tokens > info.threshold) {
+    el.textContent = `⚠ ${info.tokens}t`;
+  }
+}
+
+// Periodically check token counts for all panes
+setInterval(() => {
+  Object.keys(panes).forEach(sid => refreshTokenCount(sid));
+}, 60000);
 
 // --- Resize ---
 function refitAll() {

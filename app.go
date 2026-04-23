@@ -19,6 +19,7 @@ import (
 	"github.com/jlortiz/redo/internal/infra/store"
 	"github.com/jlortiz/redo/internal/infra/terminal"
 	"github.com/jlortiz/redo/internal/service/kb"
+	ctxopt "github.com/jlortiz/redo/internal/service/context"
 )
 
 // App is the Wails bridge — its exported methods are callable from JS.
@@ -32,6 +33,8 @@ type App struct {
 	kbRepo      *store.KBRepo
 	embedder    *embedding.Client
 	embedServer *embedding.Server
+	optimizer   *ctxopt.Optimizer
+	tokenCache  *ctxopt.TokenCache
 }
 
 func NewApp(config domain.ConfigRepository) *App {
@@ -67,6 +70,11 @@ func (a *App) initServices() {
 	}
 
 	a.embedder = embedding.NewClient("")
+	a.optimizer = ctxopt.NewOptimizer(a.embedder, a.msgRepo, a.kbRepo)
+	a.tokenCache = ctxopt.NewTokenCache(a.embedder)
+
+	// Background token refresh every 2 min
+	go a.tokenRefreshLoop()
 
 	if a.msgRepo != nil {
 		// TODO: conversation ingestion — define strategy later
@@ -226,6 +234,46 @@ func (a *App) SendInput(sessionIDs []string, text string) {
 			pty.Write("\r")
 		}
 	}
+}
+
+// SpawnShell creates a plain shell PTY in the given project's directory.
+func (a *App) SpawnShell(projectName string) string {
+	projects, _ := a.config.LoadProjects()
+	var workDir string
+	for _, p := range projects {
+		if p.Name == projectName {
+			workDir = p.Path
+			break
+		}
+	}
+	if workDir == "" {
+		return "error:project not found"
+	}
+
+	shell := os.Getenv("SHELL")
+	if shell == "" {
+		shell = "/bin/bash"
+	}
+
+	pty, err := terminal.Spawn(shell, workDir, nil)
+	if err != nil {
+		return "error:" + err.Error()
+	}
+
+	sid := "sh-" + uuid.New().String()[:6]
+	a.mu.Lock()
+	a.terminals[sid] = pty
+	a.sessions[sid] = &domain.Session{ID: sid, Project: projectName, AgentName: "shell", CLIType: "shell", Active: true}
+	a.mu.Unlock()
+
+	go func() {
+		for data := range pty.Read() {
+			runtime.EventsEmit(a.ctx, "pty:output:"+sid, string(data))
+		}
+		runtime.EventsEmit(a.ctx, "pty:exit:"+sid, nil)
+	}()
+
+	return sid
 }
 
 // SendRaw writes raw data to a terminal (from xterm.js keyboard input).
@@ -645,52 +693,123 @@ func (a *App) SearchChunks(projectName, query string, limit int) []ChunkHit {
 	return hits
 }
 
-// SearchContext finds relevant messages + KB chunks for a query.
-// Returns formatted context string ready for injection.
-func (a *App) SearchContext(projectName, query string, limit int) string {
-	if a.msgRepo == nil || a.embedder == nil {
-		return ""
-	}
-	if limit <= 0 {
-		limit = 5
+// --- Context Optimization ---
+
+// CompressAgent compresses an agent's conversation context.
+func (a *App) CompressAgent(sessionID string) string {
+	a.mu.Lock()
+	session := a.sessions[sessionID]
+	a.mu.Unlock()
+	if session == nil || a.optimizer == nil {
+		return "error: session or optimizer not available"
 	}
 
-	queryVec, err := a.embedder.Embed(query)
+	msgs := a.getConversationForSession(session)
+	if len(msgs) == 0 {
+		return "error: no messages"
+	}
+
+	geminiKey := a.config.(*config.JSONConfig).GeminiKey()
+	compressed, err := a.optimizer.Compress(msgs, "", geminiKey)
 	if err != nil {
-		fmt.Printf("[SearchContext] embed error: %v\n", err)
-		queryVec = nil // fallback to keyword-only
+		return "error: " + err.Error()
 	}
 
-	var parts []string
-
-	// Search messages
-	msgs, err := a.msgRepo.FindRelevant(projectName, query, queryVec, limit)
-	if err == nil {
-		for _, m := range msgs {
-			parts = append(parts, fmt.Sprintf("[%s/%s] %s", m.Agent, m.Role, m.Content))
-		}
+	a.mu.Lock()
+	if pty, ok := a.terminals[sessionID]; ok {
+		pty.Kill()
 	}
+	a.mu.Unlock()
 
-	// Search KB
-	if a.kbRepo != nil {
-		chunks, err := a.kbRepo.FindRelevant(projectName, query, queryVec, limit)
-		if err == nil {
-			for _, c := range chunks {
-				parts = append(parts, fmt.Sprintf("[KB:%s] %s", c.SourceFile, c.Content))
+	projects, _ := a.config.LoadProjects()
+	var agent *domain.Agent
+	projPath := ""
+	for _, p := range projects {
+		if p.Name == session.Project {
+			projPath = p.Path
+			for i := range p.Agents {
+				if p.Agents[i].Name == session.AgentName {
+					agent = &p.Agents[i]
+					break
+				}
 			}
 		}
 	}
-
-	if len(parts) == 0 {
-		return ""
+	if agent == nil {
+		return "error: agent config not found"
 	}
 
-	result := "--- Relevant context ---\n"
-	for _, p := range parts {
-		result += p + "\n"
+	driver := terminal.Drivers[session.CLIType]
+	env, homeDir, err := terminal.BuildEnv(*agent, projPath)
+	if err != nil {
+		return "error: " + err.Error()
 	}
-	result += "--- End context ---"
-	return result
+	newPty, err := terminal.Spawn(driver.SpawnCommand(*agent), projPath, env)
+	if err != nil {
+		terminal.CleanupEnv(homeDir)
+		return "error: spawn failed"
+	}
+
+	a.mu.Lock()
+	terminal.CleanupEnv(session.HomeDir)
+	a.terminals[sessionID] = newPty
+	session.HomeDir = homeDir
+	a.mu.Unlock()
+
+	go func() {
+		for data := range newPty.Read() {
+			runtime.EventsEmit(a.ctx, "pty:output:"+sessionID, string(data))
+		}
+		runtime.EventsEmit(a.ctx, "pty:exit:"+sessionID, nil)
+	}()
+
+	go func() {
+		time.Sleep(3 * time.Second)
+		a.mu.Lock()
+		p := a.terminals[sessionID]
+		a.mu.Unlock()
+		if p != nil {
+			for _, ch := range compressed {
+				p.Write(string(ch))
+				time.Sleep(2 * time.Millisecond)
+			}
+			time.Sleep(10 * time.Millisecond)
+			p.Write("\r\r")
+		}
+	}()
+
+	return fmt.Sprintf("ok: compressed %d messages", len(msgs))
+}
+
+// CheckTokens returns cached token count for a session.
+func (a *App) CheckTokens(sessionID string) map[string]int {
+	tokens, msgs := a.tokenCache.Get(sessionID)
+	return map[string]int{"tokens": tokens, "messages": msgs, "threshold": ctxopt.TokenThreshold}
+}
+
+// tokenRefreshLoop updates token counts every 2 min for all active sessions.
+func (a *App) tokenRefreshLoop() {
+	ticker := time.NewTicker(2 * time.Minute)
+	for range ticker.C {
+		a.mu.Lock()
+		sessions := make([]*domain.Session, 0, len(a.sessions))
+		for _, s := range a.sessions {
+			sessions = append(sessions, s)
+		}
+		a.mu.Unlock()
+
+		for _, s := range sessions {
+			msgs := a.getConversationForSession(s)
+			tokens, _, changed := a.tokenCache.Update(s.ID, msgs)
+			if changed {
+				fmt.Printf("[TokenCache] %s/%s: %d tokens (%d msgs)\n", s.Project, s.AgentName, tokens, len(msgs))
+				// Notify frontend
+				runtime.EventsEmit(a.ctx, "tokens:update:"+s.ID, map[string]int{
+					"tokens": tokens, "messages": len(msgs), "threshold": ctxopt.TokenThreshold,
+				})
+			}
+		}
+	}
 }
 
 // --- Conversation Ingestion ---
