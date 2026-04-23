@@ -139,11 +139,14 @@ def _nf(node, field, src):
 
 
 def _find_calls(node, src, seen, out):
-    if node.type == "call_expression":
-        fn = node.child_by_field_name("function")
+    # call_expression: Go, JS/TS, Python
+    # method_invocation: Java
+    if node.type in ("call_expression", "method_invocation"):
+        fn = node.child_by_field_name("function") or node.child_by_field_name("name")
         if fn:
             name = fn.text.decode()
-            if "." in name: name = name.rsplit(".", 1)[-1]
+            if "." in name:
+                name = name.rsplit(".", 1)[-1]
             if name not in seen and len(name) < 60:
                 seen.add(name); out.append(name)
     for child in node.children:

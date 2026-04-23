@@ -62,6 +62,8 @@ export function SaveSettings(arg1:string,arg2:boolean):Promise<string>;
 
 export function SearchChunks(arg1:string,arg2:string,arg3:number):Promise<Array<main.ChunkHit>>;
 
+export function SearchMessagesForCode(arg1:string,arg2:string):Promise<Array<Record<string, string>>>;
+
 export function SendInput(arg1:Array<string>,arg2:string):Promise<void>;
 
 export function SendRaw(arg1:string,arg2:string):Promise<void>;

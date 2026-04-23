@@ -77,6 +77,7 @@ export namespace codeview {
 	    start_line: number;
 	    end_line: number;
 	    calls: string[];
+	    status?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Symbol(source);
@@ -90,6 +91,7 @@ export namespace codeview {
 	        this.start_line = source["start_line"];
 	        this.end_line = source["end_line"];
 	        this.calls = source["calls"];
+	        this.status = source["status"];
 	    }
 	}
 	export class SymbolGraph {

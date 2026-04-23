@@ -831,10 +831,120 @@ func (a *App) GetSymbolGraph(projectName, hash string) *codeview.SymbolGraph {
 		}
 		graph, _ := codeview.BuildGraph("http://127.0.0.1:9999", repo, paths)
 		if graph != nil && len(graph.Symbols) > 0 {
+			codeview.MarkChanged(graph, repo, hash)
 			return graph
 		}
 	}
 	return nil
+}
+
+// --- Explain Change ---
+
+// SearchMessagesForCode searches agent conversations for messages related to a code snippet.
+// Returns matching messages with surrounding context.
+func (a *App) SearchMessagesForCode(projectName, codeSnippet string) []map[string]string {
+	// Search across all active sessions for this project
+	a.mu.Lock()
+	var allMsgs []domain.Message
+	for _, s := range a.sessions {
+		if s.Project == projectName {
+			msgs := a.getConversationForSession(s)
+			for i := range msgs {
+				msgs[i].Agent = s.AgentName
+			}
+			allMsgs = append(allMsgs, msgs...)
+		}
+	}
+	a.mu.Unlock()
+
+	if len(allMsgs) == 0 {
+		return nil
+	}
+
+	// Simple keyword search: find messages containing parts of the code
+	keywords := extractKeywords(codeSnippet)
+	type scored struct {
+		idx   int
+		agent string
+		score int
+	}
+	var matches []scored
+	for i, m := range allMsgs {
+		s := 0
+		lower := strings.ToLower(m.Content)
+		for _, kw := range keywords {
+			if strings.Contains(lower, kw) {
+				s++
+			}
+		}
+		if s > 0 {
+			matches = append(matches, scored{i, m.Agent, s})
+		}
+	}
+
+	// Sort by score desc
+	for i := range matches {
+		for j := i + 1; j < len(matches); j++ {
+			if matches[j].score > matches[i].score {
+				matches[i], matches[j] = matches[j], matches[i]
+			}
+		}
+	}
+
+	// Return top 3 matches with ±2 context messages
+	var result []map[string]string
+	seen := map[int]bool{}
+	for _, m := range matches {
+		if len(result) >= 15 {
+			break
+		}
+		start := m.idx - 2
+		if start < 0 {
+			start = 0
+		}
+		end := m.idx + 3
+		if end > len(allMsgs) {
+			end = len(allMsgs)
+		}
+		for j := start; j < end; j++ {
+			if seen[j] {
+				continue
+			}
+			seen[j] = true
+			highlight := ""
+			if j == m.idx {
+				highlight = "match"
+			}
+			result = append(result, map[string]string{
+				"agent":     allMsgs[j].Agent,
+				"role":      allMsgs[j].Role,
+				"content":   allMsgs[j].Content,
+				"highlight": highlight,
+			})
+		}
+	}
+	return result
+}
+
+func extractKeywords(code string) []string {
+	// Extract meaningful identifiers from code
+	words := strings.FieldsFunc(code, func(r rune) bool {
+		return !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_')
+	})
+	seen := map[string]bool{}
+	stop := map[string]bool{"the": true, "and": true, "for": true, "int": true, "var": true, "new": true, "return": true, "public": true, "private": true, "void": true, "class": true, "func": true, "def": true, "import": true, "from": true, "this": true, "self": true, "null": true, "true": true, "false": true, "string": true, "if": true, "else": true}
+	var kws []string
+	for _, w := range words {
+		w = strings.ToLower(w)
+		if len(w) >= 3 && !seen[w] && !stop[w] {
+			seen[w] = true
+			kws = append(kws, w)
+		}
+	}
+	if len(kws) > 10 {
+		kws = kws[:10]
+	}
+	return kws
 }
 // --- Context Optimization ---
 

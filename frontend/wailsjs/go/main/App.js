@@ -118,6 +118,10 @@ export function SearchChunks(arg1, arg2, arg3) {
   return window['go']['main']['App']['SearchChunks'](arg1, arg2, arg3);
 }
 
+export function SearchMessagesForCode(arg1, arg2) {
+  return window['go']['main']['App']['SearchMessagesForCode'](arg1, arg2);
+}
+
 export function SendInput(arg1, arg2) {
   return window['go']['main']['App']['SendInput'](arg1, arg2);
 }
