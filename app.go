@@ -773,7 +773,7 @@ func (a *App) GetSymbolGraph(projectName, hash string) *codeview.SymbolGraph {
 	for i, f := range files {
 		paths[i] = f.Path
 	}
-	graph, _ := codeview.BuildGraph(path, paths)
+	graph, _ := codeview.BuildGraph("http://127.0.0.1:9999", path, paths)
 	return graph
 }
 // --- Context Optimization ---

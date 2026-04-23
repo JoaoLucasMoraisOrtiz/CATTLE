@@ -27,7 +27,7 @@ else
 fi
 
 echo "[2/3] Installing Python dependencies..."
-"$VENV_DIR/bin/pip" install -q flask sentence-transformers einops pymupdf pillow google-generativeai
+"$VENV_DIR/bin/pip" install -q flask sentence-transformers einops pymupdf pillow google-generativeai tree-sitter-languages
 
 # 4. Pre-download the embedding model
 echo "[3/3] Downloading embedding model (first time only)..."
