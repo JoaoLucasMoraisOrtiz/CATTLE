@@ -2,7 +2,9 @@ package codeview
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +16,7 @@ type Commit struct {
 	Author  string `json:"author"`
 	Time    string `json:"time"`
 	Files   int    `json:"files"`
+	Repo    string `json:"repo,omitempty"`
 }
 
 type FileDiff struct {
@@ -107,6 +110,89 @@ func gitCmd(dir string, args ...string) (string, error) {
 		return "", fmt.Errorf("git %s: %w", args[0], err)
 	}
 	return string(out), nil
+}
+
+// FindGitRepos discovers all git repositories in a project path (root + subdirs).
+func FindGitRepos(projectPath string) []string {
+	var repos []string
+
+	// Check root first
+	if isGitRepo(projectPath) {
+		repos = append(repos, projectPath)
+	}
+
+	// Scan one level of subdirs
+	entries, err := os.ReadDir(projectPath)
+	if err != nil {
+		return repos
+	}
+	for _, e := range entries {
+		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		sub := filepath.Join(projectPath, e.Name())
+		if isGitRepo(sub) {
+			repos = append(repos, sub)
+		}
+		// Check one more level
+		inner, _ := os.ReadDir(sub)
+		for _, ie := range inner {
+			if ie.IsDir() && !strings.HasPrefix(ie.Name(), ".") {
+				deep := filepath.Join(sub, ie.Name())
+				if isGitRepo(deep) {
+					repos = append(repos, deep)
+				}
+			}
+		}
+	}
+	return repos
+}
+
+func isGitRepo(dir string) bool {
+	info, err := os.Stat(filepath.Join(dir, ".git"))
+	return err == nil && info.IsDir()
+}
+
+// ListCommitsMulti lists commits from all git repos found in a project.
+func ListCommitsMulti(projectPath string, limit int) ([]Commit, []string) {
+	repos := FindGitRepos(projectPath)
+	if len(repos) == 0 {
+		return nil, nil
+	}
+
+	var all []Commit
+	for _, repo := range repos {
+		commits, err := ListCommits(repo, limit)
+		if err != nil {
+			continue
+		}
+		// Tag commits with repo name if multiple repos
+		if len(repos) > 1 {
+			rel, _ := filepath.Rel(projectPath, repo)
+			if rel == "" {
+				rel = "."
+			}
+			for i := range commits {
+				commits[i].Repo = rel
+			}
+		}
+		all = append(all, commits...)
+	}
+
+	// Sort by time (most recent first) — simple approach since timeAgo is relative
+	// Commits are already sorted per-repo, just interleave
+	if len(all) > limit {
+		all = all[:limit]
+	}
+	repoNames := make([]string, len(repos))
+	for i, r := range repos {
+		rel, _ := filepath.Rel(projectPath, r)
+		if rel == "" || rel == "." {
+			rel = filepath.Base(r)
+		}
+		repoNames[i] = rel
+	}
+	return all, repoNames
 }
 
 func timeAgo(t time.Time) string {

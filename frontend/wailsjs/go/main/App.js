@@ -30,6 +30,10 @@ export function GetFilePatch(arg1, arg2, arg3) {
   return window['go']['main']['App']['GetFilePatch'](arg1, arg2, arg3);
 }
 
+export function GetGitRepos(arg1) {
+  return window['go']['main']['App']['GetGitRepos'](arg1);
+}
+
 export function GetKBChunks(arg1, arg2) {
   return window['go']['main']['App']['GetKBChunks'](arg1, arg2);
 }

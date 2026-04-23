@@ -18,6 +18,8 @@ export function GetDiffFiles(arg1:string,arg2:string):Promise<Array<codeview.Fil
 
 export function GetFilePatch(arg1:string,arg2:string,arg3:string):Promise<string>;
 
+export function GetGitRepos(arg1:string):Promise<Array<string>>;
+
 export function GetKBChunks(arg1:string,arg2:string):Promise<Array<string>>;
 
 export function GetProjectConfig(arg1:string):Promise<domain.ProjectConfig>;

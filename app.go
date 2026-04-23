@@ -715,26 +715,43 @@ func (a *App) GetCommits(projectName string, limit int) []codeview.Commit {
 	if limit <= 0 {
 		limit = 30
 	}
-	commits, _ := codeview.ListCommits(path, limit)
+	commits, _ := codeview.ListCommitsMulti(path, limit)
 	return commits
 }
 
-func (a *App) GetDiffFiles(projectName, hash string) []codeview.FileDiff {
+func (a *App) GetGitRepos(projectName string) []string {
 	path := a.getProjectPath(projectName)
 	if path == "" {
 		return nil
 	}
-	files, _ := codeview.GetDiffFiles(path, hash)
-	return files
+	repos := codeview.FindGitRepos(path)
+	names := make([]string, len(repos))
+	for i, r := range repos {
+		rel, _ := filepath.Rel(path, r)
+		if rel == "" || rel == "." {
+			rel = filepath.Base(r)
+		}
+		names[i] = rel
+	}
+	return names
+}
+
+func (a *App) GetDiffFiles(projectName, hash string) []codeview.FileDiff {
+	for _, repo := range codeview.FindGitRepos(a.getProjectPath(projectName)) {
+		if files, err := codeview.GetDiffFiles(repo, hash); err == nil && len(files) > 0 {
+			return files
+		}
+	}
+	return nil
 }
 
 func (a *App) GetFilePatch(projectName, hash, filePath string) string {
-	path := a.getProjectPath(projectName)
-	if path == "" {
-		return ""
+	for _, repo := range codeview.FindGitRepos(a.getProjectPath(projectName)) {
+		if patch, err := codeview.GetFilePatch(repo, hash, filePath); err == nil && patch != "" {
+			return patch
+		}
 	}
-	patch, _ := codeview.GetFilePatch(path, hash, filePath)
-	return patch
+	return ""
 }
 
 func (a *App) SaveProjectConfig(projectName string, cfg domain.ProjectConfig) string {
@@ -759,22 +776,22 @@ func (a *App) GetProjectConfig(projectName string) domain.ProjectConfig {
 	return domain.ProjectConfig{}
 }
 
-// GetSymbolGraph builds a call graph from changed files in a commit.
 func (a *App) GetSymbolGraph(projectName, hash string) *codeview.SymbolGraph {
-	path := a.getProjectPath(projectName)
-	if path == "" {
-		return nil
+	for _, repo := range codeview.FindGitRepos(a.getProjectPath(projectName)) {
+		files, _ := codeview.GetDiffFiles(repo, hash)
+		if len(files) == 0 {
+			continue
+		}
+		paths := make([]string, len(files))
+		for i, f := range files {
+			paths[i] = f.Path
+		}
+		graph, _ := codeview.BuildGraph("http://127.0.0.1:9999", repo, paths)
+		if graph != nil && len(graph.Symbols) > 0 {
+			return graph
+		}
 	}
-	files, _ := codeview.GetDiffFiles(path, hash)
-	if len(files) == 0 {
-		return nil
-	}
-	paths := make([]string, len(files))
-	for i, f := range files {
-		paths[i] = f.Path
-	}
-	graph, _ := codeview.BuildGraph("http://127.0.0.1:9999", path, paths)
-	return graph
+	return nil
 }
 // --- Context Optimization ---
 

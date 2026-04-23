@@ -107,12 +107,17 @@ function renderTabs() {
 }
 
 function switchTab(tabIdx) {
-  // Save current panes
+  // Save current panes and hide them
   if (activeTab >= 0 && activeTab < openedProjects.length) {
     const prevProj = projects[openedProjects[activeTab]];
     if (prevProj) {
-      projectPanes[prevProj.name] = { ...panes };
-      document.querySelectorAll('.pane').forEach(p => p.style.display = 'none');
+      projectPanes[prevProj.name] = {};
+      // Save and hide each pane by session ID
+      Object.entries(panes).forEach(([sid, info]) => {
+        projectPanes[prevProj.name][sid] = info;
+        const el = document.getElementById('pane-' + sid);
+        if (el) el.style.display = 'none';
+      });
     }
   }
 
@@ -120,9 +125,12 @@ function switchTab(tabIdx) {
   panes = {};
   focusedPane = null;
 
+  // Hide ALL panes first (safety)
+  document.querySelectorAll('.pane').forEach(p => p.style.display = 'none');
+
   const proj = projects[openedProjects[activeTab]];
   if (proj && projectPanes[proj.name]) {
-    panes = projectPanes[proj.name];
+    panes = { ...projectPanes[proj.name] };
     Object.keys(panes).forEach(sid => {
       const el = document.getElementById('pane-' + sid);
       if (el) el.style.display = '';

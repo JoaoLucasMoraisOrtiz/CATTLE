@@ -6,6 +6,7 @@ export namespace codeview {
 	    author: string;
 	    time: string;
 	    files: number;
+	    repo?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Commit(source);
@@ -18,6 +19,7 @@ export namespace codeview {
 	        this.author = source["author"];
 	        this.time = source["time"];
 	        this.files = source["files"];
+	        this.repo = source["repo"];
 	    }
 	}
 	export class Edge {

@@ -113,7 +113,7 @@ function renderTimeline() {
   }
   el.innerHTML = cvCommits.map(c =>
     `<div class="cv-commit ${c.hash === cvActiveHash ? 'active' : ''}" onclick="selectCommit('${c.hash}')">
-      <div class="cv-hash">${c.hash}</div>
+      <div class="cv-hash">${c.hash}${c.repo ? ' <span style="color:#a371f7">'+c.repo+'</span>' : ''}</div>
       <div class="cv-msg">${escapeHtml(c.message)}</div>
       <div class="cv-meta">${c.author} · ${c.time} · ${c.files} files</div>
     </div>`
