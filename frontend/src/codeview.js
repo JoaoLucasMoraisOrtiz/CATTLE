@@ -13,6 +13,90 @@ function toggleCodePanel() {
   if (codePanelOpen) loadCommits();
 }
 
+function switchCVTab(name, btn) {
+  document.querySelectorAll('.cv-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('[id^="cv-view-"]').forEach(v => v.style.display = 'none');
+  document.getElementById('cv-view-' + name).style.display = '';
+  if (name === 'gitlog') loadCommits();
+  if (name === 'graph') populateGraphCommits();
+}
+
+// --- Graph ---
+async function populateGraphCommits() {
+  if (!cvCommits.length) await loadCommits();
+  const sel = document.getElementById('graph-commit');
+  sel.innerHTML = '<option value="">Select commit...</option>' +
+    cvCommits.map(c => `<option value="${c.hash}">${c.hash} — ${escapeHtml(c.message.substring(0,40))}</option>`).join('');
+}
+
+async function loadGraph(hash) {
+  if (!hash || activeTab < 0) return;
+  const proj = projects[openedProjects[activeTab]];
+  const graph = await window.go.main.App.GetSymbolGraph(proj.name, hash);
+  if (!graph || !graph.symbols || graph.symbols.length === 0) {
+    document.getElementById('graph-info').textContent = 'No symbols found in changed files';
+    d3.select('#graph-svg').selectAll('*').remove();
+    return;
+  }
+  document.getElementById('graph-info').textContent = `${graph.symbols.length} symbols, ${(graph.edges||[]).length} edges`;
+  renderD3Graph(graph);
+}
+
+function renderD3Graph(graph) {
+  const svg = d3.select('#graph-svg');
+  svg.selectAll('*').remove();
+  const rect = svg.node().getBoundingClientRect();
+  const w = rect.width || 400, h = rect.height || 400;
+
+  // Arrow marker
+  svg.append('defs').append('marker')
+    .attr('id', 'arrow').attr('viewBox', '0 -5 10 10')
+    .attr('refX', 20).attr('refY', 0).attr('markerWidth', 6).attr('markerHeight', 6)
+    .attr('orient', 'auto')
+    .append('path').attr('d', 'M0,-5L10,0L0,5').attr('fill', '#30363d');
+
+  const kindColor = { 'function': '#1f6feb', 'method': '#1f6feb', 'class': '#3fb950', 'interface': '#a371f7' };
+
+  const nodes = graph.symbols.map(s => ({ id: s.name, ...s }));
+  const nodeIds = new Set(nodes.map(n => n.id));
+  const edges = (graph.edges || []).filter(e => nodeIds.has(e.from) && nodeIds.has(e.to));
+
+  const sim = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(edges).id(d => d.id).distance(100))
+    .force('charge', d3.forceManyBody().strength(-200))
+    .force('center', d3.forceCenter(w / 2, h / 2));
+
+  const link = svg.append('g').selectAll('line').data(edges).join('line').attr('class', 'graph-edge');
+
+  const node = svg.append('g').selectAll('g').data(nodes).join('g').attr('class', 'graph-node')
+    .call(d3.drag().on('start', dragStart).on('drag', dragging).on('end', dragEnd));
+
+  node.append('circle')
+    .attr('r', d => d.kind === 'class' || d.kind === 'interface' ? 12 : 8)
+    .attr('fill', d => kindColor[d.kind] || '#8b949e')
+    .attr('stroke', d => kindColor[d.kind] || '#8b949e');
+
+  node.append('text').text(d => d.id).attr('dx', 14).attr('dy', 4);
+
+  node.append('title').text(d => `${d.kind}: ${d.name}\n${d.file}:${d.start_line}`);
+
+  sim.on('tick', () => {
+    link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+        .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+    node.attr('transform', d => `translate(${d.x},${d.y})`);
+  });
+
+  // Zoom
+  svg.call(d3.zoom().scaleExtent([0.3, 5]).on('zoom', e => {
+    svg.selectAll('g').attr('transform', e.transform);
+  }));
+
+  function dragStart(e, d) { if (!e.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; }
+  function dragging(e, d) { d.fx = e.x; d.fy = e.y; }
+  function dragEnd(e, d) { if (!e.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }
+}
+
 async function loadCommits() {
   if (activeTab < 0) return;
   const proj = projects[openedProjects[activeTab]];

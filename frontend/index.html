@@ -40,13 +40,31 @@
         <div id="code-panel" style="display:none">
           <div id="code-panel-resize" onmousedown="startResizeCodePanel(event)"></div>
           <div id="code-panel-header">
-            <span>Code Viewer</span>
-            <button onclick="openCodeConfig()" style="background:none;border:none;color:#8b949e;cursor:pointer">⚙</button>
-            <span style="cursor:pointer;margin-left:auto" onclick="toggleCodePanel()">▶</span>
+            <div id="cv-tabs">
+              <span class="cv-tab active" onclick="switchCVTab('gitlog',this)">Git Log</span>
+              <span class="cv-tab" onclick="switchCVTab('graph',this)">Graph</span>
+              <span class="cv-tab" onclick="switchCVTab('simulator',this)">Simulator</span>
+            </div>
+            <button onclick="openCodeConfig()" style="background:none;border:none;color:#8b949e;cursor:pointer;font-size:13px">⚙</button>
+            <span style="cursor:pointer;color:#8b949e" onclick="toggleCodePanel()">▶</span>
           </div>
           <div id="code-panel-inner">
-            <div id="cv-timeline"></div>
-            <div id="cv-detail"></div>
+            <div id="cv-view-gitlog">
+              <div id="cv-timeline"></div>
+              <div id="cv-detail"></div>
+            </div>
+            <div id="cv-view-graph" style="display:none">
+              <div id="graph-toolbar">
+                <select id="graph-commit" onchange="loadGraph(this.value)">
+                  <option value="">Select commit...</option>
+                </select>
+                <span id="graph-info" style="color:#8b949e;font-size:11px"></span>
+              </div>
+              <svg id="graph-svg"></svg>
+            </div>
+            <div id="cv-view-simulator" style="display:none">
+              <div style="padding:24px;color:#8b949e;text-align:center;font-size:13px">🔜 Simulator — coming soon</div>
+            </div>
           </div>
         </div>
       </div>
@@ -171,6 +189,7 @@
     </div>
   </div>
 </div>
+  <script src="lib/d3.min.js"></script>
   <script src="lib/xterm.js"></script>
   <script src="lib/xterm-addon-fit.js"></script>
   <script src="src/main.js"></script>

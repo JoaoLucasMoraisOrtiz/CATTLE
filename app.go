@@ -758,6 +758,24 @@ func (a *App) GetProjectConfig(projectName string) domain.ProjectConfig {
 	}
 	return domain.ProjectConfig{}
 }
+
+// GetSymbolGraph builds a call graph from changed files in a commit.
+func (a *App) GetSymbolGraph(projectName, hash string) *codeview.SymbolGraph {
+	path := a.getProjectPath(projectName)
+	if path == "" {
+		return nil
+	}
+	files, _ := codeview.GetDiffFiles(path, hash)
+	if len(files) == 0 {
+		return nil
+	}
+	paths := make([]string, len(files))
+	for i, f := range files {
+		paths[i] = f.Path
+	}
+	graph, _ := codeview.BuildGraph(path, paths)
+	return graph
+}
 // --- Context Optimization ---
 
 // CompressAgent compresses an agent's conversation context.

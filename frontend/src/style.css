@@ -622,17 +622,30 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 6px 12px;
   background: #161b22;
   border-bottom: 1px solid #30363d;
   font-size: 13px;
   font-weight: 600;
 }
+#cv-tabs { display: flex; gap: 2px; flex: 1; }
+.cv-tab {
+  padding: 4px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #8b949e;
+  font-weight: 600;
+}
+.cv-tab:hover { color: #c9d1d9; }
+.cv-tab.active { color: #c9d1d9; background: #0d1117; }
 #code-panel-inner {
   flex: 1;
   display: flex;
   overflow: hidden;
 }
+#cv-view-gitlog { display: flex; flex: 1; overflow: hidden; }
+#cv-view-graph, #cv-view-simulator { flex: 1; overflow: auto; }
 
 /* Timeline */
 #cv-timeline {
@@ -691,3 +704,17 @@ body {
 .cv-line-add { color: #3fb950; background: rgba(63,185,80,.1); }
 .cv-line-del { color: #da3633; background: rgba(218,54,51,.1); }
 .cv-line-hunk { color: #1f6feb; font-weight: 600; }
+
+/* Graph view */
+#cv-view-graph { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+#graph-toolbar { padding: 6px 10px; border-bottom: 1px solid #30363d; display: flex; align-items: center; gap: 8px; }
+#graph-toolbar select {
+  background: #0d1117; color: #c9d1d9; border: 1px solid #30363d;
+  padding: 3px 8px; border-radius: 4px; font-size: 11px; font-family: inherit;
+}
+#graph-svg { flex: 1; width: 100%; }
+.graph-node { cursor: pointer; }
+.graph-node circle { stroke-width: 2; }
+.graph-node text { font-size: 10px; fill: #c9d1d9; pointer-events: none; }
+.graph-edge { stroke: #30363d; stroke-width: 1.5; fill: none; marker-end: url(#arrow); }
+.graph-edge:hover { stroke: #58a6ff; }

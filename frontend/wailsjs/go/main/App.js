@@ -14,12 +14,28 @@ export function CompressAgent(arg1) {
   return window['go']['main']['App']['CompressAgent'](arg1);
 }
 
+export function GetCommits(arg1, arg2) {
+  return window['go']['main']['App']['GetCommits'](arg1, arg2);
+}
+
 export function GetConversation(arg1) {
   return window['go']['main']['App']['GetConversation'](arg1);
 }
 
+export function GetDiffFiles(arg1, arg2) {
+  return window['go']['main']['App']['GetDiffFiles'](arg1, arg2);
+}
+
+export function GetFilePatch(arg1, arg2, arg3) {
+  return window['go']['main']['App']['GetFilePatch'](arg1, arg2, arg3);
+}
+
 export function GetKBChunks(arg1, arg2) {
   return window['go']['main']['App']['GetKBChunks'](arg1, arg2);
+}
+
+export function GetProjectConfig(arg1) {
+  return window['go']['main']['App']['GetProjectConfig'](arg1);
 }
 
 export function GetProjects() {
@@ -32,6 +48,10 @@ export function GetSessions() {
 
 export function GetSettings() {
   return window['go']['main']['App']['GetSettings']();
+}
+
+export function GetSymbolGraph(arg1, arg2) {
+  return window['go']['main']['App']['GetSymbolGraph'](arg1, arg2);
 }
 
 export function KillSession(arg1) {
@@ -68,6 +88,10 @@ export function ResizeTerminal(arg1, arg2, arg3) {
 
 export function RespawnProject(arg1) {
   return window['go']['main']['App']['RespawnProject'](arg1);
+}
+
+export function SaveProjectConfig(arg1, arg2) {
+  return window['go']['main']['App']['SaveProjectConfig'](arg1, arg2);
 }
 
 export function SaveProjects(arg1) {
