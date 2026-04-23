@@ -1,10 +1,18 @@
 .PHONY: dev build clean
 
+CGOFLAGS = CGO_CFLAGS="-DSQLITE_ENABLE_FTS5" CGO_LDFLAGS="-lm"
+
+export PKG_CONFIG_PATH := /usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig:$(PKG_CONFIG_PATH)
+
 dev:
-	CGO_CFLAGS="-DSQLITE_ENABLE_FTS5" CGO_LDFLAGS="-lm" wails dev
+	$(CGOFLAGS) wails dev
 
 build:
-	CGO_CFLAGS="-DSQLITE_ENABLE_FTS5" CGO_LDFLAGS="-lm" wails build
+	$(CGOFLAGS) wails build -s
+
+binary:
+	@echo "Building Go binary directly..."
+	$(CGOFLAGS) go build -tags webkit2_41 -o build/bin/redo .
 
 clean:
 	rm -rf build/
