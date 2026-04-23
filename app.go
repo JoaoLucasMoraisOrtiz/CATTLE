@@ -219,6 +219,11 @@ func (a *App) SpawnAgent(projectName, agentName, command, color, cliType string)
 	// Read PTY output and emit to frontend
 	go func() {
 		for data := range pty.Read() {
+			a.mu.Lock()
+			if s, ok := a.sessions[sessionID]; ok {
+				s.LastOutputTime = time.Now().UnixMilli()
+			}
+			a.mu.Unlock()
 			runtime.EventsEmit(a.ctx, "pty:output:"+sessionID, string(data))
 		}
 		runtime.EventsEmit(a.ctx, "pty:exit:"+sessionID, nil)
@@ -838,6 +843,17 @@ func (a *App) GetSymbolGraph(projectName, hash string) *codeview.SymbolGraph {
 	return nil
 }
 
+// IsAgentBusy returns true if the agent received output in the last 2 seconds.
+func (a *App) IsAgentBusy(sessionID string) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	s, ok := a.sessions[sessionID]
+	if !ok {
+		return false
+	}
+	return time.Now().UnixMilli()-s.LastOutputTime < 2000
+}
+
 // --- Explain Change ---
 
 // SearchMessagesForCode searches agent conversations for messages related to a code snippet.
@@ -1011,6 +1027,11 @@ func (a *App) CompressAgent(sessionID string) string {
 
 	go func() {
 		for data := range newPty.Read() {
+			a.mu.Lock()
+			if s, ok := a.sessions[sessionID]; ok {
+				s.LastOutputTime = time.Now().UnixMilli()
+			}
+			a.mu.Unlock()
 			runtime.EventsEmit(a.ctx, "pty:output:"+sessionID, string(data))
 		}
 		runtime.EventsEmit(a.ctx, "pty:exit:"+sessionID, nil)

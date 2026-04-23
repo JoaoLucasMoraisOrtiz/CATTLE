@@ -147,11 +147,37 @@ function renderD3Graph(graph) {
   }
 
   const g = svg.append('g');
-  let sim;
+  let sim, link, node;
+  const nodes = [], edges = [];
+
+  // Multi-select with Shift
+  const selectedNodes = new Set();
+
+  function updateSelectionVisuals() {
+    node.select('circle')
+      .attr('stroke', d => {
+        if (selectedNodes.has(d.id)) return '#58a6ff';
+        if (d.status === 'modified') return '#d29922';
+        return kindColor[d.kind] || '#8b949e';
+      })
+      .attr('stroke-width', d => selectedNodes.has(d.id) ? 4 : (d.status ? 3 : 1.5));
+    // Show selection count
+    const info = document.getElementById('graph-info');
+    const base = `${nodes.length} nodes, ${edges.length} edges (${modifiedNames.size} modified)`;
+    if (selectedNodes.size > 0) {
+      info.textContent = base + ` | ${selectedNodes.size} selected (Shift+click more, then right-click to explain)`;
+    } else {
+      info.textContent = base + ' — click to expand';
+    }
+  }
 
   function render() {
     g.selectAll('*').remove();
-    const { nodes, edges } = getVisibleData();
+    selectedNodes.clear();
+    const { nodes: n, edges: e } = getVisibleData();
+    // Reassign to outer scope for updateSelectionVisuals
+    nodes.length = 0; nodes.push(...n);
+    edges.length = 0; edges.push(...e);
 
     document.getElementById('graph-info').textContent =
       `${nodes.length} nodes, ${edges.length} edges (${modifiedNames.size} modified — click to expand)`;
@@ -162,16 +188,30 @@ function renderD3Graph(graph) {
       .force('center', d3.forceCenter(w / 2, h / 2))
       .force('collision', d3.forceCollide().radius(30));
 
-    const link = g.append('g').selectAll('line').data(edges).join('line')
+    link = g.append('g').selectAll('line').data(edges).join('line')
       .attr('class', 'graph-edge')
       .attr('marker-end', 'url(#arrow)');
 
-    const node = g.append('g').selectAll('g').data(nodes).join('g')
+    node = g.append('g').selectAll('g').data(nodes).join('g')
       .attr('class', 'graph-node')
       .style('cursor', 'pointer')
       .on('click', (e, d) => {
+        if (e.shiftKey) {
+          // Multi-select mode
+          if (selectedNodes.has(d.id)) selectedNodes.delete(d.id);
+          else selectedNodes.add(d.id);
+          updateSelectionVisuals();
+          e.stopPropagation();
+          return;
+        }
         e.stopPropagation();
         showNodeMenu(e, d);
+      })
+      .on('contextmenu', (e, d) => {
+        e.preventDefault();
+        if (selectedNodes.size >= 2) {
+          showMultiExplainMenu(e);
+        }
       })
       .call(d3.drag().on('start', dragStart).on('drag', dragging).on('end', dragEnd));
 
@@ -183,7 +223,7 @@ function renderD3Graph(graph) {
 
     node.append('text').text(d => d.id).attr('dx', 14).attr('dy', 4);
     node.append('title').text(d =>
-      `${d.kind}: ${d.name}\n${d.file}:${d.start_line}${d.status ? '\n⚡ ' + d.status : ''}\nClick to expand/collapse`
+      `${d.kind}: ${d.name}\n${d.file}:${d.start_line}${d.status ? '\n⚡ ' + d.status : ''}\nShift+click to select multiple`
     );
 
     sim.on('tick', () => {
@@ -192,6 +232,87 @@ function renderD3Graph(graph) {
       node.attr('transform', d => `translate(${d.x},${d.y})`);
     });
   }
+
+  function showMultiExplainMenu(event) {
+    document.getElementById('node-menu')?.remove();
+    const names = [...selectedNodes];
+    const menu = document.createElement('div');
+    menu.id = 'node-menu';
+    menu.className = 'node-menu';
+    menu.innerHTML = `
+      <div class="nm-title">🔗 ${names.length} nodes selected</div>
+      <div class="nm-sub">${names.join(', ')}</div>
+      <div class="nm-item" onclick="explainRelation()">🧠 Explain relationship</div>
+      <div class="nm-item" onclick="explainRelationDiff()">📄 Explain in diff context</div>
+      <div class="nm-item" onclick="clearSelection()">✕ Clear selection</div>
+    `;
+    menu.style.left = event.pageX + 'px';
+    menu.style.top = event.pageY + 'px';
+    document.body.appendChild(menu);
+    setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 10);
+  }
+
+  window.clearSelection = function() {
+    selectedNodes.clear();
+    updateSelectionVisuals();
+    document.getElementById('node-menu')?.remove();
+  };
+
+  window.explainRelation = function() {
+    document.getElementById('node-menu')?.remove();
+    const names = [...selectedNodes];
+    const syms = names.map(n => allSymbols[n]).filter(Boolean);
+    const desc = syms.map(s => `${s.kind} ${s.name} (${s.file}:${s.start_line})`).join('\n');
+    const relEdges = allEdges.filter(e => names.includes(e.from) && names.includes(e.to));
+    const edgeDesc = relEdges.map(e => `${e.from} → ${e.to}`).join(', ') || 'no direct edges';
+    const prompt = `Explain the relationship between these functions and how they interact:\n\n${desc}\n\nConnections: ${edgeDesc}`;
+    // Show agent picker
+    window._multiExplainPrompt = prompt;
+    showAgentPickerForPrompt();
+  };
+
+  window.explainRelationDiff = async function() {
+    document.getElementById('node-menu')?.remove();
+    const names = [...selectedNodes];
+    const syms = names.map(n => allSymbols[n]).filter(Boolean);
+    const files = [...new Set(syms.map(s => s.file))];
+    const proj = projects[openedProjects[activeTab]];
+    let patches = '';
+    for (const f of files) {
+      const p = await window.go.main.App.GetFilePatch(proj.name, cvActiveHash, f);
+      if (p) patches += `\n--- ${f} ---\n${p.substring(0, 1000)}\n`;
+    }
+    const desc = syms.map(s => `${s.kind} ${s.name}`).join(', ');
+    const prompt = `Explain how these changes relate to each other in this diff:\nFunctions: ${desc}\n${patches}`;
+    window._multiExplainPrompt = prompt;
+    showAgentPickerForPrompt();
+  };
+
+  function showAgentPickerForPrompt() {
+    const paneList = Object.entries(panes);
+    if (paneList.length === 0) { alert('No agents open'); return; }
+    let picker = document.getElementById('agent-picker');
+    if (picker) picker.remove();
+    picker = document.createElement('div');
+    picker.id = 'agent-picker';
+    picker.className = 'node-menu';
+    picker.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:600';
+    let html = '<div class="nm-title">💬 Send to which agent?</div>';
+    paneList.forEach(([sid, info]) => {
+      html += `<div class="nm-item" onclick="sendMultiExplain('${sid}')">${info.agent.name}</div>`;
+    });
+    html += '<div class="nm-item" onclick="document.getElementById(\'agent-picker\').remove()">Cancel</div>';
+    picker.innerHTML = html;
+    document.body.appendChild(picker);
+  }
+
+  window.sendMultiExplain = function(sid) {
+    document.getElementById('agent-picker')?.remove();
+    if (codePanelOpen) toggleCodePanel();
+    window.go.main.App.SendInput([sid], window._multiExplainPrompt);
+    focusPane(sid);
+    selectedNodes.clear();
+  };
 
   function showNodeMenu(event, d) {
     // Remove existing menu
@@ -309,11 +430,47 @@ function renderD3Graph(graph) {
   window.explainWithAgent = async function(file) {
     document.getElementById('explain-menu')?.remove();
     document.getElementById('diff-modal').style.display = 'none';
-    if (!focusedPane) { alert('Focus an agent pane first'); return; }
+
+    const paneList = Object.entries(panes);
+    if (paneList.length === 0) { alert('No agents open'); return; }
+
+    // Build agent picker
+    let picker = document.getElementById('agent-picker');
+    if (picker) picker.remove();
+    picker = document.createElement('div');
+    picker.id = 'agent-picker';
+    picker.className = 'node-menu';
+    picker.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:600';
+
+    let html = '<div class="nm-title">💬 Send to which agent?</div>';
+    for (const [sid, info] of paneList) {
+      const busy = await window.go.main.App.IsAgentBusy(sid);
+      const status = busy ? ' <span style="color:#d29922">⏳ busy</span>' : ' <span style="color:#3fb950">● idle</span>';
+      html += `<div class="nm-item" onclick="doExplainSend('${sid}','${file.replace(/'/g,"\\'")}')">
+        ${info.agent.name}${status}
+      </div>`;
+    }
+    html += '<div class="nm-item" onclick="doExplainNewAgent(\'' + file.replace(/'/g,"\\'") + '\')">+ New agent</div>';
+    picker.innerHTML = html;
+    document.body.appendChild(picker);
+    setTimeout(() => document.addEventListener('click', () => picker.remove(), { once: true }), 10);
+  };
+
+  window.doExplainSend = async function(sid, file) {
+    document.getElementById('agent-picker')?.remove();
+    if (codePanelOpen) toggleCodePanel();
     const proj = projects[openedProjects[activeTab]];
     const patch = await window.go.main.App.GetFilePatch(proj.name, cvActiveHash, file);
-    const prompt = `Explain this code change in ${file.split('/').pop()}:\n\n${patch.substring(0, 2000)}`;
-    window.go.main.App.SendInput([focusedPane], prompt);
+    const msg = `Explain this code change in ${file.split('/').pop()}:\n\n${patch.substring(0, 2000)}`;
+    window.go.main.App.SendInput([sid], msg);
+    focusPane(sid);
+  };
+
+  window.doExplainNewAgent = function(file) {
+    document.getElementById('agent-picker')?.remove();
+    // Store file for after spawn
+    window._pendingExplainFile = file;
+    spawnNextAgent();
   };
 
   render();

@@ -29,12 +29,13 @@ type ProjectConfig struct {
 
 // Session represents an active terminal session.
 type Session struct {
-	ID        string
-	Project   string
-	AgentName string
-	CLIType   string // kiro, gemini, claude
-	HomeDir   string // temp HOME for this session
-	Active    bool
+	ID             string
+	Project        string
+	AgentName      string
+	CLIType        string
+	HomeDir        string
+	Active         bool
+	LastOutputTime int64 // unix millis of last PTY output
 }
 
 // Message represents one turn in a conversation.

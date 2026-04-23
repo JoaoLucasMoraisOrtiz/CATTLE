@@ -36,6 +36,8 @@ export function GetSettings():Promise<Record<string, string>>;
 
 export function GetSymbolGraph(arg1:string,arg2:string):Promise<codeview.SymbolGraph>;
 
+export function IsAgentBusy(arg1:string):Promise<boolean>;
+
 export function KillSession(arg1:string):Promise<void>;
 
 export function PickDirectory():Promise<string>;

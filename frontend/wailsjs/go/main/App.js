@@ -66,6 +66,10 @@ export function GetSymbolGraph(arg1, arg2) {
   return window['go']['main']['App']['GetSymbolGraph'](arg1, arg2);
 }
 
+export function IsAgentBusy(arg1) {
+  return window['go']['main']['App']['IsAgentBusy'](arg1);
+}
+
 export function KillSession(arg1) {
   return window['go']['main']['App']['KillSession'](arg1);
 }
