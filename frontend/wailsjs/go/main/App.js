@@ -14,8 +14,16 @@ export function CompressAgent(arg1) {
   return window['go']['main']['App']['CompressAgent'](arg1);
 }
 
+export function GetBranches(arg1) {
+  return window['go']['main']['App']['GetBranches'](arg1);
+}
+
 export function GetCommits(arg1, arg2) {
   return window['go']['main']['App']['GetCommits'](arg1, arg2);
+}
+
+export function GetCommitsBranch(arg1, arg2, arg3) {
+  return window['go']['main']['App']['GetCommitsBranch'](arg1, arg2, arg3);
 }
 
 export function GetConversation(arg1) {

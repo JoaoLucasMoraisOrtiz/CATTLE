@@ -48,6 +48,11 @@
             <button onclick="openCodeConfig()" style="background:none;border:none;color:#8b949e;cursor:pointer;font-size:13px">⚙</button>
             <span style="cursor:pointer;color:#8b949e" onclick="toggleCodePanel()">▶</span>
           </div>
+          <div id="cv-selectors">
+            <select id="cv-repo-select" onchange="onRepoChange()"></select>
+            <select id="cv-branch-select" onchange="onBranchChange()"></select>
+            <select id="cv-commit-select" onchange="onCommitChange(this.value)"></select>
+          </div>
           <div id="code-panel-inner">
             <div id="cv-view-gitlog">
               <div id="cv-timeline"></div>
@@ -55,9 +60,6 @@
             </div>
             <div id="cv-view-graph" style="display:none">
               <div id="graph-toolbar">
-                <select id="graph-commit" onchange="loadGraph(this.value)">
-                  <option value="">Select commit...</option>
-                </select>
                 <span id="graph-info" style="color:#8b949e;font-size:11px"></span>
               </div>
               <svg id="graph-svg"></svg>

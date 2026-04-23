@@ -31,9 +31,32 @@ type DiffDetail struct {
 	Patch string `json:"patch"`
 }
 
-func ListCommits(repoPath string, limit int) ([]Commit, error) {
-	out, err := gitCmd(repoPath, "log", fmt.Sprintf("-%d", limit),
-		"--pretty=format:%H|%s|%an|%at", "--no-merges")
+// Branch info
+type Branch struct {
+	Name    string `json:"name"`
+	Current bool   `json:"current"`
+}
+
+func ListBranches(repoPath string) []Branch {
+	out, _ := gitCmd(repoPath, "branch", "--format=%(refname:short)|%(HEAD)")
+	var branches []Branch
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "|", 2)
+		current := len(parts) > 1 && strings.TrimSpace(parts[1]) == "*"
+		branches = append(branches, Branch{Name: parts[0], Current: current})
+	}
+	return branches
+}
+
+func ListCommits(repoPath string, limit int, branch string) ([]Commit, error) {
+	args := []string{"log", fmt.Sprintf("-%d", limit), "--pretty=format:%H|%s|%an|%at", "--no-merges"}
+	if branch != "" {
+		args = append(args, branch)
+	}
+	out, err := gitCmd(repoPath, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +177,7 @@ func isGitRepo(dir string) bool {
 }
 
 // ListCommitsMulti lists commits from all git repos found in a project.
-func ListCommitsMulti(projectPath string, limit int) ([]Commit, []string) {
+func ListCommitsMulti(projectPath string, limit int, branch string) ([]Commit, []string) {
 	repos := FindGitRepos(projectPath)
 	if len(repos) == 0 {
 		return nil, nil
@@ -162,7 +185,7 @@ func ListCommitsMulti(projectPath string, limit int) ([]Commit, []string) {
 
 	var all []Commit
 	for _, repo := range repos {
-		commits, err := ListCommits(repo, limit)
+		commits, err := ListCommits(repo, limit, branch)
 		if err != nil {
 			continue
 		}

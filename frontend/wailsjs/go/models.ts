@@ -1,5 +1,19 @@
 export namespace codeview {
 	
+	export class Branch {
+	    name: string;
+	    current: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new Branch(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.current = source["current"];
+	    }
+	}
 	export class Commit {
 	    hash: string;
 	    message: string;

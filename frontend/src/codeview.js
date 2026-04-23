@@ -3,6 +3,9 @@
 let codePanelOpen = false;
 let cvCommits = [];
 let cvActiveHash = null;
+let cvRepos = [];
+let cvSelectedRepo = '';
+let cvSelectedBranch = '';
 
 function toggleCodePanel() {
   const panel = document.getElementById('code-panel');
@@ -10,7 +13,63 @@ function toggleCodePanel() {
   codePanelOpen = !codePanelOpen;
   panel.style.display = codePanelOpen ? '' : 'none';
   tab.textContent = codePanelOpen ? '▶ Code' : '◀ Code';
-  if (codePanelOpen) loadCommits();
+  if (codePanelOpen) loadRepos();
+}
+
+async function loadRepos() {
+  if (activeTab < 0) return;
+  const proj = projects[openedProjects[activeTab]];
+  if (!proj) return;
+  cvRepos = await window.go.main.App.GetGitRepos(proj.name) || [];
+  const sel = document.getElementById('cv-repo-select');
+  if (cvRepos.length <= 1) {
+    sel.style.display = 'none';
+    cvSelectedRepo = '';
+  } else {
+    sel.style.display = '';
+    sel.innerHTML = '<option value="">All repos</option>' +
+      cvRepos.map(r => `<option value="${r}">${r}</option>`).join('');
+  }
+  await loadBranches();
+  await loadCommits();
+}
+
+async function loadBranches() {
+  if (activeTab < 0) return;
+  const proj = projects[openedProjects[activeTab]];
+  const branches = await window.go.main.App.GetBranches(proj.name) || [];
+  const sel = document.getElementById('cv-branch-select');
+  const current = branches.find(b => b.current);
+  cvSelectedBranch = current ? current.name : '';
+  sel.innerHTML = branches.map(b =>
+    `<option value="${b.name}" ${b.current ? 'selected' : ''}>${b.name}${b.current ? ' ●' : ''}</option>`
+  ).join('');
+}
+
+function onRepoChange() {
+  cvSelectedRepo = document.getElementById('cv-repo-select').value;
+  loadCommits();
+}
+
+async function onBranchChange() {
+  cvSelectedBranch = document.getElementById('cv-branch-select').value;
+  await loadCommits();
+}
+
+function populateCommitSelect() {
+  const sel = document.getElementById('cv-commit-select');
+  const filtered = cvSelectedRepo
+    ? cvCommits.filter(c => c.repo === cvSelectedRepo || !c.repo)
+    : cvCommits;
+  sel.innerHTML = '<option value="">Select commit...</option>' +
+    filtered.map(c => {
+      const repo = c.repo ? `[${c.repo}] ` : '';
+      return `<option value="${c.hash}">${c.hash} — ${repo}${c.message.substring(0,30)}</option>`;
+    }).join('');
+}
+
+function onCommitChange(hash) {
+  if (hash) selectCommit(hash);
 }
 
 function switchCVTab(name, btn) {
@@ -19,17 +78,10 @@ function switchCVTab(name, btn) {
   document.querySelectorAll('[id^="cv-view-"]').forEach(v => v.style.display = 'none');
   document.getElementById('cv-view-' + name).style.display = '';
   if (name === 'gitlog') loadCommits();
-  if (name === 'graph') populateGraphCommits();
+  if (name === 'graph' && cvActiveHash) loadGraph(cvActiveHash);
 }
 
 // --- Graph ---
-async function populateGraphCommits() {
-  if (!cvCommits.length) await loadCommits();
-  const sel = document.getElementById('graph-commit');
-  sel.innerHTML = '<option value="">Select commit...</option>' +
-    cvCommits.map(c => `<option value="${c.hash}">${c.hash} — ${escapeHtml(c.message.substring(0,40))}</option>`).join('');
-}
-
 async function loadGraph(hash) {
   if (!hash || activeTab < 0) return;
   const proj = projects[openedProjects[activeTab]];
@@ -101,17 +153,25 @@ async function loadCommits() {
   if (activeTab < 0) return;
   const proj = projects[openedProjects[activeTab]];
   if (!proj) return;
-  cvCommits = await window.go.main.App.GetCommits(proj.name, 30) || [];
+  if (cvSelectedBranch) {
+    cvCommits = await window.go.main.App.GetCommitsBranch(proj.name, cvSelectedBranch, 30) || [];
+  } else {
+    cvCommits = await window.go.main.App.GetCommits(proj.name, 30) || [];
+  }
   renderTimeline();
+  populateCommitSelect();
 }
 
 function renderTimeline() {
   const el = document.getElementById('cv-timeline');
-  if (cvCommits.length === 0) {
+  const filtered = cvSelectedRepo
+    ? cvCommits.filter(c => c.repo === cvSelectedRepo || !c.repo)
+    : cvCommits;
+  if (filtered.length === 0) {
     el.innerHTML = '<div style="padding:16px;color:#8b949e;text-align:center;font-size:12px">No commits</div>';
     return;
   }
-  el.innerHTML = cvCommits.map(c =>
+  el.innerHTML = filtered.map(c =>
     `<div class="cv-commit ${c.hash === cvActiveHash ? 'active' : ''}" onclick="selectCommit('${c.hash}')">
       <div class="cv-hash">${c.hash}${c.repo ? ' <span style="color:#a371f7">'+c.repo+'</span>' : ''}</div>
       <div class="cv-msg">${escapeHtml(c.message)}</div>
@@ -123,10 +183,17 @@ function renderTimeline() {
 async function selectCommit(hash) {
   cvActiveHash = hash;
   renderTimeline();
+  // Sync the commit dropdown
+  document.getElementById('cv-commit-select').value = hash;
   if (activeTab < 0) return;
   const proj = projects[openedProjects[activeTab]];
   const files = await window.go.main.App.GetDiffFiles(proj.name, hash) || [];
   renderDiffFiles(proj.name, hash, files);
+  // Also load graph if Graph tab is active
+  const graphView = document.getElementById('cv-view-graph');
+  if (graphView && graphView.style.display !== 'none') {
+    loadGraph(hash);
+  }
 }
 
 function renderDiffFiles(projName, hash, files) {

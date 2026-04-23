@@ -71,6 +71,17 @@ func (a *App) initServices() {
 	}
 
 	a.embedder = embedding.NewClient("")
+
+	// Start Python embed server (updates script from embedded copy)
+	go func() {
+		srv, err := embedding.StartServer(9999)
+		if err != nil {
+			fmt.Printf("[Embed] %v\n", err)
+			return
+		}
+		a.embedServer = srv
+	}()
+
 	a.optimizer = ctxopt.NewOptimizer(a.embedder, a.msgRepo, a.kbRepo)
 	a.tokenCache = ctxopt.NewTokenCache(a.embedder)
 
@@ -715,8 +726,40 @@ func (a *App) GetCommits(projectName string, limit int) []codeview.Commit {
 	if limit <= 0 {
 		limit = 30
 	}
-	commits, _ := codeview.ListCommitsMulti(path, limit)
+	commits, _ := codeview.ListCommitsMulti(path, limit, "")
 	return commits
+}
+
+// GetCommitsBranch returns commits for a specific branch.
+func (a *App) GetCommitsBranch(projectName, branch string, limit int) []codeview.Commit {
+	path := a.getProjectPath(projectName)
+	if path == "" {
+		return nil
+	}
+	if limit <= 0 {
+		limit = 30
+	}
+	commits, _ := codeview.ListCommitsMulti(path, limit, branch)
+	return commits
+}
+
+// GetBranches returns all branches for the project's git repos.
+func (a *App) GetBranches(projectName string) []codeview.Branch {
+	path := a.getProjectPath(projectName)
+	if path == "" {
+		return nil
+	}
+	seen := map[string]bool{}
+	var all []codeview.Branch
+	for _, repo := range codeview.FindGitRepos(path) {
+		for _, b := range codeview.ListBranches(repo) {
+			if !seen[b.Name] {
+				seen[b.Name] = true
+				all = append(all, b)
+			}
+		}
+	}
+	return all
 }
 
 func (a *App) GetGitRepos(projectName string) []string {

@@ -639,6 +639,26 @@ body {
 }
 .cv-tab:hover { color: #c9d1d9; }
 .cv-tab.active { color: #c9d1d9; background: #0d1117; }
+
+#cv-selectors {
+  display: flex;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #161b22;
+  border-bottom: 1px solid #30363d;
+}
+#cv-selectors select {
+  flex: 1;
+  background: #0d1117;
+  color: #c9d1d9;
+  border: 1px solid #30363d;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 #code-panel-inner {
   flex: 1;
   display: flex;

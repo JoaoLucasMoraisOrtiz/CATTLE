@@ -10,7 +10,11 @@ export function CheckTokens(arg1:string):Promise<Record<string, number>>;
 
 export function CompressAgent(arg1:string):Promise<string>;
 
+export function GetBranches(arg1:string):Promise<Array<codeview.Branch>>;
+
 export function GetCommits(arg1:string,arg2:number):Promise<Array<codeview.Commit>>;
+
+export function GetCommitsBranch(arg1:string,arg2:string,arg3:number):Promise<Array<codeview.Commit>>;
 
 export function GetConversation(arg1:string):Promise<Array<domain.Message>>;
 
