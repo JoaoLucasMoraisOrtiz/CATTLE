@@ -819,12 +819,26 @@ func (a *App) ListDirectory(projectName, relativePath string) []map[string]inter
 }
 
 // ReadProjectFile reads lines from a file in the project.
+
+// WriteProjectFile saves content to a file in the project.
+func (a *App) WriteProjectFile(projectName, relativePath, content string) string {
+	projPath := a.getProjectPath(projectName)
+	if projPath == "" {
+		return "error: project not found"
+	}
+	full := filepath.Join(strings.TrimRight(projPath, "/"), relativePath)
+	if err := os.WriteFile(full, []byte(content), 0644); err != nil {
+		return "error: " + err.Error()
+	}
+	return "ok"
+}
 func (a *App) ReadProjectFile(projectName, relativePath string) string {
 	projPath := a.getProjectPath(projectName)
 	if projPath == "" {
 		return ""
 	}
 	full := filepath.Join(strings.TrimRight(projPath, "/"), relativePath)
+	fmt.Printf("[ReadProjectFile] project=%s rel=%s full=%s\n", projectName, relativePath, full)
 	// Try direct path first, then search in git repos
 	data, err := os.ReadFile(full)
 	if err != nil {
@@ -868,6 +882,7 @@ func (a *App) GetFileSymbols(projectName, relativePath string) []map[string]inte
 	}
 	var result []map[string]interface{}
 	for _, s := range syms {
+		fmt.Printf("[GetFileSymbols] %s: %s calls=%v\n", s.Kind, s.Name, s.Calls)
 		result = append(result, map[string]interface{}{
 			"name":       s.Name,
 			"kind":       s.Kind,

@@ -252,6 +252,7 @@ body {
 .ft-row:hover { background: var(--bg-3); }
 .ft-row.ft-selected { background: var(--accent-dim); }
 .ft-icon { font-size: 11px; width: 14px; text-align: center; flex-shrink: 0; color: var(--text-tertiary); }
+.ft-ext { font-size: 8px; width: 14px; text-align: center; flex-shrink: 0; }
 .ft-dir-name { color: var(--text-link); font-weight: 500; }
 .ft-file-name { color: var(--text-primary); }
 

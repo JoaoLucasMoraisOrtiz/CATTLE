@@ -105,19 +105,16 @@ function ftSelectFile(path) {
 }
 
 function ftFileIcon(ext) {
-  // VS Code-style colored text icons
-  const icons = {
-    '.js': ['JS', '#f0db4f'], '.jsx': ['JSX', '#61dafb'], '.ts': ['TS', '#3178c6'], '.tsx': ['TSX', '#3178c6'],
-    '.java': ['J', '#e76f00'], '.py': ['Py', '#3776ab'], '.go': ['Go', '#00add8'], '.php': ['P', '#777bb4'],
-    '.html': ['H', '#e34c26'], '.css': ['C', '#1572b6'], '.scss': ['S', '#c6538c'],
-    '.json': ['{}', '#8b949e'], '.md': ['M', '#519aba'], '.xml': ['X', '#8b949e'],
-    '.yaml': ['Y', '#8b949e'], '.yml': ['Y', '#8b949e'], '.sql': ['Q', '#e38c00'],
-    '.sh': ['$', '#3fb950'], '.bat': ['$', '#3fb950'],
-    '.gradle': ['G', '#02303a'], '.properties': ['P', '#8b949e'],
-    '.vue': ['V', '#42b883'], '.svelte': ['S', '#ff3e00'],
+  const map = {
+    '.js': '#e8d44d', '.jsx': '#61dafb', '.ts': '#3178c6', '.tsx': '#3178c6',
+    '.java': '#e76f00', '.py': '#3776ab', '.go': '#00add8', '.php': '#777bb4',
+    '.html': '#e34c26', '.css': '#1572b6', '.scss': '#c6538c',
+    '.json': '#8b949e', '.md': '#519aba', '.xml': '#8b949e',
+    '.yaml': '#cb171e', '.yml': '#cb171e', '.sql': '#e38c00',
+    '.sh': '#3fb950', '.vue': '#42b883', '.env': '#ecd53f',
   };
-  const [label, color] = icons[ext] || ['·', '#8b949e'];
-  return `<span style="color:${color};font-weight:600;font-size:9px;font-family:var(--font-mono)">${label}</span>`;
+  const color = map[ext] || '#484f58';
+  return `<span class="ft-ext" style="color:${color}">●</span>`;
 }
 
 function ftContextMenu(event, entry) {
@@ -150,6 +147,29 @@ function ftContextMenu(event, entry) {
 
 // --- Actions ---
 
+// --- Monaco Editor ---
+let monacoReady = false;
+let monacoEditor = null;
+
+(function initMonaco() {
+  if (typeof require !== 'undefined' && require.config) {
+    require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs' }});
+    require(['vs/editor/editor.main'], function() { monacoReady = true; });
+  }
+})();
+
+function getMonacoLang(path) {
+  const ext = path.split('.').pop().toLowerCase();
+  const map = {
+    js: 'javascript', jsx: 'javascript', ts: 'typescript', tsx: 'typescript',
+    java: 'java', py: 'python', go: 'go', php: 'php',
+    html: 'html', css: 'css', scss: 'scss', json: 'json',
+    xml: 'xml', yaml: 'yaml', yml: 'yaml', md: 'markdown',
+    sql: 'sql', sh: 'shell', bat: 'bat', gradle: 'groovy',
+  };
+  return map[ext] || 'plaintext';
+}
+
 async function ftViewFile(path) {
   document.getElementById('node-menu')?.remove();
   if (activeTab < 0) return;
@@ -161,17 +181,54 @@ async function ftViewFile(path) {
     modal = document.createElement('div');
     modal.id = 'diff-modal';
     modal.className = 'diff-modal-overlay';
-    modal.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
+    modal.onclick = (e) => { if (e.target === modal) { modal.style.display = 'none'; monacoEditor = null; } };
     document.body.appendChild(modal);
   }
-  modal.innerHTML = `<div class="diff-modal" style="width:70vw;max-height:80vh">
+  modal.innerHTML = `<div class="diff-modal" style="width:75vw;max-height:85vh">
     <div class="diff-modal-header">
-      <span>📄 ${path}</span>
-      <span style="cursor:pointer" onclick="document.getElementById('diff-modal').style.display='none'">✕</span>
+      <span>${path}</span>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn-cancel" onclick="saveMonacoFile('${path}')" style="font-size:11px;padding:3px 10px">Save</button>
+        <span style="cursor:pointer" onclick="document.getElementById('diff-modal').style.display='none'; monacoEditor=null;">✕</span>
+      </div>
     </div>
-    <div class="diff-modal-body"><pre style="margin:0;font-size:12px">${escapeHtml(content || 'Could not read file')}</pre></div>
+    <div id="monaco-container" style="flex:1;min-height:400px"></div>
   </div>`;
   modal.style.display = 'flex';
+
+  if (monacoReady) {
+    setTimeout(() => {
+      const container = document.getElementById('monaco-container');
+      if (!container) return;
+      monacoEditor = monaco.editor.create(container, {
+        value: content || '',
+        language: getMonacoLang(path),
+        theme: 'vs-dark',
+        minimap: { enabled: false },
+        fontSize: 13,
+        lineNumbers: 'on',
+        scrollBeyondLastLine: false,
+        automaticLayout: true,
+        readOnly: false,
+      });
+    }, 50);
+  } else {
+    // Fallback: plain textarea
+    document.getElementById('monaco-container').innerHTML =
+      `<textarea style="width:100%;height:100%;background:var(--bg-0);color:var(--text-primary);border:none;font-family:var(--font-mono);font-size:13px;padding:10px;resize:none">${escapeHtml(content || '')}</textarea>`;
+  }
+}
+
+async function saveMonacoFile(path) {
+  if (!monacoEditor || activeTab < 0) return;
+  const proj = projects[openedProjects[activeTab]];
+  const content = monacoEditor.getValue();
+  const result = await window.go.main.App.WriteProjectFile(proj.name, path, content);
+  if (result === 'ok') {
+    // Brief flash to confirm save
+    const btn = document.querySelector('#diff-modal .btn-cancel');
+    if (btn) { btn.textContent = 'Saved!'; setTimeout(() => btn.textContent = 'Save', 1000); }
+  }
 }
 
 async function ftGraphFile(path) {
