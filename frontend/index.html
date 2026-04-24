@@ -50,7 +50,6 @@
               <span class="cv-tab active" onclick="switchCVTab('gitlog',this)">Git Log</span>
               <span class="cv-tab" onclick="switchCVTab('graph',this)">Graph</span>
               <span class="cv-tab" onclick="switchCVTab('simulator',this)">Simulator</span>
-              <span class="cv-tab" onclick="switchCVTab('promptbuilder',this)">📝 Prompt</span>
             </div>
             <button onclick="openCodeConfig()" style="background:none;border:none;color:#8b949e;cursor:pointer;font-size:13px">⚙</button>
             <span style="cursor:pointer;color:#8b949e" onclick="toggleCodePanel()">▶</span>
@@ -74,27 +73,33 @@
             <div id="cv-view-simulator" style="display:none">
               <div style="padding:24px;color:#8b949e;text-align:center;font-size:13px">🔜 Simulator — coming soon</div>
             </div>
-            <div id="cv-view-promptbuilder" style="display:none">
-              <div id="pb-container">
-                <div id="pb-left">
-                  <div class="pb-section-header">📍 Symbols <span id="pb-status" style="font-weight:normal;color:#8b949e;font-size:11px"></span></div>
-                  <div id="pb-nodes"></div>
-                  <div class="pb-section-header" style="margin-top:8px">🔗 Graph</div>
-                  <div id="pb-graph"></div>
-                </div>
-                <div id="pb-right">
-                  <div class="pb-section-header">📝 Prompt</div>
-                  <div id="pb-intent-row">
-                    <input id="pb-intent" type="text" placeholder="What do you want to do?">
-                    <button class="btn-spawn" onclick="pbSearch()" style="font-size:11px;padding:4px 12px">🔍 Search</button>
-                  </div>
-                  <textarea id="pb-prompt" rows="12" spellcheck="false" placeholder="Prompt will be built here..."></textarea>
-                  <div id="pb-actions">
-                    <button class="btn-spawn" onclick="pbSend()">💬 Send</button>
-                    <button class="btn-cancel" onclick="pbCopy()">📋 Copy</button>
-                  </div>
-                </div>
-              </div>
+          </div>
+        </div>
+      </div>
+      <!-- Prompt Builder pill + panel (above terminal) -->
+      <div id="pb-pill" onclick="togglePromptBuilder()">📝 Prompt</div>
+      <div id="pb-panel" style="display:none">
+        <div id="pb-panel-bar">
+          <span>📝 Prompt Builder</span>
+          <span style="cursor:pointer" onclick="togglePromptBuilder()">▼</span>
+        </div>
+        <div id="pb-container">
+          <div id="pb-left">
+            <div class="pb-section-header">📍 Symbols <span id="pb-status" style="font-weight:normal;color:#8b949e;font-size:11px"></span></div>
+            <div id="pb-nodes"></div>
+            <div class="pb-section-header" style="margin-top:8px">🔗 Graph</div>
+            <div id="pb-graph"></div>
+          </div>
+          <div id="pb-right">
+            <div class="pb-section-header">📝 Prompt</div>
+            <div id="pb-intent-row">
+              <input id="pb-intent" type="text" placeholder="What do you want to do?" onkeydown="if(event.key==='Enter')pbSearch()">
+              <button class="btn-spawn" onclick="pbSearch()" style="font-size:11px;padding:4px 12px">🔍 Search</button>
+            </div>
+            <textarea id="pb-prompt" spellcheck="false" placeholder="Prompt will be built here..."></textarea>
+            <div id="pb-actions">
+              <button class="btn-spawn" onclick="pbSend()">💬 Send</button>
+              <button class="btn-cancel" onclick="pbCopy()">📋 Copy</button>
             </div>
           </div>
         </div>

@@ -1,8 +1,18 @@
-// ReDo! v2 — Prompt Builder (inside Code Panel)
+// ReDo! v2 — Prompt Builder (panel above terminal)
 // File references only (file:L1-L2) — agent reads with its own tools
 
 let pbSymbols = [];
 let pbSelected = new Set();
+let pbPanelOpen = false;
+
+function togglePromptBuilder() {
+  pbPanelOpen = !pbPanelOpen;
+  const panel = document.getElementById('pb-panel');
+  const pill = document.getElementById('pb-pill');
+  panel.style.display = pbPanelOpen ? 'flex' : 'none';
+  pill.style.color = pbPanelOpen ? '#58a6ff' : '';
+  if (pbPanelOpen) document.getElementById('pb-intent').focus();
+}
 
 async function pbSearch() {
   const text = document.getElementById('pb-intent').value.trim();
