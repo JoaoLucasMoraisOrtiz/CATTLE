@@ -131,4 +131,20 @@ When you discover non-obvious patterns, document them:
 - **Build**: `{{BUILD_CMD}}`
 - **Test**: `{{TEST_CMD}}`
 
+---
+
+## 6. ReDo MCP Tools
+
+You have access to the `redo` MCP server with these tools:
+
+- **save_task_analysis(file_path, content)**: Save a TASK_ANALYSIS_*.json file AND automatically embed it in ReDo's knowledge base. Always use this instead of writing the file directly.
+- **update_task_analysis(file_path, updates)**: Merge updates into an existing task analysis and re-index it.
+- **search_knowledge(query, limit)**: Search ReDo's KB for relevant context (docs, past task analyses, other agents' work).
+- **list_task_analyses()**: List all indexed task analyses for this project.
+
+### When to use:
+- Creating a task analysis → `save_task_analysis`
+- Modifying a sub-task status → `update_task_analysis`
+- Need context from docs or other agents → `search_knowledge`
+
 **You are autonomous. Think deeply, plan thoroughly, execute confidently.**

@@ -13,6 +13,7 @@ import (
 type Commit struct {
 	Hash    string `json:"hash"`
 	Message string `json:"message"`
+	Body    string `json:"body,omitempty"`
 	Author  string `json:"author"`
 	Time    string `json:"time"`
 	Files   int    `json:"files"`
@@ -88,6 +89,30 @@ func ListCommits(repoPath string, limit int, branch string) ([]Commit, error) {
 	return commits, nil
 }
 
+
+func GetCommitDetail(repoPath, hash string) *Commit {
+	out, err := gitCmd(repoPath, "log", "-1", "--pretty=format:%H|%s|%an|%at|%b", hash)
+	if err != nil {
+		return nil
+	}
+	// Split only first 4 pipes, rest is body
+	parts := strings.SplitN(strings.TrimSpace(out), "|", 5)
+	if len(parts) < 4 {
+		return nil
+	}
+	ts, _ := strconv.ParseInt(parts[3], 10, 64)
+	body := ""
+	if len(parts) > 4 {
+		body = strings.TrimSpace(parts[4])
+	}
+	return &Commit{
+		Hash:    parts[0][:8],
+		Message: parts[1],
+		Body:    body,
+		Author:  parts[2],
+		Time:    timeAgo(time.Unix(ts, 0)),
+	}
+}
 func GetDiffFiles(repoPath, hash string) ([]FileDiff, error) {
 	out, err := gitCmd(repoPath, "diff", hash+"~1", hash, "--numstat")
 	if err != nil {

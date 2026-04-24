@@ -518,35 +518,66 @@ function renderTimeline() {
 async function selectCommit(hash) {
   cvActiveHash = hash;
   renderTimeline();
-  // Sync the commit dropdown
   document.getElementById('cv-commit-select').value = hash;
   if (activeTab < 0) return;
   const proj = projects[openedProjects[activeTab]];
-  const files = await window.go.main.App.GetDiffFiles(proj.name, hash) || [];
-  renderDiffFiles(proj.name, hash, files);
-  // Also load graph if Graph tab is active
+
+  // Load commit detail + files
+  const [detail, files] = await Promise.all([
+    window.go.main.App.GetCommitDetail(proj.name, hash),
+    window.go.main.App.GetDiffFiles(proj.name, hash) || [],
+  ]);
+  renderCommitDetail(proj.name, hash, detail, files || []);
+
   const graphView = document.getElementById('cv-view-graph');
   if (graphView && graphView.style.display !== 'none') {
     loadGraph(hash);
   }
 }
 
-function renderDiffFiles(projName, hash, files) {
+function renderCommitDetail(projName, hash, detail, files) {
   const el = document.getElementById('cv-detail');
-  if (files.length === 0) {
+  if (!detail && files.length === 0) {
     el.innerHTML = '<div style="padding:16px;color:#8b949e;text-align:center;font-size:12px">No changes</div>';
     return;
   }
-  el.innerHTML = files.map((f, i) => {
-    const icon = f.status === 'added' ? '🟢' : f.status === 'deleted' ? '🔴' : '🟡';
+
+  // Commit message header
+  let html = '';
+  if (detail) {
+    html += `<div class="cv-commit-detail">
+      <div class="cv-detail-hash">${detail.hash} <span class="cv-detail-author">${escapeHtml(detail.author)}</span> <span class="cv-detail-time">${detail.time}</span></div>
+      <div class="cv-detail-msg">${escapeHtml(detail.message)}</div>
+      ${detail.body ? '<div class="cv-detail-body">' + escapeHtml(detail.body) + '</div>' : ''}
+    </div>`;
+  }
+
+  // Changed files header
+  html += `<div class="cv-files-header">${files.length} changed file${files.length !== 1 ? 's' : ''}</div>`;
+
+  // File list (VS Code style)
+  html += files.map((f, i) => {
+    const icon = f.status === 'added' ? 'A' : f.status === 'deleted' ? 'D' : 'M';
+    const iconClass = f.status === 'added' ? 'add' : f.status === 'deleted' ? 'del' : 'mod';
+    const name = f.path.split('/').pop();
+    const dir = f.path.substring(0, f.path.length - name.length);
     return `<div class="cv-file">
       <div class="cv-file-header" onclick="togglePatch('${projName}','${hash}','${f.path}',${i})">
-        <span>${icon} ${f.path}</span>
-        <span><span class="cv-stat-add">+${f.additions}</span> <span class="cv-stat-del">-${f.deletions}</span></span>
+        <div class="cv-file-info">
+          <span class="cv-file-icon cv-icon-${iconClass}">${icon}</span>
+          <span class="cv-file-name">${name}</span>
+          <span class="cv-file-dir">${dir}</span>
+        </div>
+        <div class="cv-file-stats">
+          ${f.additions > 0 ? '<span class="cv-stat-add">+' + f.additions + '</span>' : ''}
+          ${f.deletions > 0 ? '<span class="cv-stat-del">-' + f.deletions + '</span>' : ''}
+        </div>
       </div>
       <div class="cv-patch" id="cv-patch-${i}"></div>
     </div>`;
   }).join('');
+
+  el.innerHTML = html;
 }
 
 async function togglePatch(projName, hash, filePath, idx) {

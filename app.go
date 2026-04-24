@@ -801,6 +801,15 @@ func (a *App) GetGitRepos(projectName string) []string {
 	return names
 }
 
+
+func (a *App) GetCommitDetail(projectName, hash string) *codeview.Commit {
+	for _, repo := range codeview.FindGitRepos(a.getProjectPath(projectName)) {
+		if c := codeview.GetCommitDetail(repo, hash); c != nil {
+			return c
+		}
+	}
+	return nil
+}
 func (a *App) GetDiffFiles(projectName, hash string) []codeview.FileDiff {
 	for _, repo := range codeview.FindGitRepos(a.getProjectPath(projectName)) {
 		if files, err := codeview.GetDiffFiles(repo, hash); err == nil && len(files) > 0 {
