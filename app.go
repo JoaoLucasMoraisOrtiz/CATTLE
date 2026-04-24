@@ -1060,6 +1060,32 @@ func min(a, b int) int {
 	}
 	return b
 }
+
+// ReadSymbolCode reads source lines from a file in the project.
+func (a *App) ReadSymbolCode(projectName, filePath string, startLine, endLine int) string {
+	projPath := a.getProjectPath(projectName)
+	if projPath == "" {
+		return ""
+	}
+	for _, repo := range codeview.FindGitRepos(projPath) {
+		full := filepath.Join(repo, filePath)
+		data, err := os.ReadFile(full)
+		if err != nil {
+			continue
+		}
+		lines := strings.Split(string(data), "\n")
+		s := startLine - 1
+		if s < 0 {
+			s = 0
+		}
+		e := endLine
+		if e > len(lines) {
+			e = len(lines)
+		}
+		return strings.Join(lines[s:e], "\n")
+	}
+	return ""
+}
 func (a *App) BuildPrompt(projectName, hash, intent string, symbols []string) string {
 	var parts []string
 	parts = append(parts, "## Task\n"+intent)

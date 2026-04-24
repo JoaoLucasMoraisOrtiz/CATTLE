@@ -165,12 +165,6 @@ window._sendToAgent = function(sid) {
   focusPane(sid);
 };
 
-// --- Prompt Improve ---
-// Replaced by promptbuilder.js — full tab experience
-async function improvePrompt() {
-  openPromptBuilder();
-}
-
 // --- Context Optimization ---
 async function compressAgent(sessionID) {
   if (!confirm('Compress context? This will respawn the agent with a summarized conversation.')) return;
