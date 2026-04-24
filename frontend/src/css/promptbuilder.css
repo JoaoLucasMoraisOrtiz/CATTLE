@@ -21,10 +21,22 @@
 #pb-panel {
   background: #0d1117;
   border-top: 1px solid #30363d;
-  height: 320px;
+  height: 50vh;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
+#pb-resize {
+  height: 4px;
+  cursor: ns-resize;
+  background: transparent;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+}
+#pb-resize:hover { background: #58a6ff; }
 #pb-container {
   display: flex;
   flex: 1;

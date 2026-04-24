@@ -211,3 +211,22 @@ function pbCopy() {
   ta.select();
   document.execCommand('copy');
 }
+
+// --- Resize ---
+function startResizePB(e) {
+  e.preventDefault();
+  const panel = document.getElementById('pb-panel');
+  const startY = e.clientY;
+  const startH = panel.offsetHeight;
+  function onMove(ev) {
+    const delta = startY - ev.clientY;
+    const newH = Math.max(150, Math.min(window.innerHeight - 60, startH + delta));
+    panel.style.height = newH + 'px';
+  }
+  function onUp() {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
