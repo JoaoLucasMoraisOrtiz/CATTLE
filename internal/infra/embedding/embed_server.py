@@ -123,6 +123,21 @@ def _walk_symbols(node, src, filename, lang, out):
             val = node.child_by_field_name("value")
             if val and val.type in ("arrow_function", "function"):
                 kind, name = "function", _nf(node, "name", src)
+        # Next.js/React: export default function/const
+        elif node.type == "export_statement":
+            decl = node.child_by_field_name("declaration")
+            if decl:
+                if decl.type == "function_declaration":
+                    kind, name = "component", _nf(decl, "name", src)
+                elif decl.type == "lexical_declaration":
+                    for c in decl.children:
+                        if c.type == "variable_declarator":
+                            val = c.child_by_field_name("value")
+                            if val and val.type in ("arrow_function", "function", "call_expression"):
+                                kind, name = "component", _nf(c, "name", src)
+        # method_definition inside class or object
+        elif node.type == "method_definition":
+            kind, name = "method", _nf(node, "name", src)
     if name:
         calls = []
         seen = set()
@@ -148,6 +163,14 @@ def _find_calls(node, src, seen, out):
             if "." in name:
                 name = name.rsplit(".", 1)[-1]
             if name not in seen and len(name) < 60:
+                seen.add(name); out.append(name)
+    # JSX: <Component /> → treat as call to Component
+    elif node.type in ("jsx_opening_element", "jsx_self_closing_element"):
+        tag = node.child_by_field_name("name")
+        if tag:
+            name = tag.text.decode()
+            # Only PascalCase (React components), skip html tags
+            if name[0:1].isupper() and name not in seen:
                 seen.add(name); out.append(name)
     for child in node.children:
         _find_calls(child, src, seen, out)
