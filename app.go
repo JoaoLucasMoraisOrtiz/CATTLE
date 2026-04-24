@@ -910,6 +910,55 @@ func (a *App) GetSymbolGraph(projectName, hash string) *codeview.SymbolGraph {
 }
 
 // IsAgentBusy returns true if the agent received output in the last 2 seconds.
+
+// BuildPrompt assembles a rich prompt from graph selection + user intent.
+// Also saves the selection as knowledge for future reference.
+func (a *App) BuildPrompt(projectName, hash, intent string, symbols []string) string {
+	path := a.getProjectPath(projectName)
+	if path == "" {
+		return intent
+	}
+
+	// Get the graph for this commit
+	graph := a.GetSymbolGraph(projectName, hash)
+	if graph == nil || len(graph.Symbols) == 0 {
+		return intent
+	}
+
+	// Find repo path for code extraction
+	repoPath := path
+	for _, repo := range codeview.FindGitRepos(path) {
+		files, _ := codeview.GetDiffFiles(repo, hash)
+		if len(files) > 0 {
+			repoPath = repo
+			break
+		}
+	}
+
+	ctx := codeview.PromptContext{
+		Symbols: symbols,
+		Intent:  intent,
+	}
+	prompt := codeview.BuildPrompt(repoPath, graph, ctx)
+
+	// Save selection as knowledge (human-curated context is gold)
+	if a.kbRepo != nil {
+		knowledge := fmt.Sprintf("Human selected these symbols for task: %s\nSymbols: %s\nIntent: %s",
+			intent, strings.Join(symbols, ", "), intent)
+		var emb []float32
+		if a.embedder != nil {
+			emb, _ = a.embedder.Embed(knowledge)
+		}
+		a.kbRepo.SaveChunk(&domain.KBChunk{
+			Project:    projectName,
+			SourceFile: "human-selections",
+			Content:    knowledge,
+			Embedding:  emb,
+		})
+	}
+
+	return prompt
+}
 func (a *App) IsAgentBusy(sessionID string) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()

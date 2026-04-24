@@ -248,6 +248,7 @@ function renderD3Graph(graph) {
     menu.innerHTML = `
       <div class="nm-title">🔗 ${names.length} nodes selected</div>
       <div class="nm-sub">${names.join(', ')}</div>
+      <div class="nm-item" onclick="openPromptBuilder()">📝 Build Prompt</div>
       <div class="nm-item" onclick="explainRelation()">🧠 Explain relationship</div>
       <div class="nm-item" onclick="explainRelationDiff()">📄 Explain in diff context</div>
       <div class="nm-item" onclick="clearSelection()">✕ Clear selection</div>
@@ -318,6 +319,77 @@ function renderD3Graph(graph) {
     window.go.main.App.SendInput([sid], window._multiExplainPrompt);
     focusPane(sid);
     selectedNodes.clear();
+  };
+
+  // --- Prompt Builder ---
+  window.openPromptBuilder = function() {
+    document.getElementById('node-menu')?.remove();
+    const names = [...selectedNodes];
+    const syms = names.map(n => allSymbols[n]).filter(Boolean);
+
+    let modal = document.getElementById('prompt-builder');
+    if (modal) modal.remove();
+    modal = document.createElement('div');
+    modal.id = 'prompt-builder';
+    modal.className = 'diff-modal-overlay';
+    modal.style.display = 'flex';
+    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+
+    modal.innerHTML = `<div class="diff-modal" style="width:700px">
+      <div class="diff-modal-header">
+        <span>📝 Prompt Builder</span>
+        <span style="cursor:pointer" onclick="document.getElementById('prompt-builder').remove()">✕</span>
+      </div>
+      <div style="padding:12px;display:flex;flex-direction:column;gap:10px;flex:1;overflow-y:auto">
+        <div>
+          <div style="font-size:11px;color:#8b949e;margin-bottom:4px">SELECTED SYMBOLS (${names.length})</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px">
+            ${syms.map(s => `<span class="pb-chip">${s.kind === 'class' ? '🟢' : '🔵'} ${s.name} <span style="color:#8b949e;font-size:10px">${s.file}:${s.start_line}</span></span>`).join('')}
+          </div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:#8b949e;margin-bottom:4px">WHAT DO YOU WANT TO DO?</div>
+          <textarea id="pb-intent" rows="3" style="width:100%;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:6px;padding:8px;font-family:inherit;font-size:13px;resize:vertical" placeholder="Describe your intent... e.g. 'Refactor these methods to use the Strategy pattern'"></textarea>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn-spawn" onclick="generatePrompt()">⚡ Generate Prompt</button>
+          <button class="btn-cancel" onclick="document.getElementById('prompt-builder').remove()">Cancel</button>
+        </div>
+        <div id="pb-preview" style="display:none">
+          <div style="font-size:11px;color:#8b949e;margin-bottom:4px">GENERATED PROMPT (edit before sending)</div>
+          <textarea id="pb-result" rows="12" style="width:100%;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:6px;padding:8px;font-family:monospace;font-size:12px;resize:vertical"></textarea>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button class="btn-spawn" onclick="sendBuiltPrompt()">💬 Send to Agent</button>
+            <button class="btn-cancel" onclick="copyBuiltPrompt()">📋 Copy</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+    document.body.appendChild(modal);
+    document.getElementById('pb-intent').focus();
+  };
+
+  window.generatePrompt = async function() {
+    const intent = document.getElementById('pb-intent').value.trim();
+    if (!intent) { alert('Describe what you want to do'); return; }
+    const proj = projects[openedProjects[activeTab]];
+    const names = [...selectedNodes];
+    const prompt = await window.go.main.App.BuildPrompt(proj.name, cvActiveHash, intent, names);
+    document.getElementById('pb-result').value = prompt;
+    document.getElementById('pb-preview').style.display = '';
+  };
+
+  window.sendBuiltPrompt = function() {
+    const prompt = document.getElementById('pb-result').value;
+    document.getElementById('prompt-builder').remove();
+    window._multiExplainPrompt = prompt;
+    showAgentPickerForPrompt();
+  };
+
+  window.copyBuiltPrompt = function() {
+    const el = document.getElementById('pb-result');
+    el.select();
+    document.execCommand('copy');
   };
 
   function showNodeMenu(event, d) {
