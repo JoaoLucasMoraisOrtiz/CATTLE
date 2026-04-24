@@ -170,7 +170,7 @@ function pbClearGraph() {
   pbEdges = [];
   renderPBNodes();
   renderPBGraph();
-  renderPBPromptPreview();
+  // Don't touch the prompt — user's selections are already there
   document.getElementById('pb-status').textContent = '';
 }
 
