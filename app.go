@@ -965,24 +965,31 @@ func (a *App) SuggestSymbols(projectName, prompt string) []map[string]string {
 	var results []scored
 
 	if len(allSymbols) > 0 {
-		// Embed symbol names + first line
+		// Embed symbol content (name + signature + body, truncated)
 		texts := make([]string, len(allSymbols))
 		for i, s := range allSymbols {
-			texts[i] = s.Kind + " " + s.Name + " in " + s.File
+			code := ""
+			for _, repo := range repos {
+				code = codeview.ExtractCode(repo, s)
+				if code != "" {
+					break
+				}
+			}
+			if len(code) > 500 {
+				code = code[:500]
+			}
+			if code != "" {
+				texts[i] = s.Kind + " " + s.Name + " in " + s.File + "\n" + code
+			} else {
+				texts[i] = s.Kind + " " + s.Name + " in " + s.File
+			}
 		}
 		vecs, err := a.embedder.EmbedBatch(texts)
 		if err == nil {
 			for i, s := range allSymbols {
 				cos := cosineSim(promptVec, vecs[i])
-				if cos > 0.25 {
-					code := ""
-					for _, repo := range repos {
-						code = codeview.ExtractCode(repo, s)
-						if code != "" {
-							break
-						}
-					}
-					results = append(results, scored{s, cos, code})
+				if cos > 0.2 {
+					results = append(results, scored{s, cos, texts[i]})
 				}
 			}
 		}
@@ -1085,8 +1092,20 @@ func (a *App) SearchSymbol(projectName, query string) []map[string]string {
 		for f := range fileSet {
 			syms, _ := codeview.ParseFile("http://127.0.0.1:9999", filepath.Join(repo, f))
 			for _, s := range syms {
-				if strings.Contains(strings.ToLower(s.Name), query) && !seen[s.Name+f] {
-					seen[s.Name+f] = true
+				key := s.Name + f
+				if seen[key] {
+					continue
+				}
+				// Match name OR content
+				if strings.Contains(strings.ToLower(s.Name), query) {
+					seen[key] = true
+				} else {
+					code := codeview.ExtractCode(repo, s)
+					if code != "" && strings.Contains(strings.ToLower(code), query) {
+						seen[key] = true
+					}
+				}
+				if seen[key] {
 					results = append(results, map[string]string{
 						"name": s.Name, "kind": s.Kind, "file": f,
 						"line": fmt.Sprintf("%d", s.StartLine), "end_line": fmt.Sprintf("%d", s.EndLine),
