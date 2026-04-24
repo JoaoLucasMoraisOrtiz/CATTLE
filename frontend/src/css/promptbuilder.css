@@ -42,6 +42,23 @@
   flex: 1;
   overflow: hidden;
 }
+/* Vertical splitter (left | right) */
+#pb-split-v {
+  width: 4px;
+  cursor: ew-resize;
+  background: transparent;
+  flex-shrink: 0;
+}
+#pb-split-v:hover { background: #58a6ff; }
+/* Horizontal splitter (nodes | graph) */
+#pb-split-h {
+  height: 4px;
+  cursor: ns-resize;
+  background: transparent;
+  flex-shrink: 0;
+  margin: 2px 0;
+}
+#pb-split-h:hover { background: #58a6ff; }
 #pb-left {
   width: 40%;
   display: flex;
@@ -66,7 +83,7 @@
   display: flex;
   flex-direction: column;
   gap: 3px;
-  max-height: 45%;
+  flex: 1;
   overflow-y: auto;
 }
 .pb-node {

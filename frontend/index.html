@@ -84,9 +84,11 @@
           <div id="pb-left">
             <div class="pb-section-header">📍 Symbols <span id="pb-status" style="font-weight:normal;color:#8b949e;font-size:11px"></span></div>
             <div id="pb-nodes"></div>
-            <div class="pb-section-header" style="margin-top:8px">🔗 Graph</div>
+            <div id="pb-split-h" onmousedown="startResizePBH(event)"></div>
+            <div class="pb-section-header">🔗 Graph</div>
             <div id="pb-graph"></div>
           </div>
+          <div id="pb-split-v" onmousedown="startResizePBV(event)"></div>
           <div id="pb-right">
             <div class="pb-section-header">📝 Prompt</div>
             <div id="pb-intent-row">

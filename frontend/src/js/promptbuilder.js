@@ -159,6 +159,12 @@ function renderPBGraph() {
   const h = container.clientHeight || 200;
 
   const svg = d3.select(container).append('svg').attr('width', w).attr('height', h);
+  const g = svg.append('g');
+
+  // Zoom + pan
+  svg.call(d3.zoom().scaleExtent([0.3, 5]).on('zoom', (ev) => {
+    g.attr('transform', ev.transform);
+  }));
 
   const nodes = pbSymbols.map((s, i) => ({
     id: s.name, index: i, kind: s.kind, selected: pbSelected.has(i)
@@ -169,10 +175,15 @@ function renderPBGraph() {
     .force('center', d3.forceCenter(w / 2, h / 2))
     .force('collision', d3.forceCollide(25));
 
-  const node = svg.selectAll('g').data(nodes).enter().append('g')
+  const node = g.selectAll('g').data(nodes).enter().append('g')
     .style('cursor', 'pointer')
     .on('click', (ev, d) => pbToggle(d.index))
-    .on('contextmenu', (ev, d) => { ev.preventDefault(); pbNodeMenu(ev, d.index); });
+    .on('contextmenu', (ev, d) => { ev.preventDefault(); pbNodeMenu(ev, d.index); })
+    .call(d3.drag()
+      .on('start', (ev, d) => { if (!ev.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+      .on('drag', (ev, d) => { d.fx = ev.x; d.fy = ev.y; })
+      .on('end', (ev, d) => { if (!ev.active) sim.alphaTarget(0); d.fx = null; d.fy = null; })
+    );
 
   node.append('circle')
     .attr('r', d => d.kind === 'class' ? 10 : 7)
@@ -219,14 +230,44 @@ function startResizePB(e) {
   const startY = e.clientY;
   const startH = panel.offsetHeight;
   function onMove(ev) {
-    const delta = startY - ev.clientY;
-    const newH = Math.max(150, Math.min(window.innerHeight - 60, startH + delta));
+    const newH = Math.max(150, Math.min(window.innerHeight - 60, startH + (startY - ev.clientY)));
     panel.style.height = newH + 'px';
   }
-  function onUp() {
-    document.removeEventListener('mousemove', onMove);
-    document.removeEventListener('mouseup', onUp);
+  function onUp() { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+// Vertical: left | right
+function startResizePBV(e) {
+  e.preventDefault();
+  const left = document.getElementById('pb-left');
+  const container = document.getElementById('pb-container');
+  const startX = e.clientX;
+  const startW = left.offsetWidth;
+  function onMove(ev) {
+    const newW = Math.max(120, Math.min(container.offsetWidth - 150, startW + (ev.clientX - startX)));
+    left.style.width = newW + 'px';
+    left.style.flex = 'none';
   }
+  function onUp() { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+// Horizontal: nodes | graph
+function startResizePBH(e) {
+  e.preventDefault();
+  const nodes = document.getElementById('pb-nodes');
+  const left = document.getElementById('pb-left');
+  const startY = e.clientY;
+  const startH = nodes.offsetHeight;
+  function onMove(ev) {
+    const newH = Math.max(40, Math.min(left.offsetHeight - 80, startH + (ev.clientY - startY)));
+    nodes.style.flex = 'none';
+    nodes.style.height = newH + 'px';
+  }
+  function onUp() { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }
   document.addEventListener('mousemove', onMove);
   document.addEventListener('mouseup', onUp);
 }
