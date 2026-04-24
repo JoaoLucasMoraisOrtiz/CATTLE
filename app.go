@@ -1008,12 +1008,12 @@ func (a *App) SuggestSymbols(projectName, prompt string) []map[string]string {
 			preview = preview[:300] + "..."
 		}
 		out = append(out, map[string]string{
-			"name":    r.sym.Name,
-			"kind":    r.sym.Kind,
-			"file":    r.sym.File,
-			"line":    fmt.Sprintf("%d", r.sym.StartLine),
-			"preview": preview,
-			"score":   fmt.Sprintf("%.2f", r.score),
+			"name":     r.sym.Name,
+			"kind":     r.sym.Kind,
+			"file":     r.sym.File,
+			"line":     fmt.Sprintf("%d", r.sym.StartLine),
+			"end_line": fmt.Sprintf("%d", r.sym.EndLine),
+			"score":    fmt.Sprintf("%.2f", r.score),
 		})
 	}
 
@@ -1061,37 +1061,38 @@ func min(a, b int) int {
 	return b
 }
 func (a *App) BuildPrompt(projectName, hash, intent string, symbols []string) string {
-	path := a.getProjectPath(projectName)
-	if path == "" {
-		return intent
+	var parts []string
+	parts = append(parts, "## Task\n"+intent)
+
+	if len(symbols) > 0 {
+		parts = append(parts, "\n## Relevant Files (use your file read tool to inspect)")
 	}
 
-	// Get the graph for this commit
-	graph := a.GetSymbolGraph(projectName, hash)
-	if graph == nil || len(graph.Symbols) == 0 {
-		return intent
+	// Try to get graph for line ranges
+	var graph *codeview.SymbolGraph
+	if hash != "" {
+		graph = a.GetSymbolGraph(projectName, hash)
 	}
 
-	// Find repo path for code extraction
-	repoPath := path
-	for _, repo := range codeview.FindGitRepos(path) {
-		files, _ := codeview.GetDiffFiles(repo, hash)
-		if len(files) > 0 {
-			repoPath = repo
-			break
+	for _, name := range symbols {
+		found := false
+		if graph != nil {
+			for _, sym := range graph.Symbols {
+				if sym.Name == name {
+					parts = append(parts, fmt.Sprintf("- %s `%s` → %s:%d-%d", sym.Kind, sym.Name, sym.File, sym.StartLine, sym.EndLine))
+					found = true
+					break
+				}
+			}
+		}
+		if !found {
+			parts = append(parts, fmt.Sprintf("- `%s`", name))
 		}
 	}
 
-	ctx := codeview.PromptContext{
-		Symbols: symbols,
-		Intent:  intent,
-	}
-	prompt := codeview.BuildPrompt(repoPath, graph, ctx)
-
-	// Save selection as knowledge (human-curated context is gold)
-	if a.kbRepo != nil {
-		knowledge := fmt.Sprintf("Human selected these symbols for task: %s\nSymbols: %s\nIntent: %s",
-			intent, strings.Join(symbols, ", "), intent)
+	// Save selection as knowledge
+	if a.kbRepo != nil && len(symbols) > 0 {
+		knowledge := fmt.Sprintf("Human selected symbols for task: %s\nSymbols: %s", intent, strings.Join(symbols, ", "))
 		var emb []float32
 		if a.embedder != nil {
 			emb, _ = a.embedder.Embed(knowledge)
@@ -1104,7 +1105,7 @@ func (a *App) BuildPrompt(projectName, hash, intent string, symbols []string) st
 		})
 	}
 
-	return prompt
+	return strings.Join(parts, "\n")
 }
 func (a *App) IsAgentBusy(sessionID string) bool {
 	a.mu.Lock()
