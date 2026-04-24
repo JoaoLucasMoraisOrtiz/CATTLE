@@ -163,6 +163,35 @@ async function pbExplain(idx) {
   window._showAgentPicker();
 }
 
+
+async function pbSymSearch() {
+  const q = document.getElementById('pb-sym-search').value.trim();
+  if (q.length < 2 || activeTab < 0) return;
+  const proj = projects[openedProjects[activeTab]];
+
+  document.getElementById('pb-status').textContent = '⏳ Searching symbols...';
+  const results = await window.go.main.App.SearchSymbol(proj.name, q);
+  document.getElementById('pb-status').textContent = '';
+
+  if (!results || results.length === 0) {
+    document.getElementById('pb-status').textContent = 'No symbols found for "' + q + '"';
+    return;
+  }
+
+  const existing = new Set(pbSymbols.map(x => x.name + x.file));
+  let added = 0;
+  for (const r of results) {
+    if (!existing.has(r.name + r.file)) {
+      pbSymbols.push(r);
+      existing.add(r.name + r.file);
+      added++;
+    }
+  }
+  document.getElementById('pb-status').textContent = `+${added} symbols found`;
+  document.getElementById('pb-sym-search').value = '';
+  renderPBNodes();
+  renderPBPromptPreview();
+}
 function renderPBPromptPreview() {
   const ta = document.getElementById('pb-prompt');
   if (!ta) return;

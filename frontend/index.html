@@ -86,6 +86,10 @@
             <div id="pb-nodes"></div>
             <div id="pb-split-h" onmousedown="startResizePBH(event)"></div>
             <div class="pb-section-header">🔗 Graph</div>
+            <div id="pb-graph-search">
+              <input id="pb-sym-search" type="text" placeholder="Search symbol by name..." onkeydown="if(event.key==='Enter')pbSymSearch()">
+              <button onclick="pbSymSearch()" style="background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px">🔍</button>
+            </div>
             <div id="pb-graph"></div>
           </div>
           <div id="pb-split-v" onmousedown="startResizePBV(event)"></div>

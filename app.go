@@ -1063,6 +1063,44 @@ func min(a, b int) int {
 
 // ReadSymbolCode reads source lines from a file in the project.
 
+// SearchSymbol finds symbols matching a name query across the project.
+func (a *App) SearchSymbol(projectName, query string) []map[string]string {
+	projPath := a.getProjectPath(projectName)
+	if projPath == "" {
+		return nil
+	}
+	query = strings.ToLower(query)
+	var results []map[string]string
+	seen := map[string]bool{}
+
+	for _, repo := range codeview.FindGitRepos(projPath) {
+		commits, _ := codeview.ListCommits(repo, 10, "")
+		fileSet := map[string]bool{}
+		for _, c := range commits {
+			files, _ := codeview.GetDiffFiles(repo, c.Hash)
+			for _, f := range files {
+				fileSet[f.Path] = true
+			}
+		}
+		for f := range fileSet {
+			syms, _ := codeview.ParseFile("http://127.0.0.1:9999", filepath.Join(repo, f))
+			for _, s := range syms {
+				if strings.Contains(strings.ToLower(s.Name), query) && !seen[s.Name+f] {
+					seen[s.Name+f] = true
+					results = append(results, map[string]string{
+						"name": s.Name, "kind": s.Kind, "file": f,
+						"line": fmt.Sprintf("%d", s.StartLine), "end_line": fmt.Sprintf("%d", s.EndLine),
+					})
+				}
+			}
+		}
+		if len(results) >= 20 {
+			break
+		}
+	}
+	return results
+}
+
 // ExpandSymbol finds symbols connected to the given symbol (callers + callees).
 // Each result includes "edge_from" and "edge_to" for graph rendering.
 func (a *App) ExpandSymbol(projectName, symbolName, filePath string) []map[string]string {

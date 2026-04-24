@@ -103,6 +103,21 @@
 .pb-node:hover { opacity: 0.8; }
 .pb-node.selected { opacity: 1; border-color: #3fb950; }
 .pb-ref { color: #8b949e; font-family: monospace; font-size: 10px; }
+#pb-graph-search {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+#pb-sym-search {
+  flex: 1;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  color: #c9d1d9;
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 11px;
+}
+#pb-sym-search:focus { border-color: #58a6ff; outline: none; }
 #pb-graph {
   flex: 1;
   min-height: 120px;
