@@ -23,7 +23,7 @@ async function init() {
 // --- Home Screen ---
 async function showHome() {
   projects = await window.go.main.App.GetProjects();
-  document.getElementById('home-screen').style.display = '';
+  document.getElementById('home-screen').style.display = 'flex';
   document.getElementById('workspace').style.display = 'none';
   renderHomeProjects();
 }
@@ -98,7 +98,7 @@ async function openProject(idx) {
 
 function enterWorkspace() {
   document.getElementById('home-screen').style.display = 'none';
-  document.getElementById('workspace').style.display = '';
+  document.getElementById('workspace').style.display = 'flex';
   switchTab(activeTab);
 }
 
