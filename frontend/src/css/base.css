@@ -132,5 +132,5 @@ body {
 /* Workspace body: sidebar + main */
 #workspace-body { display: flex; flex: 1; min-height: 0; overflow: hidden; position: relative; }
 
-#main-area { flex: 1; display: flex; min-width: 0; }
+#main-area { flex: 1; display: flex; min-width: 0; position: relative; }
 #main-area #panes { flex: 1; display: flex; flex-wrap: wrap; gap: 2px; padding: 4px; overflow-y: auto; min-height: 0; }

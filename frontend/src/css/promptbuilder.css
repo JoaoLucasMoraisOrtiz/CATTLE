@@ -1,20 +1,26 @@
-/* Prompt Builder — pill + panel above terminal */
+/* Prompt Builder — pill + panel */
 #pb-pill {
-  display: flex;
-  align-items: center;
-  padding: 4px 10px;
-  background: #161b22;
-  border-top: 1px solid #30363d;
-  color: #8b949e;
-  font-size: 12px;
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  padding: 6px 12px;
   cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: #8b949e;
+  z-index: 50;
   user-select: none;
 }
-#pb-pill:hover { color: #58a6ff; }
+#pb-pill:hover { color: #c9d1d9; background: #161b22; }
 
 #pb-panel {
-  border-top: 1px solid #30363d;
   background: #0d1117;
+  border-top: 1px solid #30363d;
   height: 320px;
   display: flex;
   flex-direction: column;

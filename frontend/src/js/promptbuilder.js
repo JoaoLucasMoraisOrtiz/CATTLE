@@ -7,11 +7,18 @@ let pbPanelOpen = false;
 
 function togglePromptBuilder() {
   pbPanelOpen = !pbPanelOpen;
-  const panel = document.getElementById('pb-panel');
-  const pill = document.getElementById('pb-pill');
-  panel.style.display = pbPanelOpen ? 'flex' : 'none';
-  pill.style.color = pbPanelOpen ? '#58a6ff' : '';
-  if (pbPanelOpen) document.getElementById('pb-intent').focus();
+  document.getElementById('pb-panel').style.display = pbPanelOpen ? 'flex' : 'none';
+  document.getElementById('input-area').style.display = pbPanelOpen ? 'none' : '';
+  document.getElementById('pb-pill').style.color = pbPanelOpen ? '#58a6ff' : '';
+  if (pbPanelOpen) {
+    // Copy input text to intent if user typed something
+    const input = document.getElementById('input');
+    const intent = document.getElementById('pb-intent');
+    if (input.value.trim() && !intent.value.trim()) {
+      intent.value = input.value.trim();
+    }
+    intent.focus();
+  }
 }
 
 async function pbSearch() {
