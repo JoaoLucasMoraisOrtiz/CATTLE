@@ -1062,6 +1062,58 @@ func min(a, b int) int {
 }
 
 // ReadSymbolCode reads source lines from a file in the project.
+
+// ExpandSymbol finds symbols connected to the given symbol (callers + callees).
+func (a *App) ExpandSymbol(projectName, symbolName, filePath string) []map[string]string {
+	projPath := a.getProjectPath(projectName)
+	if projPath == "" {
+		return nil
+	}
+
+	var results []map[string]string
+	seen := map[string]bool{symbolName: true}
+
+	for _, repo := range codeview.FindGitRepos(projPath) {
+		// Parse the file containing the symbol
+		full := filepath.Join(repo, filePath)
+		syms, err := codeview.ParseFile("http://127.0.0.1:9999", full)
+		if err != nil {
+			continue
+		}
+
+		// Find the target symbol and its calls
+		for _, s := range syms {
+			if s.Name == symbolName {
+				for _, call := range s.Calls {
+					if !seen[call] {
+						seen[call] = true
+						// Find the called symbol's location
+						for _, s2 := range syms {
+							if s2.Name == call {
+								results = append(results, map[string]string{
+									"name": s2.Name, "kind": s2.Kind, "file": filePath,
+									"line": fmt.Sprintf("%d", s2.StartLine), "end_line": fmt.Sprintf("%d", s2.EndLine),
+								})
+								break
+							}
+						}
+					}
+				}
+			}
+			// Also find callers (symbols that call our target)
+			for _, call := range s.Calls {
+				if call == symbolName && !seen[s.Name] {
+					seen[s.Name] = true
+					results = append(results, map[string]string{
+						"name": s.Name, "kind": s.Kind, "file": filePath,
+						"line": fmt.Sprintf("%d", s.StartLine), "end_line": fmt.Sprintf("%d", s.EndLine),
+					})
+				}
+			}
+		}
+	}
+	return results
+}
 func (a *App) ReadSymbolCode(projectName, filePath string, startLine, endLine int) string {
 	projPath := a.getProjectPath(projectName)
 	if projPath == "" {

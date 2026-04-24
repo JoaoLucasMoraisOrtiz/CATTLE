@@ -77,6 +77,7 @@ function pbNodeMenu(event, idx) {
     <div class="nm-title">${s.kind} ${s.name}</div>
     <div class="nm-item" onclick="pbViewCode(${idx})">📄 View Code</div>
     <div class="nm-item" onclick="pbExplain(${idx})">🧠 Explain</div>
+    <div class="nm-item" onclick="pbExpand(${idx})">🔗 Expand Connections</div>
     <div class="nm-item" onclick="pbToggle(${idx}); document.getElementById('node-menu').remove()">
       ${pbSelected.has(idx) ? '✕ Deselect' : '✓ Select'}
     </div>
@@ -114,6 +115,35 @@ async function pbViewCode(idx) {
   modal.style.display = 'flex';
 }
 
+
+async function pbExpand(idx) {
+  document.getElementById('node-menu')?.remove();
+  const s = pbSymbols[idx];
+  if (!s || s.kind === 'kb' || activeTab < 0) return;
+  const proj = projects[openedProjects[activeTab]];
+
+  document.getElementById('pb-status').textContent = '⏳ Expanding...';
+  const connections = await window.go.main.App.ExpandSymbol(proj.name, s.name, s.file);
+  document.getElementById('pb-status').textContent = '';
+
+  if (!connections || connections.length === 0) return;
+
+  // Add new symbols, avoid duplicates
+  const existing = new Set(pbSymbols.map(x => x.name));
+  let added = 0;
+  for (const c of connections) {
+    if (!existing.has(c.name)) {
+      pbSymbols.push(c);
+      existing.add(c.name);
+      added++;
+    }
+  }
+  if (added > 0) {
+    document.getElementById('pb-status').textContent = `+${added} connections`;
+    renderPBNodes();
+    renderPBPromptPreview();
+  }
+}
 async function pbExplain(idx) {
   document.getElementById('node-menu')?.remove();
   const s = pbSymbols[idx];
