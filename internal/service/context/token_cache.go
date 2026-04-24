@@ -1,3 +1,5 @@
+// LEGACY: Token cache for compression trigger. See optimizer.go.
+
 package context
 
 import (

@@ -49,11 +49,12 @@ async function loadBranches() {
   sel.innerHTML = branches.map(b =>
     `<option value="${b.name}" ${b.current ? 'selected' : ''}>${b.name}${b.current ? ' ●' : ''}</option>`
   ).join('');
+  await loadCommits();
 }
 
-function onRepoChange() {
+async function onRepoChange() {
   cvSelectedRepo = document.getElementById('cv-repo-select').value;
-  loadBranches();
+  await loadBranches();
 }
 
 async function onBranchChange() {
@@ -493,6 +494,7 @@ async function loadCommits() {
   if (activeTab < 0) return;
   const proj = projects[openedProjects[activeTab]];
   if (!proj) return;
+  console.log('[loadCommits] repo:', cvSelectedRepo, 'branch:', cvSelectedBranch);
   if (cvSelectedRepo) {
     cvCommits = await window.go.main.App.GetCommitsForRepo(proj.name, cvSelectedRepo, cvSelectedBranch, 30) || [];
   } else if (cvSelectedBranch) {
@@ -500,6 +502,7 @@ async function loadCommits() {
   } else {
     cvCommits = await window.go.main.App.GetCommits(proj.name, 30) || [];
   }
+  console.log('[loadCommits] got', cvCommits.length, 'commits');
   renderTimeline();
   populateCommitSelect();
 }
@@ -515,7 +518,7 @@ function renderTimeline() {
   }
   el.innerHTML = filtered.map(c =>
     `<div class="cv-commit ${c.hash === cvActiveHash ? 'active' : ''}" onclick="selectCommit('${c.hash}')">
-      <div class="cv-hash">${c.hash}${c.repo ? ' <span style="color:#a371f7">'+c.repo+'</span>' : ''}</div>
+      <div class="cv-hash">${c.hash}${c.local ? ' <span class="cv-local">↑ local</span>' : ''}${c.repo ? ' <span style="color:#a371f7">'+c.repo+'</span>' : ''}</div>
       <div class="cv-msg">${escapeHtml(c.message)}</div>
       <div class="cv-meta">${c.author} · ${c.time} · ${c.files} files</div>
     </div>`

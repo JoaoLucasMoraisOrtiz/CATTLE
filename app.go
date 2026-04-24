@@ -85,12 +85,11 @@ func (a *App) initServices() {
 	a.optimizer = ctxopt.NewOptimizer(a.embedder, a.msgRepo, a.kbRepo)
 	a.tokenCache = ctxopt.NewTokenCache(a.embedder)
 
-	// Background token refresh every 2 min
-	go a.tokenRefreshLoop()
+	// LEGACY: token refresh disabled — see CompressAgent
+	// go a.tokenRefreshLoop()
 
 	if a.msgRepo != nil {
-		// TODO: conversation ingestion — define strategy later
-		// a.startIngestionLoop()
+		a.startIngestionLoop()
 	}
 }
 
@@ -930,18 +929,22 @@ func (a *App) SearchMessagesForCode(projectName, codeSnippet string) []map[strin
 	if len(keywords) == 0 {
 		return nil
 	}
+	fmt.Printf("[SearchMsgs] project=%s keywords=%v\n", projectName, keywords)
 
-	// 1. Collect from live sessions
+	// 1. Collect from live sessions (assistant only)
 	a.mu.Lock()
 	var allMsgs []domain.Message
 	for _, s := range a.sessions {
 		if s.Project == projectName {
 			msgs := a.getConversationForSession(s)
 			for i := range msgs {
+				if msgs[i].Role != "assistant" {
+					continue
+				}
 				msgs[i].Agent = s.AgentName
 				msgs[i].SessionID = s.ID
+				allMsgs = append(allMsgs, msgs[i])
 			}
-			allMsgs = append(allMsgs, msgs...)
 		}
 	}
 	a.mu.Unlock()
@@ -953,20 +956,24 @@ func (a *App) SearchMessagesForCode(projectName, codeSnippet string) []map[strin
 		if a.embedder != nil {
 			queryVec, _ = a.embedder.Embed(query)
 		}
-		stored, _ := a.msgRepo.FindRelevant(projectName, query, queryVec, 20)
+		stored, err := a.msgRepo.FindRelevant(projectName, query, queryVec, 20)
+		fmt.Printf("[SearchMsgs] SQLite: %d stored msgs (err=%v) for project=%s\n", len(stored), err, projectName)
 		// Avoid duplicates with live sessions
 		liveIDs := map[string]bool{}
 		for _, m := range allMsgs {
 			liveIDs[m.SessionID] = true
 		}
 		for _, m := range stored {
-			if !liveIDs[m.SessionID] {
+			if !liveIDs[m.SessionID] && m.Role == "assistant" {
 				allMsgs = append(allMsgs, m)
 			}
 		}
 	}
 
+	fmt.Printf("[SearchMsgs] total: %d messages to search\n", len(allMsgs))
+
 	if len(allMsgs) == 0 {
+		fmt.Printf("[SearchMsgs] no messages found (live=%d, stored search pending)\n", 0)
 		return nil
 	}
 
@@ -1056,6 +1063,9 @@ func extractKeywords(code string) []string {
 // --- Context Optimization ---
 
 // CompressAgent compresses an agent's conversation context.
+// LEGACY: Context compression disabled. Destroying cached tokens is more expensive
+// than keeping them — providers charge much less for cached vs new tokens.
+// Kept for potential future use if context windows become a bottleneck.
 func (a *App) CompressAgent(sessionID string) string {
 	a.mu.Lock()
 	session := a.sessions[sessionID]
@@ -1147,12 +1157,14 @@ func (a *App) CompressAgent(sessionID string) string {
 }
 
 // CheckTokens returns cached token count for a session.
+// LEGACY: Token counting for compression trigger. See CompressAgent.
 func (a *App) CheckTokens(sessionID string) map[string]int {
 	tokens, msgs := a.tokenCache.Get(sessionID)
 	return map[string]int{"tokens": tokens, "messages": msgs, "threshold": ctxopt.TokenThreshold}
 }
 
 // tokenRefreshLoop updates token counts every 2 min for all active sessions.
+// LEGACY: Background token refresh for compression. See CompressAgent.
 func (a *App) tokenRefreshLoop() {
 	ticker := time.NewTicker(2 * time.Minute)
 	for range ticker.C {
@@ -1210,22 +1222,30 @@ func (a *App) ingestAll() {
 			continue
 		}
 
-		// Ingest only new messages
+		// Ingest only new assistant messages
 		newMsgs := msgs[len(existing):]
-		fmt.Printf("[Ingest] %s/%s: %d new messages\n", s.Project, s.AgentName, len(newMsgs))
+		var assistantMsgs []domain.Message
+		for _, m := range newMsgs {
+			if m.Role == "assistant" {
+				assistantMsgs = append(assistantMsgs, m)
+			}
+		}
+		if len(assistantMsgs) == 0 {
+			continue
+		}
+		fmt.Printf("[Ingest] %s/%s: %d new assistant messages\n", s.Project, s.AgentName, len(assistantMsgs))
 
-		// Batch embed
-		texts := make([]string, len(newMsgs))
-		for i, m := range newMsgs {
+		texts := make([]string, len(assistantMsgs))
+		for i, m := range assistantMsgs {
 			texts[i] = m.Content
 		}
 		vecs, err := a.embedder.EmbedBatch(texts)
 		if err != nil {
 			fmt.Printf("[Ingest] embed error: %v (saving without embeddings)\n", err)
-			vecs = make([][]float32, len(newMsgs))
+			vecs = make([][]float32, len(assistantMsgs))
 		}
 
-		for i, m := range newMsgs {
+		for i, m := range assistantMsgs {
 			m.Project = s.Project
 			m.Agent = s.AgentName
 			m.SessionID = s.ID

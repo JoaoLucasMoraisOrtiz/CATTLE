@@ -1,3 +1,7 @@
+// LEGACY: Context compression module. Disabled because destroying cached tokens
+// is more expensive than keeping them. Providers charge much less for cached vs new tokens.
+// Kept for potential future use if context windows become a bottleneck.
+
 package context
 
 import (

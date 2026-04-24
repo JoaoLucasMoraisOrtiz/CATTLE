@@ -55,6 +55,9 @@ func (d *KiroDriver) ParseSessionFile(path string) ([]domain.Message, error) {
 	}
 	defer db.Close()
 
+	// Clean trailing slash for matching
+	path = strings.TrimRight(path, "/")
+
 	var raw string
 	err = db.QueryRow(
 		"SELECT value FROM conversations_v2 WHERE key = ? ORDER BY updated_at DESC LIMIT 1",

@@ -18,6 +18,7 @@ type Commit struct {
 	Time    string `json:"time"`
 	Files   int    `json:"files"`
 	Repo    string `json:"repo,omitempty"`
+	Local   bool   `json:"local,omitempty"`
 }
 
 type FileDiff struct {
@@ -61,6 +62,18 @@ func ListCommits(repoPath string, limit int, branch string) ([]Commit, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Find unpushed commit hashes
+	localHashes := map[string]bool{}
+	if branch != "" {
+		unpushed, _ := gitCmd(repoPath, "log", "--oneline", branch, "--not", "--remotes", "--pretty=format:%H")
+		for _, h := range strings.Split(strings.TrimSpace(unpushed), "\n") {
+			if len(h) >= 8 {
+				localHashes[h[:8]] = true
+			}
+		}
+	}
+
 	var commits []Commit
 	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
 		if line == "" {
@@ -72,18 +85,19 @@ func ListCommits(repoPath string, limit int, branch string) ([]Commit, error) {
 		}
 		ts, _ := strconv.ParseInt(parts[3], 10, 64)
 		t := time.Unix(ts, 0)
-		// Count changed files
+		hash := parts[0][:8]
 		fout, _ := gitCmd(repoPath, "diff-tree", "--no-commit-id", "-r", "--name-only", parts[0])
 		files := len(strings.Split(strings.TrimSpace(fout), "\n"))
 		if fout == "" {
 			files = 0
 		}
 		commits = append(commits, Commit{
-			Hash:    parts[0][:8],
+			Hash:    hash,
 			Message: parts[1],
 			Author:  parts[2],
 			Time:    timeAgo(t),
 			Files:   files,
+			Local:   localHashes[hash],
 		})
 	}
 	return commits, nil
