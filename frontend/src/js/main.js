@@ -104,12 +104,14 @@ function renderTabs() {
 }
 
 function switchTab(tabIdx) {
+  // Save current project's panes
   if (activeTab >= 0 && activeTab < openedProjects.length) {
     const prevProj = projects[openedProjects[activeTab]];
     if (prevProj) {
-      projectPanes[prevProj.name] = {};
-      Object.entries(panes).forEach(([sid, info]) => {
-        projectPanes[prevProj.name][sid] = info;
+      // Save ALL panes currently in the global map (don't reset first)
+      projectPanes[prevProj.name] = { ...panes };
+      // Hide them
+      Object.keys(panes).forEach(sid => {
         const el = document.getElementById('pane-' + sid);
         if (el) el.style.display = 'none';
       });
@@ -120,8 +122,10 @@ function switchTab(tabIdx) {
   panes = {};
   focusedPane = null;
 
+  // Hide all panes (safety)
   document.querySelectorAll('.pane').forEach(p => p.style.display = 'none');
 
+  // Restore new project's panes
   const proj = projects[openedProjects[activeTab]];
   if (proj && projectPanes[proj.name]) {
     panes = { ...projectPanes[proj.name] };
@@ -136,6 +140,10 @@ function switchTab(tabIdx) {
   renderTabs();
   updateStatus();
   renderKBList();
+
+  // Reset code viewer for new project
+  if (typeof resetCodeViewer === 'function') resetCodeViewer();
+
   refitAll();
 }
 

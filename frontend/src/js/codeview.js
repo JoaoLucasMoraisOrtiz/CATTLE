@@ -16,6 +16,21 @@ function toggleCodePanel() {
   if (codePanelOpen) loadRepos();
 }
 
+function resetCodeViewer() {
+  cvCommits = [];
+  cvActiveHash = null;
+  cvRepos = [];
+  cvSelectedRepo = '';
+  cvSelectedBranch = '';
+  document.getElementById('cv-timeline').innerHTML = '';
+  document.getElementById('cv-detail').innerHTML = '';
+  document.getElementById('cv-repo-select').innerHTML = '';
+  document.getElementById('cv-branch-select').innerHTML = '';
+  document.getElementById('cv-commit-select').innerHTML = '';
+  d3.select('#graph-svg').selectAll('*').remove();
+  if (codePanelOpen) loadRepos();
+}
+
 async function loadRepos() {
   if (activeTab < 0) return;
   const proj = projects[openedProjects[activeTab]];
