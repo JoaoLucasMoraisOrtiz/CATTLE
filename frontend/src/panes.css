@@ -1,0 +1,70 @@
+/* Panes */
+.pane {
+  flex: 1 1 48%;
+  min-width: 300px;
+  min-height: 250px;
+  max-height: 50vh;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #0d1117;
+}
+.pane.focused { border-color: #1f6feb; }
+
+/* When only 1 pane, take full height */
+.pane:only-child {
+  max-height: none;
+  flex: 1 1 100%;
+}
+
+.pane-header {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  background: #161b22;
+  border-bottom: 1px solid #30363d;
+  font-size: 12px;
+  gap: 8px;
+}
+.pane-header .dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.pane-header .agent-name { font-weight: 600; }
+.pane-header .agent-type { color: #8b949e; }
+.pane-header .close-btn {
+  cursor: pointer;
+  color: #8b949e;
+  font-size: 14px;
+}
+.pane-header .close-btn:hover { color: #da3633; }
+.pane-header .compress-btn {
+  cursor: pointer;
+  color: #8b949e;
+  font-size: 13px;
+}
+.pane-header .compress-btn:hover { color: #58a6ff; }
+.pane-header .token-count {
+  font-size: 10px;
+  color: #8b949e;
+  margin-left: auto;
+}
+
+.pane-terminal {
+  flex: 1;
+  padding: 4px;
+  overflow: hidden;
+  position: relative;
+  min-height: 0;
+}
+
+.pane-terminal .xterm {
+  height: 100%;
+}
+
+.pane-terminal .xterm-viewport {
+  overflow-y: auto !important;
+}
