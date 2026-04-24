@@ -11,8 +11,8 @@ build:
 	$(CGOFLAGS) wails build -s
 
 binary:
-	@echo "Building Go binary directly..."
-	$(CGOFLAGS) go build -tags webkit2_41 -o build/bin/redo .
+	@echo "Building Go binary..."
+	$(CGOFLAGS) go build -tags "production webkit2_41" -o build/bin/redo .
 
 clean:
 	rm -rf build/
