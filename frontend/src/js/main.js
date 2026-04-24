@@ -127,6 +127,7 @@ function switchTab(tabIdx) {
 
   // Restore new project's panes
   const proj = projects[openedProjects[activeTab]];
+  console.log('[switchTab] to:', proj?.name, 'projectPanes:', proj ? Object.keys(projectPanes[proj.name] || {}) : 'none', 'all pane DOM:', document.querySelectorAll('.pane').length);
   if (proj && projectPanes[proj.name]) {
     panes = { ...projectPanes[proj.name] };
     Object.keys(panes).forEach(sid => {
