@@ -70,7 +70,7 @@ function populateCommitSelect() {
   sel.innerHTML = '<option value="">Select commit...</option>' +
     filtered.map(c => {
       const repo = c.repo ? `[${c.repo}] ` : '';
-      return `<option value="${c.hash}">${c.hash} — ${repo}${c.message.substring(0,30)}</option>`;
+      return `<option value="${c.hash}" data-timestamp="${c.timestamp || 0}">${c.hash} — ${repo}${c.message.substring(0,30)}</option>`;
     }).join('');
 }
 
@@ -487,7 +487,11 @@ function renderD3Graph(graph) {
     document.getElementById('explain-menu')?.remove();
     const proj = projects[openedProjects[activeTab]];
     const patch = await window.go.main.App.GetFilePatch(proj.name, cvActiveHash, file);
-    const msgs = await window.go.main.App.SearchMessagesForCode(proj.name, patch);
+    // Get commit timestamp for temporal decay ranking
+    const commitSel = document.getElementById('cv-commit-select');
+    const opt = commitSel?.selectedOptions[0];
+    const commitTS = opt?.dataset?.timestamp ? parseInt(opt.dataset.timestamp) : 0;
+    const msgs = await window.go.main.App.SearchMessagesForCode(proj.name, patch, commitTS);
 
     const modal = document.getElementById('diff-modal');
     if (!modal) return;

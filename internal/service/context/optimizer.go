@@ -192,7 +192,7 @@ func (o *Optimizer) BuildInjection(project, query, currentAgent string) string {
 
 	// Top 3 messages from OTHER agents
 	if o.msgRepo != nil {
-		msgs, _ := o.msgRepo.FindRelevant(project, query, queryVec, 6)
+		msgs, _ := o.msgRepo.FindRelevant(project, query, queryVec, 6, 0)
 		count := 0
 		for _, m := range msgs {
 			if m.Agent != currentAgent && count < 3 {

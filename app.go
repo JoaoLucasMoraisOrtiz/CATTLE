@@ -1236,7 +1236,7 @@ func (a *App) IsAgentBusy(sessionID string) bool {
 
 // SearchMessagesForCode searches agent conversations for messages related to a code snippet.
 // Searches both live sessions and stored history in SQLite.
-func (a *App) SearchMessagesForCode(projectName, codeSnippet string) []map[string]string {
+func (a *App) SearchMessagesForCode(projectName, codeSnippet string, commitTimestamp int64) []map[string]string {
 	keywords := extractKeywords(codeSnippet)
 	if len(keywords) == 0 {
 		return nil
@@ -1268,7 +1268,7 @@ func (a *App) SearchMessagesForCode(projectName, codeSnippet string) []map[strin
 		if a.embedder != nil {
 			queryVec, _ = a.embedder.Embed(query)
 		}
-		stored, err := a.msgRepo.FindRelevant(projectName, query, queryVec, 20)
+		stored, err := a.msgRepo.FindRelevant(projectName, query, queryVec, 20, commitTimestamp)
 		fmt.Printf("[SearchMsgs] SQLite: %d stored msgs (err=%v) for project=%s\n", len(stored), err, projectName)
 		// Avoid duplicates with live sessions
 		liveIDs := map[string]bool{}

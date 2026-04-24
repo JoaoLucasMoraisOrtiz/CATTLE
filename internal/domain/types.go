@@ -47,6 +47,7 @@ type Message struct {
 	Role      string // "user" | "assistant"
 	Content   string
 	Embedding []float32
+	CreatedAt int64 // unix timestamp
 }
 
 // KBChunk represents an indexed piece of documentation.

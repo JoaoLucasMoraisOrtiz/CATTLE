@@ -11,14 +11,15 @@ import (
 )
 
 type Commit struct {
-	Hash    string `json:"hash"`
-	Message string `json:"message"`
-	Body    string `json:"body,omitempty"`
-	Author  string `json:"author"`
-	Time    string `json:"time"`
-	Files   int    `json:"files"`
-	Repo    string `json:"repo,omitempty"`
-	Local   bool   `json:"local,omitempty"`
+	Hash      string `json:"hash"`
+	Message   string `json:"message"`
+	Body      string `json:"body,omitempty"`
+	Author    string `json:"author"`
+	Time      string `json:"time"`
+	Timestamp int64  `json:"timestamp"`
+	Files     int    `json:"files"`
+	Repo      string `json:"repo,omitempty"`
+	Local     bool   `json:"local,omitempty"`
 }
 
 type FileDiff struct {
@@ -92,12 +93,13 @@ func ListCommits(repoPath string, limit int, branch string) ([]Commit, error) {
 			files = 0
 		}
 		commits = append(commits, Commit{
-			Hash:    hash,
-			Message: parts[1],
-			Author:  parts[2],
-			Time:    timeAgo(t),
-			Files:   files,
-			Local:   localHashes[hash],
+			Hash:      hash,
+			Message:   parts[1],
+			Author:    parts[2],
+			Time:      timeAgo(t),
+			Timestamp: ts,
+			Files:     files,
+			Local:     localHashes[hash],
 		})
 	}
 	return commits, nil

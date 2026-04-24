@@ -40,7 +40,7 @@ func (r *MessageRepo) FindBySession(sessionID string) ([]domain.Message, error) 
 
 // FindRelevant does hybrid search: cosine similarity on embeddings + FULLTEXT on content.
 // α=0.6 for semantic, 0.4 for keyword.
-func (r *MessageRepo) FindRelevant(project string, query string, queryVec []float32, limit int) ([]domain.Message, error) {
+func (r *MessageRepo) FindRelevant(project string, query string, queryVec []float32, limit int, commitTS int64) ([]domain.Message, error) {
 	// Step 1: FULLTEXT candidates
 	rows, err := r.db.Query(
 		`SELECT id, project, agent, session_id, role, content, embedding,

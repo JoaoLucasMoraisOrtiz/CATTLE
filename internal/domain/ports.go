@@ -32,7 +32,7 @@ type ConfigRepository interface {
 type MessageRepository interface {
 	Save(msg *Message) error
 	FindBySession(sessionID string) ([]Message, error)
-	FindRelevant(project string, embedding []float32, limit int) ([]Message, error)
+	FindRelevant(project string, embedding []float32, limit int, commitTS int64) ([]Message, error)
 	SaveCompressedSummary(sessionID string, summary string) error
 	GetCompressedSummary(sessionID string) (string, error)
 }

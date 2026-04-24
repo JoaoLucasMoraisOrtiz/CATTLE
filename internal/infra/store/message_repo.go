@@ -43,14 +43,16 @@ func (r *MessageRepo) FindBySession(sessionID string) ([]domain.Message, error) 
 	return msgs, nil
 }
 
-// FindRelevant does hybrid search: cosine similarity + FTS5 BM25.
-func (r *MessageRepo) FindRelevant(project, query string, queryVec []float32, limit int) ([]domain.Message, error) {
+// FindRelevant does hybrid search: cosine similarity + FTS5 BM25 + temporal decay.
+// commitTS is the unix timestamp of the commit being investigated (0 = no decay).
+func (r *MessageRepo) FindRelevant(project, query string, queryVec []float32, limit int, commitTS int64) ([]domain.Message, error) {
 	// FTS5 candidates
 	fq := ftsQuery(query)
 	var ftsRows *sql.Rows
 	if fq != "" {
 		ftsRows, _ = r.db.Query(
-			`SELECT m.id, m.project, m.agent, m.session_id, m.role, m.content, m.embedding, bm25(messages_fts) AS score
+			`SELECT m.id, m.project, m.agent, m.session_id, m.role, m.content, m.embedding, bm25(messages_fts) AS score,
+			        CAST(strftime('%s', m.created_at) AS INTEGER) AS ts
 			 FROM messages_fts f JOIN messages m ON f.rowid = m.id
 			 WHERE m.project=? AND messages_fts MATCH ? ORDER BY score LIMIT ?`,
 			project, fq, limit*3,
@@ -61,6 +63,7 @@ func (r *MessageRepo) FindRelevant(project, query string, queryVec []float32, li
 		msg   domain.Message
 		bm25  float64
 		cos   float64
+		decay float64
 		final float64
 	}
 	seen := map[int64]bool{}
@@ -71,11 +74,14 @@ func (r *MessageRepo) FindRelevant(project, query string, queryVec []float32, li
 		for ftsRows.Next() {
 			var s scored
 			var emb []byte
-			ftsRows.Scan(&s.msg.ID, &s.msg.Project, &s.msg.Agent, &s.msg.SessionID, &s.msg.Role, &s.msg.Content, &emb, &s.bm25)
-			s.bm25 = -s.bm25 // FTS5 bm25 returns negative (lower=better)
+			var ts int64
+			ftsRows.Scan(&s.msg.ID, &s.msg.Project, &s.msg.Agent, &s.msg.SessionID, &s.msg.Role, &s.msg.Content, &emb, &s.bm25, &ts)
+			s.bm25 = -s.bm25
+			s.msg.CreatedAt = ts
 			if v := decodeVec(emb); v != nil && queryVec != nil {
 				s.cos = cosine(queryVec, v)
 			}
+			s.decay = temporalDecay(commitTS, ts)
 			candidates = append(candidates, s)
 			seen[s.msg.ID] = true
 		}
@@ -84,28 +90,32 @@ func (r *MessageRepo) FindRelevant(project, query string, queryVec []float32, li
 	// Embedding-only candidates
 	if queryVec != nil {
 		allRows, _ := r.db.Query(
-			`SELECT id, project, agent, session_id, role, content, embedding FROM messages WHERE project=?`, project,
+			`SELECT id, project, agent, session_id, role, content, embedding,
+			        CAST(strftime('%s', created_at) AS INTEGER) AS ts
+			 FROM messages WHERE project=?`, project,
 		)
 		if allRows != nil {
 			defer allRows.Close()
 			for allRows.Next() {
 				var m domain.Message
 				var emb []byte
-				allRows.Scan(&m.ID, &m.Project, &m.Agent, &m.SessionID, &m.Role, &m.Content, &emb)
+				var ts int64
+				allRows.Scan(&m.ID, &m.Project, &m.Agent, &m.SessionID, &m.Role, &m.Content, &emb, &ts)
 				if seen[m.ID] {
 					continue
 				}
+				m.CreatedAt = ts
 				if v := decodeVec(emb); v != nil {
 					cos := cosine(queryVec, v)
 					if cos > 0.3 {
-						candidates = append(candidates, scored{msg: m, cos: cos})
+						candidates = append(candidates, scored{msg: m, cos: cos, decay: temporalDecay(commitTS, ts)})
 					}
 				}
 			}
 		}
 	}
 
-	// Normalize + combine (α=0.6 semantic, 0.4 keyword)
+	// Normalize + combine: α=0.4 semantic, β=0.2 keyword, γ=0.4 temporal
 	maxBM, maxCos := 0.0, 0.0
 	for _, c := range candidates {
 		if c.bm25 > maxBM { maxBM = c.bm25 }
@@ -115,7 +125,7 @@ func (r *MessageRepo) FindRelevant(project, query string, queryVec []float32, li
 		nb, nc := 0.0, 0.0
 		if maxBM > 0 { nb = candidates[i].bm25 / maxBM }
 		if maxCos > 0 { nc = candidates[i].cos / maxCos }
-		candidates[i].final = 0.6*nc + 0.4*nb
+		candidates[i].final = 0.4*nc + 0.2*nb + 0.4*candidates[i].decay
 	}
 	// Sort desc
 	for i := range candidates {
@@ -132,6 +142,17 @@ func (r *MessageRepo) FindRelevant(project, query string, queryVec []float32, li
 		result = append(result, c.msg)
 	}
 	return result, nil
+}
+
+// temporalDecay returns a score [0,1] based on how close a message is to a commit.
+// exp(-λ * |days|) where λ = 0.1
+// Same day: ~1.0, same week: ~0.5, same month: ~0.05, no commitTS: 0.5 (neutral)
+func temporalDecay(commitTS, msgTS int64) float64 {
+	if commitTS == 0 || msgTS == 0 {
+		return 0.5 // neutral when no timestamp
+	}
+	days := math.Abs(float64(commitTS-msgTS)) / 86400.0
+	return math.Exp(-0.1 * days)
 }
 
 func (r *MessageRepo) SaveSummary(project, agent, sessionID, content string, msgCount int) error {
