@@ -257,6 +257,17 @@ body {
 }
 #input:focus { border-color: #1f6feb; }
 
+#improve-btn {
+  background: #21262d;
+  color: #8b949e;
+  border: 1px solid #30363d;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+#improve-btn:hover { color: #58a6ff; border-color: #58a6ff; }
+
 #send-btn {
   background: #238636;
   color: #fff;
@@ -852,3 +863,22 @@ body {
   font-size: 11px;
   color: #c9d1d9;
 }
+
+/* Improve panel */
+.improve-header { font-size: 12px; font-weight: 600; color: #58a6ff; padding: 4px 0 8px; }
+.improve-node {
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: all .15s;
+}
+.improve-node:hover { opacity: 0.8; }
+.improve-node.selected { opacity: 1; border-color: #3fb950; }
+.improve-node-header { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
+.improve-explain { cursor: pointer; font-size: 14px; opacity: 0.5; }
+.improve-explain:hover { opacity: 1; }
+.improve-preview { font-size: 10px; color: #8b949e; margin-top: 3px; font-family: monospace; line-height: 1.3; overflow: hidden; max-height: 40px; }

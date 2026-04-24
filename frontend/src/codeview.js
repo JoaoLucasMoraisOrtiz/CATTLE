@@ -313,6 +313,10 @@ function renderD3Graph(graph) {
     document.body.appendChild(picker);
   }
 
+  function showAgentPickerForPrompt() {
+    window._showAgentPicker();
+  }
+
   window.sendMultiExplain = function(sid) {
     document.getElementById('agent-picker')?.remove();
     if (codePanelOpen) toggleCodePanel();

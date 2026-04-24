@@ -802,6 +802,152 @@ setInterval(() => {
   Object.keys(panes).forEach(sid => refreshTokenCount(sid));
 }, 60000);
 
+// --- Agent Picker (global) ---
+window._showAgentPicker = function() {
+  const paneList = Object.entries(panes);
+  if (paneList.length === 0) { alert('No agents open'); return; }
+  let picker = document.getElementById('agent-picker');
+  if (picker) picker.remove();
+  picker = document.createElement('div');
+  picker.id = 'agent-picker';
+  picker.className = 'node-menu';
+  picker.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:600';
+  let html = '<div class="nm-title">💬 Send to which agent?</div>';
+  paneList.forEach(([sid, info]) => {
+    html += `<div class="nm-item" onclick="window._sendToAgent('${sid}')">${info.agent.name}</div>`;
+  });
+  html += '<div class="nm-item" onclick="document.getElementById(\'agent-picker\').remove()">Cancel</div>';
+  picker.innerHTML = html;
+  document.body.appendChild(picker);
+};
+
+window._sendToAgent = function(sid) {
+  document.getElementById('agent-picker')?.remove();
+  if (typeof codePanelOpen !== 'undefined' && codePanelOpen) toggleCodePanel();
+  window.go.main.App.SendInput([sid], window._multiExplainPrompt);
+  focusPane(sid);
+};
+
+// --- Prompt Improve ---
+let improveSymbols = []; // suggested symbols
+let improveSelected = new Set(); // indices the user selected
+
+async function improvePrompt() {
+  const input = document.getElementById('input');
+  const text = input.value.trim();
+  if (text.length < 5) { alert('Type your prompt first, then click 🔍'); return; }
+  if (activeTab < 0) return;
+  const proj = projects[openedProjects[activeTab]];
+
+  setSendEnabled(false);
+  document.getElementById('improve-btn').textContent = '⏳';
+
+  const suggestions = await window.go.main.App.SuggestSymbols(proj.name, text);
+  document.getElementById('improve-btn').textContent = '🔍';
+
+  if (!suggestions || suggestions.length === 0) {
+    setSendEnabled(true);
+    alert('No relevant code found for this prompt.');
+    return;
+  }
+
+  improveSymbols = suggestions;
+  improveSelected = new Set();
+  showImprovePanel();
+}
+
+function showImprovePanel() {
+  const el = document.getElementById('injection-preview');
+  el.innerHTML = `<div class="improve-header">🔍 Relevant code found — select what to include:</div>` +
+    improveSymbols.map((s, i) => {
+      const icon = s.kind === 'kb' ? '📚' : s.kind === 'class' ? '🟢' : '🔵';
+      return `<div class="improve-node ${improveSelected.has(i) ? 'selected' : ''}" onclick="toggleImproveNode(${i})">
+        <div class="improve-node-header">
+          <span>${icon} <b>${s.name}</b> <span style="color:#8b949e">${s.kind !== 'kb' ? s.file + ':' + s.line : s.file}</span></span>
+          <span class="improve-explain" onclick="event.stopPropagation(); explainNode(${i})" title="Explain this">❓</span>
+        </div>
+        <div class="improve-preview">${escapeHtml(s.preview || '').substring(0, 150)}</div>
+      </div>`;
+    }).join('') +
+    `<div style="display:flex;gap:8px;padding:6px 0">
+      <button class="btn-spawn" onclick="applyImprove()" style="font-size:11px;padding:4px 12px">⚡ Build & Send</button>
+      <button class="btn-cancel" onclick="hideImprovePanel()" style="font-size:11px;padding:4px 12px">Cancel</button>
+    </div>`;
+  el.classList.add('visible');
+  setSendEnabled(true);
+}
+
+function toggleImproveNode(idx) {
+  if (improveSelected.has(idx)) improveSelected.delete(idx);
+  else improveSelected.add(idx);
+  // Update visual
+  const nodes = document.querySelectorAll('.improve-node');
+  nodes.forEach((n, i) => n.classList.toggle('selected', improveSelected.has(i)));
+}
+
+async function explainNode(idx) {
+  const s = improveSymbols[idx];
+  if (!s) return;
+  // Show the full code in a tooltip/modal
+  let modal = document.getElementById('diff-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'diff-modal';
+    modal.className = 'diff-modal-overlay';
+    modal.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
+    document.body.appendChild(modal);
+  }
+  const title = s.kind === 'kb' ? `📚 ${s.name}` : `${s.kind} ${s.name} — ${s.file}:${s.line}`;
+  modal.innerHTML = `<div class="diff-modal">
+    <div class="diff-modal-header">
+      <span>${title}</span>
+      <span style="cursor:pointer" onclick="document.getElementById('diff-modal').style.display='none'">✕</span>
+    </div>
+    <div class="diff-modal-body"><pre style="margin:0">${escapeHtml(s.preview || 'No preview')}</pre></div>
+  </div>`;
+  modal.style.display = 'flex';
+}
+
+async function applyImprove() {
+  if (improveSelected.size === 0) {
+    alert('Select at least one symbol to include');
+    return;
+  }
+  const input = document.getElementById('input');
+  const intent = input.value.trim();
+  const proj = projects[openedProjects[activeTab]];
+  const selectedNames = [...improveSelected].map(i => improveSymbols[i].name);
+
+  // Use BuildPrompt if we have a commit, otherwise build locally
+  let prompt;
+  if (cvActiveHash) {
+    prompt = await window.go.main.App.BuildPrompt(proj.name, cvActiveHash, intent, selectedNames);
+  } else {
+    // Build simple prompt with previews
+    let parts = ['## Task\n' + intent, '\n## Relevant Code'];
+    for (const i of improveSelected) {
+      const s = improveSymbols[i];
+      parts.push(`\n### ${s.kind} \`${s.name}\` (${s.file})\n\`\`\`\n${s.preview}\n\`\`\``);
+    }
+    prompt = parts.join('\n');
+  }
+
+  hideImprovePanel();
+  input.value = '';
+
+  // Show agent picker
+  window._multiExplainPrompt = prompt;
+  showAgentPickerForPrompt();
+}
+
+function hideImprovePanel() {
+  improveSymbols = [];
+  improveSelected.clear();
+  const el = document.getElementById('injection-preview');
+  el.innerHTML = '';
+  el.classList.remove('visible');
+}
+
 // --- Resize ---
 function refitAll() {
   Object.entries(panes).forEach(([sid, { fitAddon, term }]) => {

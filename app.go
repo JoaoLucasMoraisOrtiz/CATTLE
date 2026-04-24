@@ -913,6 +913,153 @@ func (a *App) GetSymbolGraph(projectName, hash string) *codeview.SymbolGraph {
 
 // BuildPrompt assembles a rich prompt from graph selection + user intent.
 // Also saves the selection as knowledge for future reference.
+
+// SuggestSymbols finds code symbols relevant to a user's prompt.
+// Returns symbols with their code snippet for the user to review.
+func (a *App) SuggestSymbols(projectName, prompt string) []map[string]string {
+	path := a.getProjectPath(projectName)
+	if path == "" || a.embedder == nil {
+		return nil
+	}
+
+	// Embed the prompt
+	promptVec, err := a.embedder.Embed(prompt)
+	if err != nil {
+		return nil
+	}
+
+	// Get all KB chunks and find code-related ones
+	if a.kbRepo == nil {
+		return nil
+	}
+	chunks, _ := a.kbRepo.FindRelevant(projectName, prompt, promptVec, 10)
+
+	// Also parse recent files for symbols
+	repos := codeview.FindGitRepos(path)
+	var allSymbols []codeview.Symbol
+	for _, repo := range repos {
+		// Get files from latest commits
+		commits, _ := codeview.ListCommits(repo, 5, "")
+		fileSet := map[string]bool{}
+		for _, c := range commits {
+			files, _ := codeview.GetDiffFiles(repo, c.Hash)
+			for _, f := range files {
+				fileSet[f.Path] = true
+			}
+		}
+		for f := range fileSet {
+			syms, _ := codeview.ParseFile("http://127.0.0.1:9999", filepath.Join(repo, f))
+			for i := range syms {
+				syms[i].File = f
+			}
+			allSymbols = append(allSymbols, syms...)
+		}
+	}
+
+	// Score symbols by embedding similarity to prompt
+	type scored struct {
+		sym   codeview.Symbol
+		score float64
+		code  string
+	}
+	var results []scored
+
+	if len(allSymbols) > 0 {
+		// Embed symbol names + first line
+		texts := make([]string, len(allSymbols))
+		for i, s := range allSymbols {
+			texts[i] = s.Kind + " " + s.Name + " in " + s.File
+		}
+		vecs, err := a.embedder.EmbedBatch(texts)
+		if err == nil {
+			for i, s := range allSymbols {
+				cos := cosineSim(promptVec, vecs[i])
+				if cos > 0.25 {
+					code := ""
+					for _, repo := range repos {
+						code = codeview.ExtractCode(repo, s)
+						if code != "" {
+							break
+						}
+					}
+					results = append(results, scored{s, cos, code})
+				}
+			}
+		}
+	}
+
+	// Sort by score desc
+	for i := range results {
+		for j := i + 1; j < len(results); j++ {
+			if results[j].score > results[i].score {
+				results[i], results[j] = results[j], results[i]
+			}
+		}
+	}
+
+	// Return top 8
+	var out []map[string]string
+	for i, r := range results {
+		if i >= 8 {
+			break
+		}
+		preview := r.code
+		if len(preview) > 300 {
+			preview = preview[:300] + "..."
+		}
+		out = append(out, map[string]string{
+			"name":    r.sym.Name,
+			"kind":    r.sym.Kind,
+			"file":    r.sym.File,
+			"line":    fmt.Sprintf("%d", r.sym.StartLine),
+			"preview": preview,
+			"score":   fmt.Sprintf("%.2f", r.score),
+		})
+	}
+
+	// Also add KB chunk matches
+	for _, c := range chunks {
+		if len(out) >= 10 {
+			break
+		}
+		name := c.SourceFile
+		if idx := strings.LastIndex(name, "/"); idx >= 0 {
+			name = name[idx+1:]
+		}
+		out = append(out, map[string]string{
+			"name":    name,
+			"kind":    "kb",
+			"file":    c.SourceFile,
+			"preview": c.Content[:min(300, len(c.Content))],
+			"score":   "kb",
+		})
+	}
+
+	return out
+}
+
+func cosineSim(a, b []float32) float64 {
+	if len(a) != len(b) {
+		return 0
+	}
+	var dot, na, nb float64
+	for i := range a {
+		dot += float64(a[i]) * float64(b[i])
+		na += float64(a[i]) * float64(a[i])
+		nb += float64(b[i]) * float64(b[i])
+	}
+	if na == 0 || nb == 0 {
+		return 0
+	}
+	return dot / (na * nb)
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
 func (a *App) BuildPrompt(projectName, hash, intent string, symbols []string) string {
 	path := a.getProjectPath(projectName)
 	if path == "" {

@@ -72,6 +72,11 @@ func BuildPrompt(repoPath string, graph *SymbolGraph, ctx PromptContext) string 
 }
 
 func extractSymbolCode(repoPath string, sym Symbol) string {
+	return ExtractCode(repoPath, sym)
+}
+
+// ExtractCode reads the source lines for a symbol.
+func ExtractCode(repoPath string, sym Symbol) string {
 	path := filepath.Join(repoPath, sym.File)
 	data, err := os.ReadFile(path)
 	if err != nil {
