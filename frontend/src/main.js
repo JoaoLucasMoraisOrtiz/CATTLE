@@ -646,11 +646,13 @@ function renderKBList() {
 
 async function addKBDoc() {
   if (activeTab < 0) return;
-  const path = await window.go.main.App.PickFile();
-  if (!path) return;
+  const paths = await window.go.main.App.PickFiles();
+  if (!paths || paths.length === 0) return;
   const proj = projects[openedProjects[activeTab]];
-  showKBLoading('Indexing ' + path.split('/').pop() + '...');
-  const result = await window.go.main.App.AddKBDoc(proj.name, path);
+  showKBLoading(`Indexing ${paths.length} file${paths.length > 1 ? 's' : ''}...`);
+  for (const path of paths) {
+    await window.go.main.App.AddKBDoc(proj.name, path);
+  }
   hideKBLoading();
   projects = await window.go.main.App.GetProjects();
   renderKBList();

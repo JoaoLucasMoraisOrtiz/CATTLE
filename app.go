@@ -193,6 +193,7 @@ func (a *App) SpawnAgent(projectName, agentName, command, color, cliType string)
 	if err != nil {
 		return "error:env build failed: " + err.Error()
 	}
+	terminal.WriteAgentMD(homeDir, *proj)
 
 	cmd := driver.SpawnCommand(agent)
 	pty, err := terminal.Spawn(cmd, workDir, env)
@@ -421,6 +422,7 @@ func (a *App) RespawnProject(projectName string) map[string]string {
 			fmt.Printf("[RespawnProject] BuildEnv error for %s: %v\n", agent.Name, err)
 			continue
 		}
+		terminal.WriteAgentMD(homeDir, *proj)
 
 		// Try resume first, fallback to normal spawn
 		cmd := driver.ResumeCommand(agent)
@@ -510,6 +512,21 @@ func (a *App) PickFile() string {
 		return ""
 	}
 	return path
+}
+
+// PickFiles opens a native file dialog for multiple selection.
+func (a *App) PickFiles() []string {
+	paths, err := runtime.OpenMultipleFilesDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "Select Knowledge Documents",
+		Filters: []runtime.FileFilter{
+			{DisplayName: "Documents", Pattern: "*.md;*.txt;*.py;*.go;*.js;*.ts;*.json;*.yaml;*.yml;*.toml;*.pdf;*.png;*.jpg"},
+			{DisplayName: "All Files", Pattern: "*"},
+		},
+	})
+	if err != nil {
+		return nil
+	}
+	return paths
 }
 
 // PickDirectory opens a native directory dialog.
