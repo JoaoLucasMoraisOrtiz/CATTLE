@@ -825,26 +825,45 @@ func (a *App) ReadProjectFile(projectName, relativePath string) string {
 		return ""
 	}
 	full := filepath.Join(strings.TrimRight(projPath, "/"), relativePath)
-	info, err := os.Stat(full)
-	if err != nil || info.IsDir() || info.Size() > 512*1024 {
-		return "" // skip dirs and files > 512KB
-	}
+	// Try direct path first, then search in git repos
 	data, err := os.ReadFile(full)
 	if err != nil {
+		for _, repo := range codeview.FindGitRepos(projPath) {
+			alt := filepath.Join(repo, relativePath)
+			data, err = os.ReadFile(alt)
+			if err == nil {
+				break
+			}
+		}
+	}
+	if err != nil {
+		fmt.Printf("[ReadProjectFile] not found: %s (tried %s)\n", relativePath, full)
+		return ""
+	}
+	if len(data) > 512*1024 {
 		return ""
 	}
 	return string(data)
 }
 
-// GetFileSymbols parses a file and returns its AST symbols.
 func (a *App) GetFileSymbols(projectName, relativePath string) []map[string]interface{} {
 	projPath := a.getProjectPath(projectName)
 	if projPath == "" {
 		return nil
 	}
 	full := filepath.Join(strings.TrimRight(projPath, "/"), relativePath)
+	// Try direct, then in git repos
 	syms, err := codeview.ParseFile("http://127.0.0.1:9999", full)
-	if err != nil || len(syms) == 0 {
+	if (err != nil || len(syms) == 0) {
+		for _, repo := range codeview.FindGitRepos(projPath) {
+			alt := filepath.Join(repo, relativePath)
+			syms, err = codeview.ParseFile("http://127.0.0.1:9999", alt)
+			if err == nil && len(syms) > 0 {
+				break
+			}
+		}
+	}
+	if len(syms) == 0 {
 		return nil
 	}
 	var result []map[string]interface{}

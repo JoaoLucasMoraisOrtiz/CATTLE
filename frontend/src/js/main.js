@@ -182,15 +182,15 @@ async function showProjectPicker() {
   const el = document.getElementById('project-list');
   el.innerHTML = projects.map((p, i) => {
     const opened = openedProjects.includes(i);
-    return `<div class="project-list-item" style="display:flex;justify-content:space-between;align-items:center">
-      <div onclick="pickProject(${i})" style="cursor:pointer;flex:1">
-        <div class="pli-name">${p.name} ${opened ? '<span style="color:#3fb950">● open</span>' : ''}</div>
-        <div class="pli-path">${p.path}</div>
+    return `<div class="project-list-item" onclick="pickProject(${i})">
+      <div class="pli-info">
+        <span class="pli-name">${p.name}</span>
+        ${opened ? '<span class="pli-badge">open</span>' : ''}
       </div>
-      <span class="delete-btn" onclick="event.stopPropagation();closeProjectModal();deleteProject(${i})" title="Delete">🗑</span>
+      <div class="pli-path">${p.path}</div>
     </div>`;
   }).join('');
-  if (projects.length === 0) el.innerHTML = '<p style="color:#8b949e;text-align:center">No projects</p>';
+  if (projects.length === 0) el.innerHTML = '<p style="color:var(--text-tertiary);text-align:center;padding:16px">No projects yet</p>';
   document.getElementById('project-modal').classList.add('active');
 }
 function closeProjectModal() { document.getElementById('project-modal').classList.remove('active'); }

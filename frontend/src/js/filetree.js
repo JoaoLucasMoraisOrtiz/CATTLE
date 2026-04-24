@@ -56,6 +56,7 @@ function renderTreeLevel(container, entries, depth) {
       row.onclick = (e) => { e.stopPropagation(); toggleDir(row, entry.path, depth); };
     } else {
       row.onclick = (e) => { e.stopPropagation(); ftSelectFile(entry.path); };
+      row.ondblclick = (e) => { e.stopPropagation(); ftViewFile(entry.path); };
     }
     row.oncontextmenu = (e) => { e.preventDefault(); ftContextMenu(e, entry); };
 
@@ -104,7 +105,19 @@ function ftSelectFile(path) {
 }
 
 function ftFileIcon(ext) {
-  return ''; // clean UI — no emoji icons, just indentation
+  // VS Code-style colored text icons
+  const icons = {
+    '.js': ['JS', '#f0db4f'], '.jsx': ['JSX', '#61dafb'], '.ts': ['TS', '#3178c6'], '.tsx': ['TSX', '#3178c6'],
+    '.java': ['J', '#e76f00'], '.py': ['Py', '#3776ab'], '.go': ['Go', '#00add8'], '.php': ['P', '#777bb4'],
+    '.html': ['H', '#e34c26'], '.css': ['C', '#1572b6'], '.scss': ['S', '#c6538c'],
+    '.json': ['{}', '#8b949e'], '.md': ['M', '#519aba'], '.xml': ['X', '#8b949e'],
+    '.yaml': ['Y', '#8b949e'], '.yml': ['Y', '#8b949e'], '.sql': ['Q', '#e38c00'],
+    '.sh': ['$', '#3fb950'], '.bat': ['$', '#3fb950'],
+    '.gradle': ['G', '#02303a'], '.properties': ['P', '#8b949e'],
+    '.vue': ['V', '#42b883'], '.svelte': ['S', '#ff3e00'],
+  };
+  const [label, color] = icons[ext] || ['·', '#8b949e'];
+  return `<span style="color:${color};font-weight:600;font-size:9px;font-family:var(--font-mono)">${label}</span>`;
 }
 
 function ftContextMenu(event, entry) {
@@ -283,4 +296,12 @@ function switchSidebarTab(tab) {
   document.getElementById('kb-panel').style.display = tab === 'kb' ? '' : 'none';
   document.getElementById('files-panel').style.display = tab === 'files' ? '' : 'none';
   if (tab === 'files') renderFileTreeRoot();
+}
+
+function toggleSidebar() {
+  const sb = document.getElementById('sidebar');
+  sb.classList.toggle('collapsed');
+  const btn = sb.querySelector('.sidebar-collapse');
+  if (btn) btn.textContent = sb.classList.contains('collapsed') ? '▶' : '◀';
+  setTimeout(refitAll, 200);
 }

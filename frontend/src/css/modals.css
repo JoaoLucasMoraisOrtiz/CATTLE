@@ -108,6 +108,22 @@
   font-family: var(--font-ui);
 }
 .btn-cancel:hover { border-color: var(--border-hover); color: var(--text-primary); }
+
+/* Project list */
+.project-list-item {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 6px;
+  cursor: pointer;
+  transition: all .1s;
+}
+.project-list-item:hover { border-color: var(--accent); background: var(--accent-dim); }
+.pli-info { display: flex; align-items: center; gap: 8px; }
+.pli-name { font-weight: 600; font-size: 13px; }
+.pli-badge { font-size: 10px; color: var(--success); border: 1px solid var(--success); padding: 1px 6px; border-radius: 10px; }
+.pli-path { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .btn-spawn {
   padding: 8px 16px;
   background: var(--accent);
