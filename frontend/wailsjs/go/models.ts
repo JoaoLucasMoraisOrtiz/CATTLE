@@ -17,10 +17,13 @@ export namespace codeview {
 	export class Commit {
 	    hash: string;
 	    message: string;
+	    body?: string;
 	    author: string;
 	    time: string;
+	    timestamp: number;
 	    files: number;
 	    repo?: string;
+	    local?: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new Commit(source);
@@ -30,10 +33,13 @@ export namespace codeview {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.hash = source["hash"];
 	        this.message = source["message"];
+	        this.body = source["body"];
 	        this.author = source["author"];
 	        this.time = source["time"];
+	        this.timestamp = source["timestamp"];
 	        this.files = source["files"];
 	        this.repo = source["repo"];
+	        this.local = source["local"];
 	    }
 	}
 	export class Edge {
@@ -161,6 +167,7 @@ export namespace domain {
 	    Role: string;
 	    Content: string;
 	    Embedding: number[];
+	    CreatedAt: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new Message(source);
@@ -175,6 +182,7 @@ export namespace domain {
 	        this.Role = source["Role"];
 	        this.Content = source["Content"];
 	        this.Embedding = source["Embedding"];
+	        this.CreatedAt = source["CreatedAt"];
 	    }
 	}
 	export class ProjectConfig {

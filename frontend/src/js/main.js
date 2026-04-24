@@ -58,14 +58,32 @@ async function openProject(idx) {
     enterWorkspace();
     return;
   }
+
+  // Save current panes BEFORE changing activeTab
+  if (activeTab >= 0 && activeTab < openedProjects.length) {
+    const prevProj = projects[openedProjects[activeTab]];
+    if (prevProj) {
+      projectPanes[prevProj.name] = { ...panes };
+      Object.keys(panes).forEach(sid => {
+        const el = document.getElementById('pane-' + sid);
+        if (el) el.style.display = 'none';
+      });
+    }
+  }
+
   openedProjects.push(idx);
   activeTab = openedProjects.length - 1;
+
+  // Clear for new project
+  panes = {};
+  focusedPane = null;
+  document.querySelectorAll('.pane').forEach(p => p.style.display = 'none');
+
   enterWorkspace();
 
   const proj = projects[idx];
   if (proj.agents && proj.agents.length > 0 && (!projectPanes[proj.name] || Object.keys(projectPanes[proj.name]).length === 0)) {
     const result = await window.go.main.App.RespawnProject(proj.name);
-    console.log('[RespawnProject] result:', JSON.stringify(result));
     if (result) {
       const colors = { kiro: '#f0883e', gemini: '#1f6feb', claude: '#a371f7', codex: '#3fb950' };
       for (const [agentName, sid] of Object.entries(result)) {
@@ -76,6 +94,7 @@ async function openProject(idx) {
       }
     }
   }
+}
 }
 
 function enterWorkspace() {
@@ -104,13 +123,10 @@ function renderTabs() {
 }
 
 function switchTab(tabIdx) {
-  // Save current project's panes
-  if (activeTab >= 0 && activeTab < openedProjects.length) {
+  if (activeTab >= 0 && activeTab < openedProjects.length && activeTab !== tabIdx) {
     const prevProj = projects[openedProjects[activeTab]];
     if (prevProj) {
-      // Save ALL panes currently in the global map (don't reset first)
       projectPanes[prevProj.name] = { ...panes };
-      // Hide them
       Object.keys(panes).forEach(sid => {
         const el = document.getElementById('pane-' + sid);
         if (el) el.style.display = 'none';
@@ -121,13 +137,9 @@ function switchTab(tabIdx) {
   activeTab = tabIdx;
   panes = {};
   focusedPane = null;
-
-  // Hide all panes (safety)
   document.querySelectorAll('.pane').forEach(p => p.style.display = 'none');
 
-  // Restore new project's panes
   const proj = projects[openedProjects[activeTab]];
-  console.log('[switchTab] to:', proj?.name, 'projectPanes:', proj ? Object.keys(projectPanes[proj.name] || {}) : 'none', 'all pane DOM:', document.querySelectorAll('.pane').length);
   if (proj && projectPanes[proj.name]) {
     panes = { ...projectPanes[proj.name] };
     Object.keys(panes).forEach(sid => {
@@ -141,10 +153,7 @@ function switchTab(tabIdx) {
   renderTabs();
   updateStatus();
   renderKBList();
-
-  // Reset code viewer for new project
   if (typeof resetCodeViewer === 'function') resetCodeViewer();
-
   refitAll();
 }
 

@@ -6,15 +6,25 @@ import {main} from '../models';
 
 export function AddKBDoc(arg1:string,arg2:string):Promise<string>;
 
+export function BuildPrompt(arg1:string,arg2:string,arg3:string,arg4:Array<string>):Promise<string>;
+
 export function CheckTokens(arg1:string):Promise<Record<string, number>>;
 
 export function CompressAgent(arg1:string):Promise<string>;
 
+export function ExpandSymbol(arg1:string,arg2:string,arg3:string):Promise<Array<Record<string, string>>>;
+
 export function GetBranches(arg1:string):Promise<Array<codeview.Branch>>;
+
+export function GetBranchesForRepo(arg1:string,arg2:string):Promise<Array<codeview.Branch>>;
+
+export function GetCommitDetail(arg1:string,arg2:string):Promise<codeview.Commit>;
 
 export function GetCommits(arg1:string,arg2:number):Promise<Array<codeview.Commit>>;
 
 export function GetCommitsBranch(arg1:string,arg2:string,arg3:number):Promise<Array<codeview.Commit>>;
+
+export function GetCommitsForRepo(arg1:string,arg2:string,arg3:string,arg4:number):Promise<Array<codeview.Commit>>;
 
 export function GetConversation(arg1:string):Promise<Array<domain.Message>>;
 
@@ -44,7 +54,11 @@ export function PickDirectory():Promise<string>;
 
 export function PickFile():Promise<string>;
 
+export function PickFiles():Promise<Array<string>>;
+
 export function ReadFileContent(arg1:string):Promise<string>;
+
+export function ReadSymbolCode(arg1:string,arg2:string,arg3:number,arg4:number):Promise<string>;
 
 export function ReindexKB(arg1:string):Promise<string>;
 
@@ -64,7 +78,9 @@ export function SaveSettings(arg1:string,arg2:boolean):Promise<string>;
 
 export function SearchChunks(arg1:string,arg2:string,arg3:number):Promise<Array<main.ChunkHit>>;
 
-export function SearchMessagesForCode(arg1:string,arg2:string):Promise<Array<Record<string, string>>>;
+export function SearchMessagesForCode(arg1:string,arg2:string,arg3:number):Promise<Array<Record<string, string>>>;
+
+export function SearchSymbol(arg1:string,arg2:string):Promise<Array<Record<string, string>>>;
 
 export function SendInput(arg1:Array<string>,arg2:string):Promise<void>;
 
@@ -73,5 +89,7 @@ export function SendRaw(arg1:string,arg2:string):Promise<void>;
 export function SpawnAgent(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<string>;
 
 export function SpawnShell(arg1:string):Promise<string>;
+
+export function SuggestSymbols(arg1:string,arg2:string):Promise<Array<Record<string, string>>>;
 
 export function WipeSQLite():Promise<string>;

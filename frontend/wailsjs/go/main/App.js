@@ -6,6 +6,10 @@ export function AddKBDoc(arg1, arg2) {
   return window['go']['main']['App']['AddKBDoc'](arg1, arg2);
 }
 
+export function BuildPrompt(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['BuildPrompt'](arg1, arg2, arg3, arg4);
+}
+
 export function CheckTokens(arg1) {
   return window['go']['main']['App']['CheckTokens'](arg1);
 }
@@ -14,8 +18,20 @@ export function CompressAgent(arg1) {
   return window['go']['main']['App']['CompressAgent'](arg1);
 }
 
+export function ExpandSymbol(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ExpandSymbol'](arg1, arg2, arg3);
+}
+
 export function GetBranches(arg1) {
   return window['go']['main']['App']['GetBranches'](arg1);
+}
+
+export function GetBranchesForRepo(arg1, arg2) {
+  return window['go']['main']['App']['GetBranchesForRepo'](arg1, arg2);
+}
+
+export function GetCommitDetail(arg1, arg2) {
+  return window['go']['main']['App']['GetCommitDetail'](arg1, arg2);
 }
 
 export function GetCommits(arg1, arg2) {
@@ -24,6 +40,10 @@ export function GetCommits(arg1, arg2) {
 
 export function GetCommitsBranch(arg1, arg2, arg3) {
   return window['go']['main']['App']['GetCommitsBranch'](arg1, arg2, arg3);
+}
+
+export function GetCommitsForRepo(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['GetCommitsForRepo'](arg1, arg2, arg3, arg4);
 }
 
 export function GetConversation(arg1) {
@@ -82,8 +102,16 @@ export function PickFile() {
   return window['go']['main']['App']['PickFile']();
 }
 
+export function PickFiles() {
+  return window['go']['main']['App']['PickFiles']();
+}
+
 export function ReadFileContent(arg1) {
   return window['go']['main']['App']['ReadFileContent'](arg1);
+}
+
+export function ReadSymbolCode(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['ReadSymbolCode'](arg1, arg2, arg3, arg4);
 }
 
 export function ReindexKB(arg1) {
@@ -122,8 +150,12 @@ export function SearchChunks(arg1, arg2, arg3) {
   return window['go']['main']['App']['SearchChunks'](arg1, arg2, arg3);
 }
 
-export function SearchMessagesForCode(arg1, arg2) {
-  return window['go']['main']['App']['SearchMessagesForCode'](arg1, arg2);
+export function SearchMessagesForCode(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SearchMessagesForCode'](arg1, arg2, arg3);
+}
+
+export function SearchSymbol(arg1, arg2) {
+  return window['go']['main']['App']['SearchSymbol'](arg1, arg2);
 }
 
 export function SendInput(arg1, arg2) {
@@ -140,6 +172,10 @@ export function SpawnAgent(arg1, arg2, arg3, arg4, arg5) {
 
 export function SpawnShell(arg1) {
   return window['go']['main']['App']['SpawnShell'](arg1);
+}
+
+export function SuggestSymbols(arg1, arg2) {
+  return window['go']['main']['App']['SuggestSymbols'](arg1, arg2);
 }
 
 export function WipeSQLite() {
