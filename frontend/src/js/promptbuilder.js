@@ -164,6 +164,16 @@ async function pbExplain(idx) {
 }
 
 
+function pbClearGraph() {
+  pbSymbols = [];
+  pbSelected = new Set();
+  pbEdges = [];
+  renderPBNodes();
+  renderPBGraph();
+  renderPBPromptPreview();
+  document.getElementById('pb-status').textContent = '';
+}
+
 async function pbSymSearch() {
   const q = document.getElementById('pb-sym-search').value.trim();
   if (q.length < 2 || activeTab < 0) return;
