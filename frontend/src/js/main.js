@@ -259,13 +259,13 @@ function createPane(sessionID, agent) {
   pane.className = 'pane';
   pane.id = 'pane-' + sessionID;
   pane.innerHTML = `
-    <div class="pane-header">
+    <div class="pane-header" ondblclick="toggleCollapsePane('${sessionID}')">
       <span class="dot" style="background:${agent.color || '#8b949e'}"></span>
       <span class="agent-name">${agent.name}</span>
       <span class="agent-type">${agent.cli_type || ''}</span>
-      <span class="token-count" id="tokens-${sessionID}" title="Token count">—</span>
-      <span class="compress-btn" onclick="event.stopPropagation(); compressAgent('${sessionID}')" title="Compress context">🗜</span>
-      <span class="close-btn" onclick="event.stopPropagation(); killPane('${sessionID}', true)">✕</span>
+      <span class="token-count" id="tokens-${sessionID}">—</span>
+      <span class="collapse-btn" onclick="event.stopPropagation(); toggleCollapsePane('${sessionID}')" title="Collapse">—</span>
+      <span class="close-btn" onclick="event.stopPropagation(); killPane('${sessionID}', true)" title="Close">✕</span>
     </div>
     <div class="pane-terminal" id="term-${sessionID}"></div>
   `;
@@ -331,6 +331,17 @@ function killPane(sessionID, removeFromConfig = false) {
   updateStatus();
 }
 
+
+function toggleCollapsePane(sessionID) {
+  const el = document.getElementById('pane-' + sessionID);
+  if (!el) return;
+  el.classList.toggle('collapsed');
+  const btn = el.querySelector('.collapse-btn');
+  if (btn) btn.textContent = el.classList.contains('collapsed') ? '□' : '—';
+  if (!el.classList.contains('collapsed') && panes[sessionID]) {
+    setTimeout(() => { panes[sessionID].fitAddon.fit(); }, 50);
+  }
+}
 function focusPane(sessionID) {
   document.querySelectorAll('.pane').forEach(p => { p.classList.remove('focused'); p.style.borderColor = '#30363d'; p.style.boxShadow = 'none'; });
   document.getElementById('input').blur();

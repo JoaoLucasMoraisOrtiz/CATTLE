@@ -104,14 +104,7 @@ function ftSelectFile(path) {
 }
 
 function ftFileIcon(ext) {
-  const icons = {
-    '.js': '🟨', '.jsx': '🟨', '.ts': '🔷', '.tsx': '🔷',
-    '.java': '☕', '.py': '🐍', '.go': '🔵', '.php': '🐘',
-    '.html': '🌐', '.css': '🎨', '.json': '📋', '.md': '📝',
-    '.xml': '📄', '.yaml': '📄', '.yml': '📄', '.sql': '🗃',
-    '.sh': '⚙', '.bat': '⚙', '.gradle': '🐘', '.properties': '⚙',
-  };
-  return icons[ext] || '📄';
+  return ''; // clean UI — no emoji icons, just indentation
 }
 
 function ftContextMenu(event, entry) {
@@ -122,17 +115,17 @@ function ftContextMenu(event, entry) {
 
   if (entry.isDir) {
     menu.innerHTML = `
-      <div class="nm-title">📁 ${entry.name}</div>
-      <div class="nm-item" onclick="ftGraphDir('${entry.path}')">🔗 Graph all files</div>
-      <div class="nm-item" onclick="ftAddDirToPrompt('${entry.path}')">📝 Add all to Prompt</div>
+      <div class="nm-title">${entry.name}/</div>
+      <div class="nm-item" onclick="ftGraphDir('${entry.path}')">View as Graph</div>
+      <div class="nm-item" onclick="ftAddDirToPrompt('${entry.path}')">Add all to Prompt</div>
     `;
   } else {
     menu.innerHTML = `
-      <div class="nm-title">${ftFileIcon(entry.ext)} ${entry.name}</div>
-      <div class="nm-item" onclick="ftViewFile('${entry.path}')">📄 View</div>
-      <div class="nm-item" onclick="ftGraphFile('${entry.path}')">🔗 View as Graph</div>
-      <div class="nm-item" onclick="ftAddToPrompt('${entry.path}')">📝 Add to Prompt</div>
-      <div class="nm-item" onclick="ftAddToKB('${entry.path}')">📚 Add to KB</div>
+      <div class="nm-title">${entry.name}</div>
+      <div class="nm-item" onclick="ftViewFile('${entry.path}')">View</div>
+      <div class="nm-item" onclick="ftGraphFile('${entry.path}')">View as Graph</div>
+      <div class="nm-item" onclick="ftAddToPrompt('${entry.path}')">Add to Prompt</div>
+      <div class="nm-item" onclick="ftAddToKB('${entry.path}')">Add to Knowledge</div>
     `;
   }
 

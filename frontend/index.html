@@ -8,7 +8,6 @@
 <link rel="stylesheet" href="src/css/base.css">
 <link rel="stylesheet" href="src/css/panes.css">
 <link rel="stylesheet" href="src/css/modals.css">
-<link rel="stylesheet" href="src/css/sidebar.css">
 <link rel="stylesheet" href="src/css/input.css">
 <link rel="stylesheet" href="src/css/codeview.css">
 <link rel="stylesheet" href="src/css/promptbuilder.css">
@@ -30,8 +29,8 @@
       <div id="workspace-body">
         <div id="sidebar">
           <div class="sidebar-tabs">
-            <span class="sidebar-tab active" data-tab="kb" onclick="switchSidebarTab('kb')">📚 KB</span>
-            <span class="sidebar-tab" data-tab="files" onclick="switchSidebarTab('files')">📁 Files</span>
+            <span class="sidebar-tab active" data-tab="kb" onclick="switchSidebarTab('kb')">Knowledge</span>
+            <span class="sidebar-tab" data-tab="files" onclick="switchSidebarTab('files')">Files</span>
           </div>
           <div id="kb-panel">
             <div id="kb-list"></div>
@@ -46,7 +45,7 @@
         </div>
         <div id="main-area">
           <div id="panes"></div>
-          <div id="pb-pill" onclick="togglePromptBuilder()">📝 Prompt</div>
+          <div id="pb-pill" onclick="togglePromptBuilder()">Prompt</div>
         </div>
         <!-- Code Viewer right panel -->
         <div id="code-panel-tab" onclick="toggleCodePanel()">◀ Code</div>
