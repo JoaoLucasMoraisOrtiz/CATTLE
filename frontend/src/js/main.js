@@ -95,7 +95,6 @@ async function openProject(idx) {
     }
   }
 }
-}
 
 function enterWorkspace() {
   document.getElementById('home-screen').style.display = 'none';
