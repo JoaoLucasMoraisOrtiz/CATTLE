@@ -765,6 +765,29 @@ func (a *App) GetCommitsBranch(projectName, branch string, limit int) []codeview
 	return commits
 }
 
+// GetCommitsForRepo returns commits for a specific repo and branch.
+func (a *App) GetCommitsForRepo(projectName, repoName, branch string, limit int) []codeview.Commit {
+	path := a.getProjectPath(projectName)
+	if path == "" {
+		return nil
+	}
+	if limit <= 0 {
+		limit = 30
+	}
+	// Find the actual repo path
+	for _, repo := range codeview.FindGitRepos(path) {
+		rel, _ := filepath.Rel(path, repo)
+		if rel == "." {
+			rel = filepath.Base(repo)
+		}
+		if rel == repoName {
+			commits, _ := codeview.ListCommits(repo, limit, branch)
+			return commits
+		}
+	}
+	return nil
+}
+
 // GetBranches returns all branches for the project's git repos.
 func (a *App) GetBranches(projectName string) []codeview.Branch {
 	path := a.getProjectPath(projectName)
@@ -782,6 +805,24 @@ func (a *App) GetBranches(projectName string) []codeview.Branch {
 		}
 	}
 	return all
+}
+
+// GetBranchesForRepo returns branches for a specific repo.
+func (a *App) GetBranchesForRepo(projectName, repoName string) []codeview.Branch {
+	path := a.getProjectPath(projectName)
+	if path == "" {
+		return nil
+	}
+	for _, repo := range codeview.FindGitRepos(path) {
+		rel, _ := filepath.Rel(path, repo)
+		if rel == "." {
+			rel = filepath.Base(repo)
+		}
+		if rel == repoName {
+			return codeview.ListBranches(repo)
+		}
+	}
+	return nil
 }
 
 func (a *App) GetGitRepos(projectName string) []string {

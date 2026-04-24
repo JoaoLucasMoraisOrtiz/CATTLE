@@ -37,10 +37,15 @@ async function loadRepos() {
 async function loadBranches() {
   if (activeTab < 0) return;
   const proj = projects[openedProjects[activeTab]];
-  const branches = await window.go.main.App.GetBranches(proj.name) || [];
+  let branches;
+  if (cvSelectedRepo) {
+    branches = await window.go.main.App.GetBranchesForRepo(proj.name, cvSelectedRepo) || [];
+  } else {
+    branches = await window.go.main.App.GetBranches(proj.name) || [];
+  }
   const sel = document.getElementById('cv-branch-select');
   const current = branches.find(b => b.current);
-  cvSelectedBranch = current ? current.name : '';
+  cvSelectedBranch = current ? current.name : (branches[0] ? branches[0].name : '');
   sel.innerHTML = branches.map(b =>
     `<option value="${b.name}" ${b.current ? 'selected' : ''}>${b.name}${b.current ? ' ●' : ''}</option>`
   ).join('');
@@ -48,7 +53,7 @@ async function loadBranches() {
 
 function onRepoChange() {
   cvSelectedRepo = document.getElementById('cv-repo-select').value;
-  loadCommits();
+  loadBranches();
 }
 
 async function onBranchChange() {
@@ -488,7 +493,9 @@ async function loadCommits() {
   if (activeTab < 0) return;
   const proj = projects[openedProjects[activeTab]];
   if (!proj) return;
-  if (cvSelectedBranch) {
+  if (cvSelectedRepo) {
+    cvCommits = await window.go.main.App.GetCommitsForRepo(proj.name, cvSelectedRepo, cvSelectedBranch, 30) || [];
+  } else if (cvSelectedBranch) {
     cvCommits = await window.go.main.App.GetCommitsBranch(proj.name, cvSelectedBranch, 30) || [];
   } else {
     cvCommits = await window.go.main.App.GetCommits(proj.name, 30) || [];
