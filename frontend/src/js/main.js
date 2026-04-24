@@ -153,6 +153,7 @@ function switchTab(tabIdx) {
   updateStatus();
   renderKBList();
   if (typeof resetCodeViewer === 'function') resetCodeViewer();
+  if (typeof resetFileTree === 'function') resetFileTree();
   refitAll();
 }
 

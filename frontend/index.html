@@ -29,14 +29,20 @@
       <div id="tabs"></div>
       <div id="workspace-body">
         <div id="sidebar">
-          <div class="sidebar-header">
-            <span>📚 Knowledge Base</span>
+          <div class="sidebar-tabs">
+            <span class="sidebar-tab active" data-tab="kb" onclick="switchSidebarTab('kb')">📚 KB</span>
+            <span class="sidebar-tab" data-tab="files" onclick="switchSidebarTab('files')">📁 Files</span>
           </div>
-          <div id="kb-list"></div>
-          <div class="sidebar-actions">
-            <button onclick="addKBDoc()" style="width:100%">+ Add Document</button>
+          <div id="kb-panel">
+            <div id="kb-list"></div>
+            <div class="sidebar-actions">
+              <button onclick="addKBDoc()" style="width:100%">+ Add Document</button>
+            </div>
+            <button class="btn-reindex" onclick="reindexKB()">↻ Reindex All</button>
           </div>
-          <button class="btn-reindex" onclick="reindexKB()">↻ Reindex All</button>
+          <div id="files-panel" style="display:none">
+            <div id="file-tree"></div>
+          </div>
         </div>
         <div id="main-area">
           <div id="panes"></div>
@@ -235,6 +241,7 @@
   <script src="src/js/settings.js"></script>
   <script src="src/js/terminal.js"></script>
   <script src="src/js/kb.js"></script>
+  <script src="src/js/filetree.js"></script>
   <script src="src/js/input.js"></script>
   <script src="src/js/promptbuilder.js"></script>
   <script src="src/js/main.js"></script>

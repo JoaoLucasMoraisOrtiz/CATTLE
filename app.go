@@ -739,6 +739,127 @@ func (a *App) getProjectPath(name string) string {
 	return ""
 }
 
+
+// --- File Tree APIs ---
+
+// ListDirectory returns files/dirs at a relative path, respecting .gitignore.
+func (a *App) ListDirectory(projectName, relativePath string) []map[string]interface{} {
+	projPath := a.getProjectPath(projectName)
+	if projPath == "" {
+		return nil
+	}
+	projPath = strings.TrimRight(projPath, "/")
+	dir := projPath
+	if relativePath != "" && relativePath != "." {
+		dir = filepath.Join(projPath, relativePath)
+	}
+
+	// Use git ls-files to respect .gitignore
+	tracked := map[string]bool{}
+	for _, repo := range codeview.FindGitRepos(projPath) {
+		out, err := exec.Command("git", "-C", repo, "ls-files", "--cached", "--others", "--exclude-standard").Output()
+		if err == nil {
+			for _, f := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+				if f != "" {
+					full := filepath.Join(repo, f)
+					// Mark all parent dirs as tracked too
+					rel, _ := filepath.Rel(projPath, full)
+					if rel != "" {
+						tracked[rel] = true
+						for p := filepath.Dir(rel); p != "." && p != ""; p = filepath.Dir(p) {
+							tracked[p+"/"] = true
+						}
+					}
+				}
+			}
+		}
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+
+	var result []map[string]interface{}
+	for _, e := range entries {
+		name := e.Name()
+		if strings.HasPrefix(name, ".") || name == "node_modules" || name == "__pycache__" || name == "target" || name == "build" || name == "dist" {
+			continue
+		}
+		rel := name
+		if relativePath != "" && relativePath != "." {
+			rel = filepath.Join(relativePath, name)
+		}
+		// Filter: only show tracked files/dirs (or dirs that contain tracked files)
+		if len(tracked) > 0 {
+			if e.IsDir() {
+				if !tracked[rel+"/"] {
+					continue
+				}
+			} else {
+				if !tracked[rel] {
+					continue
+				}
+			}
+		}
+		info, _ := e.Info()
+		size := int64(0)
+		if info != nil {
+			size = info.Size()
+		}
+		result = append(result, map[string]interface{}{
+			"name":  name,
+			"path":  rel,
+			"isDir": e.IsDir(),
+			"size":  size,
+			"ext":   filepath.Ext(name),
+		})
+	}
+	return result
+}
+
+// ReadProjectFile reads lines from a file in the project.
+func (a *App) ReadProjectFile(projectName, relativePath string) string {
+	projPath := a.getProjectPath(projectName)
+	if projPath == "" {
+		return ""
+	}
+	full := filepath.Join(strings.TrimRight(projPath, "/"), relativePath)
+	info, err := os.Stat(full)
+	if err != nil || info.IsDir() || info.Size() > 512*1024 {
+		return "" // skip dirs and files > 512KB
+	}
+	data, err := os.ReadFile(full)
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}
+
+// GetFileSymbols parses a file and returns its AST symbols.
+func (a *App) GetFileSymbols(projectName, relativePath string) []map[string]interface{} {
+	projPath := a.getProjectPath(projectName)
+	if projPath == "" {
+		return nil
+	}
+	full := filepath.Join(strings.TrimRight(projPath, "/"), relativePath)
+	syms, err := codeview.ParseFile("http://127.0.0.1:9999", full)
+	if err != nil || len(syms) == 0 {
+		return nil
+	}
+	var result []map[string]interface{}
+	for _, s := range syms {
+		result = append(result, map[string]interface{}{
+			"name":       s.Name,
+			"kind":       s.Kind,
+			"file":       relativePath,
+			"start_line": s.StartLine,
+			"end_line":   s.EndLine,
+			"calls":      s.Calls,
+		})
+	}
+	return result
+}
 func (a *App) GetCommits(projectName string, limit int) []codeview.Commit {
 	path := a.getProjectPath(projectName)
 	if path == "" {
