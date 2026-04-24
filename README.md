@@ -112,6 +112,6 @@ make dev
 
 **Built with ❤️ by [João Lucas Morais Ortiz](https://github.com/JoaoLucasMoraisOrtiz)**
 
-*ReDo — porque até IAs trabalham melhor em equipe.* 🐄
+*ReDo — porque até IAs trabalham melhor com humanos.* 🐄
 
 </div>

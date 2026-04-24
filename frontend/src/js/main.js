@@ -269,6 +269,14 @@ function createPane(sessionID, agent) {
   document.getElementById('term-' + sessionID).addEventListener('mousedown', () => { focusPane(sessionID); });
 
   panes[sessionID] = { term, fitAddon, agent };
+  // Keep projectPanes in sync
+  if (activeTab >= 0 && activeTab < openedProjects.length) {
+    const proj = projects[openedProjects[activeTab]];
+    if (proj) {
+      if (!projectPanes[proj.name]) projectPanes[proj.name] = {};
+      projectPanes[proj.name][sessionID] = panes[sessionID];
+    }
+  }
   focusPane(sessionID);
 
   window.runtime.EventsOn('pty:output:' + sessionID, (data) => { term.write(data); });
@@ -293,6 +301,11 @@ function killPane(sessionID, removeFromConfig = false) {
   const el = document.getElementById('pane-' + sessionID);
   if (el) el.remove();
   if (panes[sessionID]) { panes[sessionID].term.dispose(); delete panes[sessionID]; }
+  // Remove from projectPanes
+  if (activeTab >= 0 && activeTab < openedProjects.length) {
+    const proj = projects[openedProjects[activeTab]];
+    if (proj && projectPanes[proj.name]) delete projectPanes[proj.name][sessionID];
+  }
   if (focusedPane === sessionID) {
     focusedPane = Object.keys(panes)[0] || null;
     if (focusedPane) focusPane(focusedPane);
