@@ -146,7 +146,7 @@ body {
 
 /* --- Workspace --- */
 #workspace { display: none; flex: 1; flex-direction: column; overflow: hidden; }
-#workspace-body { display: flex; flex: 1; overflow: hidden; }
+#workspace-body { display: flex; flex: 1; overflow: hidden; position: relative; }
 
 /* --- Sidebar --- */
 #sidebar {

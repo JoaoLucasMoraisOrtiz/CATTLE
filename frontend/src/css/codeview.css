@@ -5,19 +5,19 @@
   top: 50%;
   transform: translateY(-50%);
   writing-mode: vertical-rl;
-  background: #21262d;
-  border: 1px solid #30363d;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
   border-right: none;
   border-radius: 6px 0 0 6px;
   padding: 12px 6px;
   cursor: pointer;
   font-size: 12px;
   font-weight: 600;
-  color: #8b949e;
+  color: var(--text-secondary);
   z-index: 50;
   user-select: none;
 }
-#code-panel-tab:hover { color: #c9d1d9; background: #161b22; }
+#code-panel-tab:hover { color: var(--text-primary); background: var(--bg-3); }
 
 #code-panel {
   position: absolute;
@@ -41,6 +41,7 @@
   cursor: col-resize;
   z-index: 101;
 }
+#code-panel-resize:hover { background: #58a6ff; }
 #code-panel-header {
   display: flex;
   align-items: center;

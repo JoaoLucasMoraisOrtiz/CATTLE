@@ -11,7 +11,7 @@ function toggleCodePanel() {
   const panel = document.getElementById('code-panel');
   const tab = document.getElementById('code-panel-tab');
   codePanelOpen = !codePanelOpen;
-  panel.style.display = codePanelOpen ? '' : 'none';
+  panel.style.display = codePanelOpen ? 'flex' : 'none';
   tab.textContent = codePanelOpen ? '▶ Code' : '◀ Code';
   if (codePanelOpen) loadRepos();
 }
