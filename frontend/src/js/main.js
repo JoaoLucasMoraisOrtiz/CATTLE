@@ -39,12 +39,10 @@ function renderHomeProjects() {
     const agentText = agents.length > 0
       ? agents.map(a => `<span style="color:${a.color || '#8b949e'}">${a.name}</span>`).join(', ')
       : '<span style="color:#8b949e">No agents</span>';
-    return `<div class="project-card">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <div class="pc-name" style="cursor:pointer;flex:1" onclick="openProject(${i})">${p.name}</div>
-        <span class="delete-btn" onclick="event.stopPropagation();deleteProject(${i})" title="Delete project">🗑</span>
-      </div>
-      <div class="pc-path" onclick="openProject(${i})" style="cursor:pointer">${p.path}</div>
+    return `<div class="project-card" onclick="openProject(${i})">
+      <span class="delete-btn" onclick="event.stopPropagation();deleteProject(${i})" title="Delete">×</span>
+      <h3>${p.name}</h3>
+      <p title="${p.path}">${p.path}</p>
       <div class="pc-agents">${agentText}</div>
     </div>`;
   }).join('');
