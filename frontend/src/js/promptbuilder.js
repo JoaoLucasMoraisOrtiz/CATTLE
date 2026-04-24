@@ -3,6 +3,7 @@
 
 let pbSymbols = [];
 let pbSelected = new Set();
+let pbEdges = [];  // {from, to}
 let pbPanelOpen = false;
 
 function togglePromptBuilder() {
@@ -30,6 +31,7 @@ async function pbSearch() {
   document.getElementById('pb-status').textContent = '⏳ Searching...';
   pbSymbols = [];
   pbSelected = new Set();
+  pbEdges = [];
 
   const suggestions = await window.go.main.App.SuggestSymbols(proj.name, text);
   pbSymbols = suggestions || [];
@@ -137,6 +139,11 @@ async function pbExpand(idx) {
       existing.add(c.name);
       added++;
     }
+    // Add edge
+    if (c.edge_from && c.edge_to) {
+      const dup = pbEdges.some(e => e.from === c.edge_from && e.to === c.edge_to);
+      if (!dup) pbEdges.push({ from: c.edge_from, to: c.edge_to });
+    }
   }
   if (added > 0) {
     document.getElementById('pb-status').textContent = `+${added} connections`;
@@ -200,12 +207,34 @@ function renderPBGraph() {
     id: s.name, index: i, kind: s.kind, selected: pbSelected.has(i)
   }));
 
+  // Build links from pbEdges
+  const nameToIdx = {};
+  nodes.forEach((n, i) => nameToIdx[n.id] = i);
+  const links = pbEdges
+    .filter(e => nameToIdx[e.from] !== undefined && nameToIdx[e.to] !== undefined)
+    .map(e => ({ source: nameToIdx[e.from], target: nameToIdx[e.to] }));
+
   const sim = d3.forceSimulation(nodes)
     .force('charge', d3.forceManyBody().strength(-60))
     .force('center', d3.forceCenter(w / 2, h / 2))
-    .force('collision', d3.forceCollide(25));
+    .force('collision', d3.forceCollide(25))
+    .force('link', d3.forceLink(links).distance(80));
 
-  const node = g.selectAll('g').data(nodes).enter().append('g')
+  // Arrow marker
+  g.append('defs').append('marker')
+    .attr('id', 'pb-arrow').attr('viewBox', '0 0 10 6')
+    .attr('refX', 18).attr('refY', 3)
+    .attr('markerWidth', 8).attr('markerHeight', 6)
+    .attr('orient', 'auto')
+    .append('path').attr('d', 'M0,0L10,3L0,6').attr('fill', '#484f58');
+
+  const link = g.selectAll('line.pb-edge').data(links).enter().append('line')
+    .attr('class', 'pb-edge')
+    .attr('stroke', '#484f58').attr('stroke-width', 1.5)
+    .attr('marker-end', 'url(#pb-arrow)');
+
+  const node = g.selectAll('g.pb-node-g').data(nodes).enter().append('g')
+    .attr('class', 'pb-node-g')
     .style('cursor', 'pointer')
     .on('click', (ev, d) => pbToggle(d.index))
     .on('contextmenu', (ev, d) => { ev.preventDefault(); pbNodeMenu(ev, d.index); })
@@ -227,6 +256,8 @@ function renderPBGraph() {
     .attr('fill', '#c9d1d9').attr('font-size', '9px');
 
   sim.on('tick', () => {
+    link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+        .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
     node.attr('transform', d => `translate(${d.x},${d.y})`);
   });
 }
