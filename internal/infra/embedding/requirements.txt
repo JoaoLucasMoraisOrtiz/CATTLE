@@ -4,7 +4,12 @@ einops
 pymupdf
 pillow
 google-generativeai
-tree-sitter==0.21.3
-tree-sitter-languages
+tree-sitter>=0.23
+tree-sitter-javascript
+tree-sitter-typescript
+tree-sitter-java
+tree-sitter-python
+tree-sitter-php
+tree-sitter-go
 mcp
 requests

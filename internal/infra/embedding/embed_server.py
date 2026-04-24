@@ -84,6 +84,34 @@ def parse_file():
         return jsonify({"symbols": []})
     import os
     ext = os.path.splitext(file_path)[1].lower()
+
+    # Try advanced parsers first (from dataflow-mcp)
+    lang_adv = {".py": "python", ".java": "java", ".go": None,
+                ".js": "javascript", ".jsx": "javascript",
+                ".ts": "typescript", ".tsx": "typescript",
+                ".php": "php"}
+    adv_lang = lang_adv.get(ext)
+    if adv_lang and adv_lang != "go":
+        try:
+            from parsers import parse_file as adv_parse
+            result = adv_parse(file_path, adv_lang)
+            # Convert to our format
+            symbols = []
+            for name, info in result.get("symbols", {}).items():
+                symbols.append({
+                    "name": name, "kind": info["kind"],
+                    "file": os.path.basename(file_path),
+                    "start_line": info["line_start"], "end_line": info["line_end"],
+                    "calls": info.get("calls", []),
+                    "signature": info.get("signature", ""),
+                    "imports": result.get("imports", []),
+                    "exports": result.get("exports", []),
+                })
+            return jsonify({"symbols": symbols})
+        except Exception as e:
+            print(f"[parse] advanced parser failed: {e}, falling back")
+
+    # Fallback: new tree-sitter API (Go + others without advanced parser)
     lang_map = {".py": "python", ".java": "java", ".go": "go",
                 ".js": "javascript", ".jsx": "javascript",
                 ".ts": "typescript", ".tsx": "typescript"}
@@ -91,8 +119,18 @@ def parse_file():
     if not lang_name:
         return jsonify({"symbols": []})
     try:
-        import tree_sitter_languages
-        parser = tree_sitter_languages.get_parser(lang_name)
+        from tree_sitter import Language, Parser as TSParser
+        _lang_mods = {
+            "go": lambda: __import__("tree_sitter_go").language(),
+            "python": lambda: __import__("tree_sitter_python").language(),
+            "java": lambda: __import__("tree_sitter_java").language(),
+            "javascript": lambda: __import__("tree_sitter_javascript").language(),
+            "typescript": lambda: __import__("tree_sitter_typescript").language_typescript(),
+        }
+        lang_fn = _lang_mods.get(lang_name)
+        if not lang_fn:
+            return jsonify({"symbols": []})
+        parser = TSParser(Language(lang_fn()))
         with open(file_path, "rb") as f:
             src = f.read()
         tree = parser.parse(src)

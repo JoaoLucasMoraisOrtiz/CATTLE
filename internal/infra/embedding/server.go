@@ -1,8 +1,9 @@
 package embedding
 
 import (
-	_ "embed"
+	"embed"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"os"
 	"os/exec"
@@ -15,6 +16,9 @@ var serverScript []byte
 
 //go:embed requirements.txt
 var requirements []byte
+
+//go:embed parsers/*.py
+var parsersFS embed.FS
 
 type Server struct {
 	cmd  *exec.Cmd
@@ -35,12 +39,36 @@ func StartServer(port int) (*Server, error) {
 	os.WriteFile(scriptPath, serverScript, 0644)
 	os.WriteFile(reqPath, requirements, 0644)
 
-	// Auto-install if venv missing
+	// Extract parsers module
+	parsersDir := filepath.Join(redoDir, "parsers")
+	os.MkdirAll(parsersDir, 0755)
+	fs.WalkDir(parsersFS, "parsers", func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		data, _ := parsersFS.ReadFile(path)
+		dst := filepath.Join(redoDir, path)
+		os.WriteFile(dst, data, 0644)
+		return nil
+	})
+
+	// Auto-install if venv missing or requirements changed
+	reqHash := fmt.Sprintf("%x", len(requirements)) // simple change detection
+	hashFile := filepath.Join(venvDir, ".req-hash")
+	oldHash, _ := os.ReadFile(hashFile)
+	needSetup := false
 	if _, err := os.Stat(venvPython); err != nil {
-		fmt.Println("[Embed] First run — setting up Python environment...")
+		needSetup = true
+	} else if string(oldHash) != reqHash {
+		needSetup = true
+		fmt.Println("[Embed] Requirements changed — reinstalling...")
+	}
+	if needSetup {
+		fmt.Println("[Embed] Setting up Python environment...")
 		if err := setup(venvDir, reqPath); err != nil {
 			return nil, fmt.Errorf("auto-setup failed: %w (run install.sh manually)", err)
 		}
+		os.WriteFile(hashFile, []byte(reqHash), 0644)
 	}
 
 	// Kill existing on this port
@@ -48,6 +76,7 @@ func StartServer(port int) (*Server, error) {
 	time.Sleep(500 * time.Millisecond)
 
 	cmd := exec.Command(venvPython, scriptPath, fmt.Sprintf("%d", port))
+	cmd.Dir = redoDir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
