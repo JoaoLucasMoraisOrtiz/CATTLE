@@ -35,11 +35,16 @@ func WriteAgentMD(homeDir string, project domain.Project) {
 	os.MkdirAll(kiroDir, 0755)
 	os.WriteFile(filepath.Join(kiroDir, "default.md"), []byte(content), 0644)
 
-	// Claude: CLAUDE.md in project root (symlinked)
+	// Claude: CLAUDE.md in project root
 	os.WriteFile(filepath.Join(homeDir, "CLAUDE.md"), []byte(content), 0644)
 
 	// Gemini: GEMINI.md in project root
 	os.WriteFile(filepath.Join(homeDir, "GEMINI.md"), []byte(content), 0644)
+
+	// Codex: .codex/AGENTS.md
+	codexDir := filepath.Join(homeDir, ".codex")
+	os.MkdirAll(codexDir, 0755)
+	os.WriteFile(filepath.Join(codexDir, "AGENTS.md"), []byte(content), 0644)
 }
 
 func detectManifest(lang string) string {

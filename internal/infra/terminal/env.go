@@ -9,7 +9,7 @@ import (
 )
 
 var homeAllowlist = []string{".config", ".local", ".bashrc", ".bash_profile", ".profile", ".zshrc", ".nvm"}
-var homeCopylist = []string{".kiro", ".gemini", ".claude"}
+var homeCopylist = []string{".kiro", ".gemini", ".claude", ".codex"}
 
 // BuildEnv creates an isolated HOME with symlinks + MCP config for an agent.
 // Returns env vars map and the temp home path.

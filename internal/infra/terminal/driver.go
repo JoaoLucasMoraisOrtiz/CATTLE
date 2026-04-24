@@ -18,6 +18,7 @@ var Drivers = map[string]domain.TerminalDriver{
 	"kiro":   &KiroDriver{},
 	"gemini": &GeminiDriver{},
 	"claude": &ClaudeDriver{},
+	"codex":  &CodexDriver{},
 }
 
 // --- Kiro Driver ---
@@ -273,11 +274,139 @@ func (d *ClaudeDriver) SpawnCommand(a domain.Agent) string {
 	return "claude"
 }
 func (d *ClaudeDriver) ResumeCommand(a domain.Agent) string {
-	base := d.SpawnCommand(a)
-	return base + " --resume"
+	return d.SpawnCommand(a) + " --resume"
 }
 func (d *ClaudeDriver) SessionSavePath(homeDir string) string {
-	return filepath.Join(homeDir, ".claude", "conversations")
+	return filepath.Join(homeDir, ".claude", "projects")
 }
-func (d *ClaudeDriver) ParseSessionFile(_ string) ([]domain.Message, error) { return nil, nil }
-func (d *ClaudeDriver) WriteSessionFile(_ string, _ []domain.Message) error  { return nil }
+
+func (d *ClaudeDriver) ParseSessionFile(path string) ([]domain.Message, error) {
+	// Claude saves in ~/.claude/projects/<hash>/<session>.jsonl
+	// path = HOME dir, find latest session
+	base := filepath.Join(path, ".claude", "projects")
+	latest, err := findLatestFile(base, ".jsonl")
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(latest)
+	if err != nil {
+		return nil, err
+	}
+	var msgs []domain.Message
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		if line == "" {
+			continue
+		}
+		var entry map[string]any
+		if json.Unmarshal([]byte(line), &entry) != nil {
+			continue
+		}
+		role, _ := entry["role"].(string)
+		if role != "user" && role != "assistant" {
+			continue
+		}
+		content := ""
+		if c, ok := entry["content"].(string); ok {
+			content = c
+		} else if parts, ok := entry["content"].([]any); ok {
+			for _, p := range parts {
+				if m, ok := p.(map[string]any); ok {
+					if t, ok := m["text"].(string); ok {
+						content += t
+					}
+				}
+			}
+		}
+		if content != "" {
+			msgs = append(msgs, domain.Message{Role: role, Content: content})
+		}
+	}
+	return msgs, nil
+}
+
+func (d *ClaudeDriver) WriteSessionFile(_ string, _ []domain.Message) error { return nil }
+
+// --- Codex Driver ---
+
+type CodexDriver struct{}
+
+func (d *CodexDriver) Name() string { return "codex" }
+func (d *CodexDriver) SpawnCommand(a domain.Agent) string {
+	if a.Command != "" {
+		return a.Command
+	}
+	return "codex"
+}
+func (d *CodexDriver) ResumeCommand(a domain.Agent) string {
+	return d.SpawnCommand(a) + " --resume"
+}
+func (d *CodexDriver) SessionSavePath(homeDir string) string {
+	return filepath.Join(homeDir, ".codex", "sessions")
+}
+
+func (d *CodexDriver) ParseSessionFile(path string) ([]domain.Message, error) {
+	// Codex saves in ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl
+	// path = HOME dir
+	base := filepath.Join(path, ".codex", "sessions")
+	latest, err := findLatestFile(base, ".jsonl")
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(latest)
+	if err != nil {
+		return nil, err
+	}
+	var msgs []domain.Message
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		if line == "" {
+			continue
+		}
+		var entry map[string]any
+		if json.Unmarshal([]byte(line), &entry) != nil {
+			continue
+		}
+		role, _ := entry["role"].(string)
+		if role != "user" && role != "assistant" {
+			continue
+		}
+		content := ""
+		if c, ok := entry["content"].(string); ok {
+			content = c
+		} else if parts, ok := entry["content"].([]any); ok {
+			for _, p := range parts {
+				if m, ok := p.(map[string]any); ok {
+					if t, ok := m["text"].(string); ok {
+						content += t
+					}
+				}
+			}
+		}
+		if content != "" {
+			msgs = append(msgs, domain.Message{Role: role, Content: content})
+		}
+	}
+	return msgs, nil
+}
+
+func (d *CodexDriver) WriteSessionFile(_ string, _ []domain.Message) error { return nil }
+
+// --- Helpers ---
+
+func findLatestFile(dir, ext string) (string, error) {
+	var latest string
+	var latestTime time.Time
+	filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		if strings.HasSuffix(info.Name(), ext) && info.ModTime().After(latestTime) {
+			latest = path
+			latestTime = info.ModTime()
+		}
+		return nil
+	})
+	if latest == "" {
+		return "", os.ErrNotExist
+	}
+	return latest, nil
+}
