@@ -357,8 +357,11 @@ function switchSidebarTab(tab) {
 
 function toggleSidebar() {
   const sb = document.getElementById('sidebar');
+  const pill = document.getElementById('sidebar-pill');
   sb.classList.toggle('collapsed');
+  const collapsed = sb.classList.contains('collapsed');
+  pill.style.display = collapsed ? '' : 'none';
   const btn = sb.querySelector('.sidebar-collapse');
-  if (btn) btn.textContent = sb.classList.contains('collapsed') ? '▶' : '◀';
+  if (btn) btn.textContent = collapsed ? '▶' : '◀';
   setTimeout(refitAll, 200);
 }
