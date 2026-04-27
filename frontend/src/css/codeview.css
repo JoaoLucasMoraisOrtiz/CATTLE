@@ -55,14 +55,14 @@
 #cv-tabs { display: flex; gap: 2px; flex: 1; }
 .cv-tab {
   padding: 4px 12px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm, 4px);
   cursor: pointer;
   font-size: 12px;
-  color: #8b949e;
+  color: var(--text-secondary, #8b949e);
   font-weight: 600;
 }
-.cv-tab:hover { color: #c9d1d9; }
-.cv-tab.active { color: #c9d1d9; background: #0d1117; }
+.cv-tab:hover { color: var(--text-primary, #c9d1d9); }
+.cv-tab.active { color: var(--text-primary, #c9d1d9); background: var(--bg-1, #0d1117); }
 
 #cv-selectors {
   display: flex;
