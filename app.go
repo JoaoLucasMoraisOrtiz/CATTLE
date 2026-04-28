@@ -1046,8 +1046,11 @@ func (a *App) GetProjectConfig(projectName string) domain.ProjectConfig {
 }
 
 func (a *App) GetSymbolGraph(projectName, hash string) *codeview.SymbolGraph {
-	for _, repo := range codeview.FindGitRepos(a.getProjectPath(projectName)) {
+	projPath := a.getProjectPath(projectName)
+	fmt.Printf("[GetSymbolGraph] project=%s hash=%s path=%s\n", projectName, hash, projPath)
+	for _, repo := range codeview.FindGitRepos(projPath) {
 		files, _ := codeview.GetDiffFiles(repo, hash)
+		fmt.Printf("[GetSymbolGraph] repo=%s files=%d\n", repo, len(files))
 		if len(files) == 0 {
 			continue
 		}

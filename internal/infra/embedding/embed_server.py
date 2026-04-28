@@ -83,6 +83,9 @@ def parse_file():
     if not file_path:
         return jsonify({"symbols": []})
     import os
+    if not os.path.isfile(file_path):
+        print(f"[parse] file not found: {file_path}")
+        return jsonify({"symbols": [], "error": f"file not found: {file_path}"})
     ext = os.path.splitext(file_path)[1].lower()
 
     # Try advanced parsers first (from dataflow-mcp)
