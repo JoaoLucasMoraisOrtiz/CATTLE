@@ -83,7 +83,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-#cv-view-gitlog { display: flex; flex: 1; overflow: hidden; }
+#cv-view-gitlog { display: flex; flex: 1; overflow: hidden; min-height: 0; }
+#code-panel-inner { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
 #cv-view-graph { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 #cv-view-simulator { flex: 1; overflow: auto; }
 
