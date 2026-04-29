@@ -26,6 +26,12 @@ func (r *MessageRepo) Save(msg *domain.Message) error {
 	return err
 }
 
+func (r *MessageRepo) CountBySession(sessionID string) int {
+	var count int
+	r.db.QueryRow(`SELECT COUNT(*) FROM messages WHERE session_id=?`, sessionID).Scan(&count)
+	return count
+}
+
 func (r *MessageRepo) FindBySession(sessionID string) ([]domain.Message, error) {
 	rows, err := r.db.Query(
 		`SELECT id, project, agent, session_id, role, content FROM messages WHERE session_id=? ORDER BY id`, sessionID,
@@ -87,12 +93,14 @@ func (r *MessageRepo) FindRelevant(project, query string, queryVec []float32, li
 		}
 	}
 
-	// Embedding-only candidates
+	// Embedding-only candidates (last 90 days, with embeddings only)
 	if queryVec != nil {
 		allRows, _ := r.db.Query(
 			`SELECT id, project, agent, session_id, role, content, embedding,
 			        CAST(strftime('%s', created_at) AS INTEGER) AS ts
-			 FROM messages WHERE project=?`, project,
+			 FROM messages WHERE project=? AND embedding IS NOT NULL
+			 AND created_at > datetime('now', '-90 days')
+			 ORDER BY created_at DESC LIMIT ?`, project, limit*5,
 		)
 		if allRows != nil {
 			defer allRows.Close()

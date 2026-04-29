@@ -1089,8 +1089,32 @@ func (a *App) GetSymbolGraph(projectName, hash string) *codeview.SymbolGraph {
 // BuildPrompt assembles a rich prompt from graph selection + user intent.
 // Also saves the selection as knowledge for future reference.
 
+// --- SuggestSymbols cache ---
+type symbolCache struct {
+	key     string // project + latest commit hashes
+	symbols []codeview.Symbol
+	texts   []string
+	vecs    [][]float32
+}
+
+var suggestCache *symbolCache
+
+func (a *App) getSuggestCacheKey(projectName string) string {
+	path := a.getProjectPath(projectName)
+	if path == "" {
+		return ""
+	}
+	var hashes string
+	for _, repo := range codeview.FindGitRepos(path) {
+		commits, _ := codeview.ListCommits(repo, 1, "")
+		if len(commits) > 0 {
+			hashes += commits[0].Hash
+		}
+	}
+	return projectName + ":" + hashes
+}
+
 // SuggestSymbols finds code symbols relevant to a user's prompt.
-// Returns symbols with their code snippet for the user to review.
 func (a *App) SuggestSymbols(projectName, prompt string) []map[string]string {
 	path := a.getProjectPath(projectName)
 	fmt.Printf("[SuggestSymbols] project=%s path=%s embedder=%v kbRepo=%v\n", projectName, path, a.embedder != nil, a.kbRepo != nil)
@@ -1110,47 +1134,42 @@ func (a *App) SuggestSymbols(projectName, prompt string) []map[string]string {
 	}
 	chunks, _ := a.kbRepo.FindRelevant(projectName, prompt, promptVec, 10)
 
-	// Also parse recent files for symbols
-	repos := codeview.FindGitRepos(path)
-	fmt.Printf("[SuggestSymbols] repos=%d\n", len(repos))
+	// Check symbol cache
+	cacheKey := a.getSuggestCacheKey(projectName)
 	var allSymbols []codeview.Symbol
-	for _, repo := range repos {
-		commits, _ := codeview.ListCommits(repo, 5, "")
-		fileSet := map[string]bool{}
-		for _, c := range commits {
-			files, _ := codeview.GetDiffFiles(repo, c.Hash)
-			for _, f := range files {
-				fileSet[f.Path] = true
+	var symTexts []string
+	var symVecs [][]float32
+
+	if suggestCache != nil && suggestCache.key == cacheKey {
+		allSymbols = suggestCache.symbols
+		symTexts = suggestCache.texts
+		symVecs = suggestCache.vecs
+		fmt.Printf("[SuggestSymbols] cache hit: %d symbols\n", len(allSymbols))
+	} else {
+		// Parse recent files
+		repos := codeview.FindGitRepos(path)
+		for _, repo := range repos {
+			commits, _ := codeview.ListCommits(repo, 5, "")
+			fileSet := map[string]bool{}
+			for _, c := range commits {
+				files, _ := codeview.GetDiffFiles(repo, c.Hash)
+				for _, f := range files {
+					fileSet[f.Path] = true
+				}
+			}
+			for f := range fileSet {
+				syms, _ := codeview.ParseFile("http://127.0.0.1:9999", filepath.Join(repo, f))
+				for i := range syms {
+					syms[i].File = f
+				}
+				allSymbols = append(allSymbols, syms...)
 			}
 		}
-		fmt.Printf("[SuggestSymbols] repo=%s files=%d\n", filepath.Base(repo), len(fileSet))
-		for f := range fileSet {
-			syms, err := codeview.ParseFile("http://127.0.0.1:9999", filepath.Join(repo, f))
-			if err != nil {
-				fmt.Printf("[SuggestSymbols] parse error %s: %v\n", f, err)
-			}
-			for i := range syms {
-				syms[i].File = f
-			}
-			allSymbols = append(allSymbols, syms...)
-		}
-	}
-	fmt.Printf("[SuggestSymbols] symbols=%d\n", len(allSymbols))
-
-	// Score symbols by embedding similarity to prompt
-	type scored struct {
-		sym   codeview.Symbol
-		score float64
-		code  string
-	}
-	var results []scored
-
-	if len(allSymbols) > 0 {
-		// Embed symbol content (name + signature + body, truncated)
-		texts := make([]string, len(allSymbols))
+		// Build texts + embed
+		symTexts = make([]string, len(allSymbols))
 		for i, s := range allSymbols {
 			code := ""
-			for _, repo := range repos {
+			for _, repo := range codeview.FindGitRepos(path) {
 				code = codeview.ExtractCode(repo, s)
 				if code != "" {
 					break
@@ -1160,23 +1179,34 @@ func (a *App) SuggestSymbols(projectName, prompt string) []map[string]string {
 				code = code[:500]
 			}
 			if code != "" {
-				texts[i] = s.Kind + " " + s.Name + " in " + s.File + "\n" + code
+				symTexts[i] = s.Kind + " " + s.Name + " in " + s.File + "\n" + code
 			} else {
-				texts[i] = s.Kind + " " + s.Name + " in " + s.File
+				symTexts[i] = s.Kind + " " + s.Name + " in " + s.File
 			}
 		}
-		vecs, err := a.embedder.EmbedBatch(texts)
-		fmt.Printf("[SuggestSymbols] EmbedBatch err=%v vecs=%d\n", err, len(vecs))
-		if err == nil {
-			for i, s := range allSymbols {
-				cos := cosineSim(promptVec, vecs[i])
-				if cos > 0.2 {
-					results = append(results, scored{s, cos, texts[i]})
-				}
+		if len(symTexts) > 0 {
+			symVecs, _ = a.embedder.EmbedBatch(symTexts)
+		}
+		suggestCache = &symbolCache{key: cacheKey, symbols: allSymbols, texts: symTexts, vecs: symVecs}
+		fmt.Printf("[SuggestSymbols] cached %d symbols\n", len(allSymbols))
+	}
+
+	// Score against prompt
+	type scored struct {
+		sym   codeview.Symbol
+		score float64
+		code  string
+	}
+	var results []scored
+	if symVecs != nil {
+		for i, s := range allSymbols {
+			cos := cosineSim(promptVec, symVecs[i])
+			if cos > 0.2 {
+				results = append(results, scored{s, cos, symTexts[i]})
 			}
 		}
 	}
-	fmt.Printf("[SuggestSymbols] results=%d (threshold>0.2)\n", len(results))
+	fmt.Printf("[SuggestSymbols] results=%d\n", len(results))
 
 	// Sort by score desc
 	for i := range results {
@@ -1731,13 +1761,13 @@ func (a *App) ingestAll() {
 		}
 
 		// Check how many we already have
-		existing, _ := a.msgRepo.FindBySession(s.ID)
-		if len(msgs) <= len(existing) {
+		existingCount := a.msgRepo.CountBySession(s.ID)
+		if len(msgs) <= existingCount {
 			continue
 		}
 
 		// Ingest only new assistant messages
-		newMsgs := msgs[len(existing):]
+		newMsgs := msgs[existingCount:]
 		var assistantMsgs []domain.Message
 		for _, m := range newMsgs {
 			if m.Role == "assistant" {
