@@ -1076,13 +1076,14 @@ func (a *App) GetSymbolGraph(projectName, hash string) *codeview.SymbolGraph {
 // Returns symbols with their code snippet for the user to review.
 func (a *App) SuggestSymbols(projectName, prompt string) []map[string]string {
 	path := a.getProjectPath(projectName)
+	fmt.Printf("[SuggestSymbols] project=%s path=%s embedder=%v kbRepo=%v\n", projectName, path, a.embedder != nil, a.kbRepo != nil)
 	if path == "" || a.embedder == nil {
 		return nil
 	}
 
-	// Embed the prompt
 	promptVec, err := a.embedder.Embed(prompt)
 	if err != nil {
+		fmt.Printf("[SuggestSymbols] embed error: %v\n", err)
 		return nil
 	}
 
@@ -1094,9 +1095,9 @@ func (a *App) SuggestSymbols(projectName, prompt string) []map[string]string {
 
 	// Also parse recent files for symbols
 	repos := codeview.FindGitRepos(path)
+	fmt.Printf("[SuggestSymbols] repos=%d\n", len(repos))
 	var allSymbols []codeview.Symbol
 	for _, repo := range repos {
-		// Get files from latest commits
 		commits, _ := codeview.ListCommits(repo, 5, "")
 		fileSet := map[string]bool{}
 		for _, c := range commits {
@@ -1105,14 +1106,19 @@ func (a *App) SuggestSymbols(projectName, prompt string) []map[string]string {
 				fileSet[f.Path] = true
 			}
 		}
+		fmt.Printf("[SuggestSymbols] repo=%s files=%d\n", filepath.Base(repo), len(fileSet))
 		for f := range fileSet {
-			syms, _ := codeview.ParseFile("http://127.0.0.1:9999", filepath.Join(repo, f))
+			syms, err := codeview.ParseFile("http://127.0.0.1:9999", filepath.Join(repo, f))
+			if err != nil {
+				fmt.Printf("[SuggestSymbols] parse error %s: %v\n", f, err)
+			}
 			for i := range syms {
 				syms[i].File = f
 			}
 			allSymbols = append(allSymbols, syms...)
 		}
 	}
+	fmt.Printf("[SuggestSymbols] symbols=%d\n", len(allSymbols))
 
 	// Score symbols by embedding similarity to prompt
 	type scored struct {
@@ -1143,6 +1149,7 @@ func (a *App) SuggestSymbols(projectName, prompt string) []map[string]string {
 			}
 		}
 		vecs, err := a.embedder.EmbedBatch(texts)
+		fmt.Printf("[SuggestSymbols] EmbedBatch err=%v vecs=%d\n", err, len(vecs))
 		if err == nil {
 			for i, s := range allSymbols {
 				cos := cosineSim(promptVec, vecs[i])
@@ -1152,6 +1159,7 @@ func (a *App) SuggestSymbols(projectName, prompt string) []map[string]string {
 			}
 		}
 	}
+	fmt.Printf("[SuggestSymbols] results=%d (threshold>0.2)\n", len(results))
 
 	// Sort by score desc
 	for i := range results {
