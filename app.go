@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -743,18 +744,18 @@ func (a *App) getProjectPath(name string) string {
 // --- File Tree APIs ---
 
 // ListDirectory returns files/dirs at a relative path, respecting .gitignore.
-func (a *App) ListDirectory(projectName, relativePath string) []map[string]interface{} {
-	projPath := a.getProjectPath(projectName)
-	if projPath == "" {
-		return nil
-	}
-	projPath = strings.TrimRight(projPath, "/")
-	dir := projPath
-	if relativePath != "" && relativePath != "." {
-		dir = filepath.Join(projPath, relativePath)
-	}
+// --- git ls-files cache ---
+var (
+	lsFilesCache   = map[string]map[string]bool{}
+	lsFilesCacheTS = map[string]time.Time{}
+)
 
-	// Use git ls-files to respect .gitignore
+func (a *App) getTrackedFiles(projPath string) map[string]bool {
+	if cached, ok := lsFilesCache[projPath]; ok {
+		if time.Since(lsFilesCacheTS[projPath]) < 30*time.Second {
+			return cached
+		}
+	}
 	tracked := map[string]bool{}
 	for _, repo := range codeview.FindGitRepos(projPath) {
 		out, err := exec.Command("git", "-C", repo, "ls-files", "--cached", "--others", "--exclude-standard").Output()
@@ -762,7 +763,6 @@ func (a *App) ListDirectory(projectName, relativePath string) []map[string]inter
 			for _, f := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 				if f != "" {
 					full := filepath.Join(repo, f)
-					// Mark all parent dirs as tracked too
 					rel, _ := filepath.Rel(projPath, full)
 					if rel != "" {
 						tracked[rel] = true
@@ -774,6 +774,23 @@ func (a *App) ListDirectory(projectName, relativePath string) []map[string]inter
 			}
 		}
 	}
+	lsFilesCache[projPath] = tracked
+	lsFilesCacheTS[projPath] = time.Now()
+	return tracked
+}
+
+func (a *App) ListDirectory(projectName, relativePath string) []map[string]interface{} {
+	projPath := a.getProjectPath(projectName)
+	if projPath == "" {
+		return nil
+	}
+	projPath = strings.TrimRight(projPath, "/")
+	dir := projPath
+	if relativePath != "" && relativePath != "." {
+		dir = filepath.Join(projPath, relativePath)
+	}
+
+	tracked := a.getTrackedFiles(projPath)
 
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -1224,7 +1241,7 @@ func cosineSim(a, b []float32) float64 {
 	if na == 0 || nb == 0 {
 		return 0
 	}
-	return dot / (na * nb)
+	return dot / (math.Sqrt(na) * math.Sqrt(nb))
 }
 
 func min(a, b int) int {

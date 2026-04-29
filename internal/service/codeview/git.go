@@ -55,7 +55,8 @@ func ListBranches(repoPath string) []Branch {
 }
 
 func ListCommits(repoPath string, limit int, branch string) ([]Commit, error) {
-	args := []string{"log", fmt.Sprintf("-%d", limit), "--pretty=format:%H|%s|%an|%at", "--no-merges"}
+	// Single git log with --shortstat to get file counts without per-commit spawns
+	args := []string{"log", fmt.Sprintf("-%d", limit), "--pretty=format:COMMIT|%H|%s|%an|%at", "--shortstat", "--no-merges"}
 	if branch != "" {
 		args = append(args, branch)
 	}
@@ -64,7 +65,6 @@ func ListCommits(repoPath string, limit int, branch string) ([]Commit, error) {
 		return nil, err
 	}
 
-	// Find unpushed commit hashes
 	localHashes := map[string]bool{}
 	if branch != "" {
 		unpushed, _ := gitCmd(repoPath, "log", "--oneline", branch, "--not", "--remotes", "--pretty=format:%H")
@@ -76,22 +76,32 @@ func ListCommits(repoPath string, limit int, branch string) ([]Commit, error) {
 	}
 
 	var commits []Commit
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-		if line == "" {
+	lines := strings.Split(out, "\n")
+	for i := 0; i < len(lines); i++ {
+		line := strings.TrimSpace(lines[i])
+		if !strings.HasPrefix(line, "COMMIT|") {
 			continue
 		}
-		parts := strings.SplitN(line, "|", 4)
+		parts := strings.SplitN(line[7:], "|", 4)
 		if len(parts) < 4 {
 			continue
 		}
 		ts, _ := strconv.ParseInt(parts[3], 10, 64)
 		t := time.Unix(ts, 0)
 		hash := parts[0][:8]
-		fout, _ := gitCmd(repoPath, "diff-tree", "--no-commit-id", "-r", "--name-only", parts[0])
-		files := len(strings.Split(strings.TrimSpace(fout), "\n"))
-		if fout == "" {
-			files = 0
+
+		// Next non-empty line after COMMIT is the --shortstat line
+		files := 0
+		for j := i + 1; j < len(lines) && j <= i+3; j++ {
+			sl := strings.TrimSpace(lines[j])
+			if strings.Contains(sl, "file") && strings.Contains(sl, "changed") {
+				// "3 files changed, 10 insertions(+), 2 deletions(-)"
+				n, _ := strconv.Atoi(strings.Fields(sl)[0])
+				files = n
+				break
+			}
 		}
+
 		commits = append(commits, Commit{
 			Hash:      hash,
 			Message:   parts[1],
@@ -176,16 +186,24 @@ func gitCmd(dir string, args ...string) (string, error) {
 	return string(out), nil
 }
 
-// FindGitRepos discovers all git repositories in a project path (root + subdirs).
-func FindGitRepos(projectPath string) []string {
-	var repos []string
+// --- Git repo cache (TTL 60s) ---
+var (
+	gitRepoCache   = map[string][]string{}
+	gitRepoCacheTS = map[string]time.Time{}
+)
 
-	// Check root first
+// FindGitRepos discovers all git repositories in a project path (root + subdirs). Cached 60s.
+func FindGitRepos(projectPath string) []string {
+	if cached, ok := gitRepoCache[projectPath]; ok {
+		if time.Since(gitRepoCacheTS[projectPath]) < 60*time.Second {
+			return cached
+		}
+	}
+
+	var repos []string
 	if isGitRepo(projectPath) {
 		repos = append(repos, projectPath)
 	}
-
-	// Scan one level of subdirs
 	entries, err := os.ReadDir(projectPath)
 	if err != nil {
 		return repos
@@ -198,7 +216,6 @@ func FindGitRepos(projectPath string) []string {
 		if isGitRepo(sub) {
 			repos = append(repos, sub)
 		}
-		// Check one more level
 		inner, _ := os.ReadDir(sub)
 		for _, ie := range inner {
 			if ie.IsDir() && !strings.HasPrefix(ie.Name(), ".") {
@@ -209,6 +226,9 @@ func FindGitRepos(projectPath string) []string {
 			}
 		}
 	}
+
+	gitRepoCache[projectPath] = repos
+	gitRepoCacheTS[projectPath] = time.Now()
 	return repos
 }
 
