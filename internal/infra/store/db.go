@@ -18,10 +18,11 @@ func Open() (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	return db, migrate(db)
+	return db, Migrate(db)
 }
 
-func migrate(db *sql.DB) error {
+// Migrate creates tables and indexes.
+func Migrate(db *sql.DB) error {
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS messages (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
