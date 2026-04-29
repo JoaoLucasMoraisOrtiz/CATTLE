@@ -5,6 +5,7 @@ import (
 	"math"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/jlortiz/redo/internal/domain"
 	_ "github.com/mattn/go-sqlite3"
@@ -231,5 +232,47 @@ func TestEncodeDecodeVec(t *testing.T) {
 	}
 	if decodeVec(nil) != nil {
 		t.Error("decodeVec(nil) should return nil")
+	}
+}
+
+func TestCountBySession(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+	repo := NewMessageRepo(db)
+
+	// Empty
+	if c := repo.CountBySession("nonexistent"); c != 0 {
+		t.Errorf("expected 0, got %d", c)
+	}
+
+	// Add messages
+	for i := 0; i < 5; i++ {
+		repo.Save(&domain.Message{
+			Project: "proj", Agent: "kiro", SessionID: "sess-count", Role: "assistant", Content: "msg",
+		})
+	}
+	if c := repo.CountBySession("sess-count"); c != 5 {
+		t.Errorf("expected 5, got %d", c)
+	}
+}
+
+func TestFindRelevant_TemporalFilter(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+	repo := NewMessageRepo(db)
+
+	// Insert a message (will have current timestamp)
+	repo.Save(&domain.Message{
+		Project: "proj", Agent: "kiro", SessionID: "s1", Role: "assistant",
+		Content: "recent message about authentication",
+	})
+
+	// Search with commitTS=now should find it (temporal decay ~1.0)
+	results, err := repo.FindRelevant("proj", "authentication", nil, 10, time.Now().Unix())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) == 0 {
+		t.Error("should find recent message via FTS")
 	}
 }
